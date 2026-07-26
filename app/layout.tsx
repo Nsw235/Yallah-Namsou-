@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Moto-Taxi Tchad",
-  description: "Commandez une moto ou une voiture en quelques secondes à N'Djamena",
+  title: "Yallah-Namsou نمشوا",
+  description: "Commandez une voiture en quelques secondes à N'Djamena",
   manifest: "/manifest.json",
 };
 

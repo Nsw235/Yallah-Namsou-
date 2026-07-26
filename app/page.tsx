@@ -1,11 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase, VehicleType, PricingRule } from "../lib/supabase";
+import dynamic from "next/dynamic";
+import { supabase, VehicleType, VEHICLE_LABELS, PricingRule } from "../lib/supabase";
+import ChadFlag from "../components/ChadFlag";
+import { IconBerline, IconPrestige, IconSUV } from "../components/VehicleIcons";
+
+// La carte utilise le DOM (Leaflet) : chargement uniquement côté client, jamais pré-rendu au build.
+const MapBackground = dynamic(() => import("../components/MapBackground"), { ssr: false });
+
+const VEHICLE_ORDER: VehicleType[] = ["berline", "prestige", "suv"];
+const VEHICLE_ICON: Record<VehicleType, (props: { active: boolean }) => JSX.Element> = {
+  berline: IconBerline,
+  prestige: IconPrestige,
+  suv: IconSUV,
+};
 
 export default function BookingScreen() {
   const [pricingRules, setPricingRules] = useState<PricingRule[]>([]);
-  const [vehicleType, setVehicleType] = useState<VehicleType>("moto");
+  const [vehicleType, setVehicleType] = useState<VehicleType>("berline");
   const [pickup, setPickup] = useState("");
   const [dropoff, setDropoff] = useState("");
   const [distanceKm, setDistanceKm] = useState<number>(3);
@@ -64,55 +77,67 @@ export default function BookingScreen() {
   }
 
   return (
-    <div className="screen">
-      <div className="header">
-        <h1>Où allez-vous ?</h1>
-        <p>N'Djamena · Moto ou voiture, à la demande</p>
+    <div className="app-shell">
+      <div className="map-layer">
+        <MapBackground />
       </div>
 
-      <div className="content">
+      <div className="top-bar">
+        <div className="brand">
+          Yallah-Namsou <span dir="rtl">نمشوا</span>
+        </div>
+        <ChadFlag />
+      </div>
+
+      <div className="sheet">
         <label>Type de véhicule</label>
-        <div className="vehicle-toggle">
-          <div
-            className={`vehicle-btn ${vehicleType === "moto" ? "active" : ""}`}
-            onClick={() => setVehicleType("moto")}
-          >
-            <span className="emoji">🏍️</span>
-            Moto
-          </div>
-          <div
-            className={`vehicle-btn ${vehicleType === "voiture" ? "active" : ""}`}
-            onClick={() => setVehicleType("voiture")}
-          >
-            <span className="emoji">🚗</span>
-            Voiture
-          </div>
+        <div className="vehicle-grid">
+          {VEHICLE_ORDER.map((type) => {
+            const Icon = VEHICLE_ICON[type];
+            const active = vehicleType === type;
+            return (
+              <div
+                key={type}
+                className={`vehicle-card ${active ? "active" : ""}`}
+                onClick={() => setVehicleType(type)}
+              >
+                {active && <span className="check">✓</span>}
+                <Icon active={active} />
+                <span className="vehicle-label">{VEHICLE_LABELS[type]}</span>
+              </div>
+            );
+          })}
         </div>
 
         <label>Point de départ</label>
-        <input
-          type="text"
-          placeholder="Ex : Avenue Charles de Gaulle"
-          value={pickup}
-          onChange={(e) => setPickup(e.target.value)}
-        />
+        <div className="input-wrap">
+          <input
+            type="text"
+            placeholder="Ex : Avenue Charles de Gaulle"
+            value={pickup}
+            onChange={(e) => setPickup(e.target.value)}
+          />
+          <span className="input-icon">📍</span>
+        </div>
 
         <label>Destination</label>
-        <input
-          type="text"
-          placeholder="Ex : Aéroport de N'Djamena"
-          value={dropoff}
-          onChange={(e) => setDropoff(e.target.value)}
-        />
-
-        <label>Distance estimée (km) — géolocalisation à brancher ensuite</label>
-        <input
-          type="number"
-          min={0.5}
-          step={0.5}
-          value={distanceKm}
-          onChange={(e) => setDistanceKm(parseFloat(e.target.value) || 0)}
-        />
+        <div className="input-wrap split">
+          <input
+            type="text"
+            placeholder="Ex : Aéroport de N'Djamena"
+            value={dropoff}
+            onChange={(e) => setDropoff(e.target.value)}
+          />
+          <input
+            type="number"
+            className="km-input"
+            min={0.5}
+            step={0.5}
+            value={distanceKm}
+            onChange={(e) => setDistanceKm(parseFloat(e.target.value) || 0)}
+            title="Distance estimée (km) — géolocalisation à brancher ensuite"
+          />
+        </div>
 
         <div className="price-box">
           <div className="label">Prix estimé</div>
