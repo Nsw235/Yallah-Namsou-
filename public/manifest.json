@@ -1,0 +1,10 @@
+{
+  "name": "Moto-Taxi Tchad",
+  "short_name": "MotoTaxi",
+  "description": "Commandez une moto ou une voiture à la demande à N'Djamena",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F2EEE6",
+  "theme_color": "#1B2A4A",
+  "icons": []
+}
