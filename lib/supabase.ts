@@ -1,11 +1,22 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+// Valeurs par défaut = vrai projet Supabase "yallah-namsou" (clé publique, sans risque à exposer côté client).
+// Tu peux les surcharger via NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY dans Vercel → Settings → Environment Variables.
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://jijvqzrldnijjfhlawda.supabase.co";
+const supabaseAnonKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "sb_publishable_nQgrYTherG1AtCfmOQ6nTg_iIDQY7vP";
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export type VehicleType = "moto" | "voiture";
+export type VehicleType = "suv" | "prestige" | "berline";
+
+export const VEHICLE_LABELS: Record<VehicleType, string> = {
+  suv: "SUV",
+  prestige: "Prestige",
+  berline: "Berline",
+};
 
 export interface PricingRule {
   vehicle_type: VehicleType;
