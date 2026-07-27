@@ -208,6 +208,18 @@ html, body {
   color: var(--text-muted);
 }
 
+.payment-badge {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px;
+}
+
 .confirm-btn {
   margin-top: 18px;
   width: 100%;

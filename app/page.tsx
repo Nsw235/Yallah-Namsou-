@@ -56,22 +56,44 @@ export default function BookingScreen() {
       return;
     }
 
-    const { error } = await supabase.from("trips").insert({
-      passenger_id: userData.user.id,
-      vehicle_type: vehicleType,
-      pickup_lat: 12.1348,
-      pickup_lng: 15.0557,
-      pickup_address: pickup,
-      dropoff_lat: 12.1348,
-      dropoff_lng: 15.0557,
-      dropoff_address: dropoff,
-      estimated_price: estimatedPrice,
+    const { data: trip, error } = await supabase
+      .from("trips")
+      .insert({
+        passenger_id: userData.user.id,
+        vehicle_type: vehicleType,
+        pickup_lat: 12.1348,
+        pickup_lng: 15.0557,
+        pickup_address: pickup,
+        dropoff_lat: 12.1348,
+        dropoff_lng: 15.0557,
+        dropoff_address: dropoff,
+        estimated_price: estimatedPrice,
+      })
+      .select()
+      .single();
+
+    if (error || !trip) {
+      setStatus({ text: `Erreur lors de la demande : ${error?.message}`, error: true });
+      setSubmitting(false);
+      return;
+    }
+
+    // Paiement en espèces : on ouvre l'enregistrement dès la réservation,
+    // le chauffeur le passera à "paid" en fin de course une fois l'argent remis.
+    const { error: paymentError } = await supabase.from("payments").insert({
+      trip_id: trip.id,
+      method: "cash",
+      amount: estimatedPrice ?? 0,
+      status: "pending",
     });
 
-    if (error) {
-      setStatus({ text: `Erreur lors de la demande : ${error.message}`, error: true });
+    if (paymentError) {
+      setStatus({
+        text: `Course créée, mais le paiement n'a pas pu être initialisé (${paymentError.message}).`,
+        error: true,
+      });
     } else {
-      setStatus({ text: "Course demandée ! Recherche d'un chauffeur disponible…" });
+      setStatus({ text: "Course demandée ! Paiement en espèces à la remise. Recherche d'un chauffeur disponible…" });
     }
     setSubmitting(false);
   }
@@ -145,6 +167,8 @@ export default function BookingScreen() {
             {estimatedPrice !== null ? `${estimatedPrice.toLocaleString("fr-FR")} FCFA` : "…"}
           </div>
         </div>
+
+        <div className="payment-badge">💵 Paiement : Espèces à la remise</div>
 
         <button
           className="confirm-btn"
