@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
 import { PricingRule, Trip, VehicleType } from '@/types/database';
 import {
-  DEMO_ROUTE,
   VEHICLE_ICON,
   VEHICLE_LABELS,
   estimatePrice,
@@ -13,13 +12,15 @@ import {
   haversineKm,
 } from '@/lib/pricing';
 import {
+  assignDriver,
   completeTrip,
   createTrip,
-  findAndAssignDriver,
   getPricingRules,
+  listAvailableVehicles,
   rateTrip,
   startTrip,
 } from '@/lib/rides';
+import { GeoResult, searchAddress } from '@/lib/geocode';
 import AuthGate from '@/components/AuthGate';
 import Header from '@/components/Header';
 import MapBackground from '@/components/MapBackground';
@@ -40,18 +41,15 @@ type VehicleInfo = {
   model: string | null;
 };
 
-const DISTANCE_KM = haversineKm(
-  DEMO_ROUTE.pickup.lat,
-  DEMO_ROUTE.pickup.lng,
-  DEMO_ROUTE.dropoff.lat,
-  DEMO_ROUTE.dropoff.lng
-);
+type AvailableOption = Awaited<ReturnType<typeof listAvailableVehicles>>[number];
 
 export default function PrivateFleetApp() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [step, setStep] = useState<Step>(1);
   const [pricingRules, setPricingRules] = useState<PricingRule[]>([]);
   const [vehicle, setVehicle] = useState<VehicleType>('berline');
+  const [pickup, setPickup] = useState<GeoResult | null>(null);
+  const [dropoff, setDropoff] = useState<GeoResult | null>(null);
   const [trip, setTrip] = useState<Trip | null>(null);
   const [driver, setDriver] = useState<DriverInfo | null>(null);
   const [vehicleInfo, setVehicleInfo] = useState<VehicleInfo | null>(null);
@@ -59,6 +57,13 @@ export default function PrivateFleetApp() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [availableOptions, setAvailableOptions] = useState<AvailableOption[]>([]);
+  const [loadingDrivers, setLoadingDrivers] = useState(false);
+
+  const distanceKm = useMemo(() => {
+    if (!pickup || !dropoff) return null;
+    return haversineKm(pickup.lat, pickup.lng, dropoff.lat, dropoff.lng);
+  }, [pickup, dropoff]);
 
   // Session Supabase
   useEffect(() => {
@@ -75,9 +80,10 @@ export default function PrivateFleetApp() {
   }, [session]);
 
   function priceFor(type: VehicleType): number | null {
+    if (distanceKm == null) return null;
     const rule = pricingRules.find((r) => r.vehicle_type === type);
     if (!rule) return null;
-    return estimatePrice(rule, DISTANCE_KM);
+    return estimatePrice(rule, distanceKm);
   }
 
   function resetToBooking() {
@@ -87,10 +93,11 @@ export default function PrivateFleetApp() {
     setVehicleInfo(null);
     setRating(0);
     setError(null);
+    setAvailableOptions([]);
   }
 
   async function handleConfirmTrip() {
-    if (!session?.user) return;
+    if (!session?.user || !pickup || !dropoff) return;
     setBusy(true);
     setError(null);
     try {
@@ -100,6 +107,8 @@ export default function PrivateFleetApp() {
         passengerId: session.user.id,
         vehicleType: vehicle,
         estimatedPrice: price,
+        pickup,
+        dropoff,
       });
       setTrip(newTrip);
       setStep(3);
@@ -110,41 +119,52 @@ export default function PrivateFleetApp() {
     }
   }
 
-  // Recherche de chauffeur dès l'entrée sur l'écran 3
+  // Chargement de la vraie liste des chauffeurs disponibles à l'entrée sur l'écran 3
   useEffect(() => {
     if (step !== 3 || !trip) return;
     let cancelled = false;
-    const start = Date.now();
-    (async () => {
-      try {
-        const result = await findAndAssignDriver(trip.id, trip.vehicle_type);
-        const elapsed = Date.now() - start;
-        const minDelay = Math.max(0, 2200 - elapsed); // confort visuel de l'animation sonar
-        setTimeout(() => {
-          if (cancelled) return;
-          setDriver({
-            id: result.driver.id,
-            full_name: (result.driver as any).full_name,
-            phone: (result.driver as any).phone,
-            rating_avg: result.driver.rating_avg,
-          });
-          setVehicleInfo({
-            plate: result.vehicle.plate,
-            brand: result.vehicle.brand,
-            model: result.vehicle.model,
-          });
-          setTrip(result.trip);
-          setStep(4);
-        }, minDelay);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? 'Aucun chauffeur disponible pour le moment.');
-      }
-    })();
+    setLoadingDrivers(true);
+    setAvailableOptions([]);
+    listAvailableVehicles(trip.vehicle_type)
+      .then((options) => {
+        if (!cancelled) setAvailableOptions(options);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e?.message ?? 'Impossible de charger les chauffeurs disponibles.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDrivers(false);
+      });
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, trip?.id]);
+  }, [step, trip]);
+
+  async function handleSelectDriver(option: AvailableOption) {
+    if (!trip) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await assignDriver(trip.id, option.driver.id, option.vehicle.id);
+      setDriver({
+        id: option.driver.id,
+        full_name: option.driver.full_name,
+        phone: option.driver.phone,
+        rating_avg: option.driver.rating_avg,
+      });
+      setVehicleInfo({
+        plate: option.vehicle.plate,
+        brand: option.vehicle.brand,
+        model: option.vehicle.model,
+      });
+      setTrip(updated);
+      setStep(4);
+    } catch (e: any) {
+      setError(e?.message ?? 'Impossible de choisir ce chauffeur.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function handleReady() {
     if (!trip) return;
@@ -225,22 +245,36 @@ export default function PrivateFleetApp() {
             vehicle={vehicle}
             onSelect={setVehicle}
             priceFor={priceFor}
+            pickup={pickup}
+            dropoff={dropoff}
+            onPickupChange={setPickup}
+            onDropoffChange={setDropoff}
             onSearch={() => setStep(2)}
             onOptions={() => setShowHistory(true)}
           />
         )}
 
-        {step === 2 && (
+        {step === 2 && pickup && dropoff && (
           <Screen2
             vehicle={vehicle}
             price={priceFor(vehicle)}
+            pickup={pickup}
+            dropoff={dropoff}
             busy={busy}
             onConfirm={handleConfirmTrip}
             onOptions={() => setShowHistory(true)}
           />
         )}
 
-        {step === 3 && <Screen3 onOptions={() => setShowHistory(true)} />}
+        {step === 3 && (
+          <Screen3
+            options={availableOptions}
+            loading={loadingDrivers}
+            busy={busy}
+            onSelect={handleSelectDriver}
+            onOptions={() => setShowHistory(true)}
+          />
+        )}
 
         {step === 4 && driver && vehicleInfo && trip && (
           <Screen4
@@ -282,12 +316,20 @@ function Screen1({
   vehicle,
   onSelect,
   priceFor,
+  pickup,
+  dropoff,
+  onPickupChange,
+  onDropoffChange,
   onSearch,
   onOptions,
 }: {
   vehicle: VehicleType;
   onSelect: (v: VehicleType) => void;
   priceFor: (v: VehicleType) => number | null;
+  pickup: GeoResult | null;
+  dropoff: GeoResult | null;
+  onPickupChange: (g: GeoResult) => void;
+  onDropoffChange: (g: GeoResult) => void;
   onSearch: () => void;
   onOptions: () => void;
 }) {
@@ -296,18 +338,36 @@ function Screen1({
     { key: 'van', icon: '/icon_van.png' },
     { key: 'suv', icon: '/icon_suv.png' },
   ];
+  const ready = !!pickup && !!dropoff;
   return (
     <div className="screen fade">
       <MapBackground
         routeColor="#e8c9a8"
-        routePath="M100,420 L100,480 L300,480 L300,300"
+        routePath={ready ? 'M100,420 L100,480 L300,480 L300,300' : undefined}
       >
-        <div style={{ position: 'absolute', top: 296, left: 295, width: 14, height: 14, borderRadius: '50% 50% 50% 0', background: '#ff5f5f', transform: 'rotate(-45deg)', boxShadow: '0 0 8px #ff5f5f' }} />
-        <div style={{ position: 'absolute', top: 416, left: 96, width: 14, height: 14, borderRadius: '50% 50% 50% 0', background: '#e8c9a8', transform: 'rotate(-45deg)', boxShadow: '0 0 8px #e8c9a8' }} />
+        {pickup && (
+          <div style={{ position: 'absolute', top: 416, left: 96, width: 14, height: 14, borderRadius: '50% 50% 50% 0', background: '#e8c9a8', transform: 'rotate(-45deg)', boxShadow: '0 0 8px #e8c9a8' }} />
+        )}
+        {dropoff && (
+          <div style={{ position: 'absolute', top: 296, left: 295, width: 14, height: 14, borderRadius: '50% 50% 50% 0', background: '#ff5f5f', transform: 'rotate(-45deg)', boxShadow: '0 0 8px #ff5f5f' }} />
+        )}
       </MapBackground>
       <Header onOptionsClick={onOptions} />
-      <RouteCard />
-      <div className="sheet glass">
+      <div className="sheet glass" style={{ paddingTop: 16 }}>
+        <AddressField
+          label="DÉPART"
+          placeholder="D'où partez-vous ?"
+          value={pickup}
+          onChange={onPickupChange}
+        />
+        <div style={{ height: 10 }} />
+        <AddressField
+          label="DESTINATION"
+          placeholder="Où allez-vous ?"
+          value={dropoff}
+          onChange={onDropoffChange}
+        />
+        <div style={{ height: 14 }} />
         <div className="vehicles">
           {types.map((t) => (
             <div
@@ -316,18 +376,92 @@ function Screen1({
               onClick={() => onSelect(t.key)}
             >
               <img src={t.icon} alt={VEHICLE_LABELS[t.key]} className="vimg" />
-              <div className="vprice">{formatFCFA(priceFor(t.key))}</div>
+              <div className="vprice">{ready ? formatFCFA(priceFor(t.key)) : '—'}</div>
             </div>
           ))}
         </div>
-        <button className="btn amber" onClick={onSearch}>RECHERCHER</button>
+        <button className="btn amber" onClick={onSearch} disabled={!ready}>
+          {ready ? 'RECHERCHER' : 'CHOISISSEZ VOS ADRESSES'}
+        </button>
         <div className="home-indicator" />
       </div>
     </div>
   );
 }
 
-function RouteCard() {
+/* Champ de saisie d'adresse avec suggestions réelles (OpenStreetMap Nominatim). */
+function AddressField({
+  label,
+  placeholder,
+  value,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  value: GeoResult | null;
+  onChange: (g: GeoResult) => void;
+}) {
+  const [query, setQuery] = useState(value?.label ?? '');
+  const [results, setResults] = useState<GeoResult[]>([]);
+  const [open, setOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    if (value) return;
+    if (query.trim().length < 3) {
+      setResults([]);
+      return;
+    }
+    setSearching(true);
+    const t = setTimeout(() => {
+      searchAddress(query)
+        .then((r) => {
+          setResults(r);
+          setOpen(true);
+        })
+        .catch(() => setResults([]))
+        .finally(() => setSearching(false));
+    }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  return (
+    <div className="field" style={{ position: 'relative' }}>
+      <label>{label}</label>
+      <input
+        type="text"
+        placeholder={placeholder}
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+        }}
+        onFocus={() => results.length > 0 && setOpen(true)}
+      />
+      {searching && <div className="route-sub">Recherche…</div>}
+      {open && results.length > 0 && (
+        <div className="glass" style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, borderRadius: 12, marginTop: 4, maxHeight: 180, overflowY: 'auto' }}>
+          {results.map((r, i) => (
+            <div
+              key={i}
+              style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: i < results.length - 1 ? '1px solid rgba(169,122,91,0.15)' : undefined }}
+              onClick={() => {
+                onChange(r);
+                setQuery(r.label);
+                setOpen(false);
+              }}
+            >
+              <div className="route-addr" style={{ fontSize: 14 }}>{r.label}</div>
+              <div className="route-sub">{r.address}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RouteCard({ pickup, dropoff }: { pickup: GeoResult; dropoff: GeoResult }) {
   return (
     <div className="route-card glass fade">
       <div className="route-row">
@@ -338,12 +472,12 @@ function RouteCard() {
         </div>
         <div style={{ flex: 1 }}>
           <div className="route-label">DÉPART</div>
-          <div className="route-addr">{DEMO_ROUTE.pickup.label}</div>
-          <div className="route-sub">{DEMO_ROUTE.pickup.address}</div>
+          <div className="route-addr">{pickup.label}</div>
+          <div className="route-sub">{pickup.address}</div>
           <div style={{ height: 10 }} />
           <div className="route-label">DESTINATION</div>
-          <div className="route-addr">{DEMO_ROUTE.dropoff.label}</div>
-          <div className="route-sub">{DEMO_ROUTE.dropoff.address}</div>
+          <div className="route-addr">{dropoff.label}</div>
+          <div className="route-sub">{dropoff.address}</div>
         </div>
       </div>
     </div>
@@ -356,12 +490,16 @@ function RouteCard() {
 function Screen2({
   vehicle,
   price,
+  pickup,
+  dropoff,
   busy,
   onConfirm,
   onOptions,
 }: {
   vehicle: VehicleType;
   price: number | null;
+  pickup: GeoResult;
+  dropoff: GeoResult;
   busy: boolean;
   onConfirm: () => void;
   onOptions: () => void;
@@ -370,7 +508,7 @@ function Screen2({
     <div className="screen fade">
       <MapBackground routeColor="#e8c9a8" routePath="M100,420 L100,480 L300,480 L300,300" />
       <Header onOptionsClick={onOptions} />
-      <RouteCard />
+      <RouteCard pickup={pickup} dropoff={dropoff} />
       <div className="sheet glass">
         <div className="veh-hero"><img src={VEHICLE_ICON[vehicle]} alt={VEHICLE_LABELS[vehicle]} className="veh-hero-img" /></div>
         <div className="confirm-title">{VEHICLE_LABELS[vehicle]} SÉLECTIONNÉE</div>
@@ -394,30 +532,57 @@ function Screen2({
 /* ---------------------------------------------------------------------- */
 /* ÉCRAN 3 — Recherche de chauffeur                                       */
 /* ---------------------------------------------------------------------- */
-function Screen3({ onOptions }: { onOptions: () => void }) {
+function Screen3({
+  options,
+  loading,
+  busy,
+  onSelect,
+  onOptions,
+}: {
+  options: AvailableOption[];
+  loading: boolean;
+  busy: boolean;
+  onSelect: (option: AvailableOption) => void;
+  onOptions: () => void;
+}) {
   return (
     <div className="screen fade">
       <MapBackground />
       <Header onOptionsClick={onOptions} />
-      <div className="title-banner glass" style={{ top: 160 }}>
-        <div className="route-label">DESTINATION</div>
-        <div className="route-addr">{DEMO_ROUTE.dropoff.label}</div>
-        <div className="route-sub">{DEMO_ROUTE.dropoff.address}</div>
+      <div className="title-banner glass" style={{ top: 100 }}>
+        <div className="route-label">CHAUFFEURS DISPONIBLES</div>
+        <div className="route-sub">{loading ? 'Recherche en cours…' : `${options.length} chauffeur(s) trouvé(s)`}</div>
       </div>
-      <div className="sonar-wrap">
-        <div className="sonar-ring" />
-        <div className="sonar-ring" />
-        <div className="sonar-ring" />
-        <div className="sonar-core" />
-        <div className="car-ghost" style={{ top: 20, left: 20 }}>🚗</div>
-        <div className="car-ghost" style={{ top: 210, left: 230 }}>🚗</div>
-        <div className="car-ghost" style={{ top: 230, left: 30 }}>🚗</div>
-      </div>
-      <div className="sheet glass" style={{ paddingTop: 16 }}>
-        <div className="search-sheet">
-          <div className="spinner" />
-          <div className="search-text">RECHERCHE D&apos;UN CHAUFFEUR<br />PRIVATE FLEET...</div>
-        </div>
+      <div className="sheet glass" style={{ paddingTop: 16, maxHeight: '60%', overflowY: 'auto' }}>
+        {loading && (
+          <div className="search-sheet">
+            <div className="spinner" />
+            <div className="search-text">RECHERCHE DES CHAUFFEURS<br />DISPONIBLES...</div>
+          </div>
+        )}
+
+        {!loading && options.length === 0 && (
+          <div className="search-sheet">
+            <div className="search-text">AUCUN CHAUFFEUR DISPONIBLE<br />POUR CE TYPE DE VÉHICULE POUR LE MOMENT.</div>
+          </div>
+        )}
+
+        {!loading &&
+          options.map((option) => (
+            <div key={option.vehicle.id} className="driver-row" style={{ marginBottom: 12, cursor: 'pointer' }}>
+              <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
+              <div className="driver-info">
+                <div className="driver-name">{option.driver.full_name ?? 'Chauffeur'}</div>
+                <div className="driver-meta">
+                  <span className="star-badge">{Number(option.driver.rating_avg).toFixed(1)} ★</span>
+                </div>
+                <div className="route-sub">{option.vehicle.brand} {option.vehicle.model} — {option.vehicle.plate}</div>
+              </div>
+              <button className="btn cyan" style={{ width: 'auto', padding: '10px 16px' }} disabled={busy} onClick={() => onSelect(option)}>
+                CHOISIR
+              </button>
+            </div>
+          ))}
         <div className="home-indicator" />
       </div>
     </div>
@@ -450,7 +615,7 @@ function Screen4({
       <Header onOptionsClick={onOptions} />
       <div className="title-banner glass">
         <h2>CHAUFFEUR ARRIVE</h2>
-        <div className="sub-route">📍 {DEMO_ROUTE.pickup.label} → {DEMO_ROUTE.dropoff.label}</div>
+        <div className="sub-route">📍 {trip.pickup_address} → {trip.dropoff_address}</div>
       </div>
       <div className="sheet glass">
         <div className="driver-row">
@@ -533,7 +698,7 @@ function Screen5({
           </div>
           <div className="split-content" style={{ paddingTop: 300 }}>
             <div className="fare-box">
-              <div className="fare-row"><span className="k">DESTINATION</span><span className="v">{DEMO_ROUTE.dropoff.label}</span></div>
+              <div className="fare-row"><span className="k">DESTINATION</span><span className="v">{trip.dropoff_address}</span></div>
               <div className="fare-row"><span className="k">Prix (espèces)</span><span className="v">{formatFCFA(trip.estimated_price)}</span></div>
             </div>
           </div>
