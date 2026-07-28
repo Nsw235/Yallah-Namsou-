@@ -67,10 +67,12 @@ export default function PrivateFleetApp() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  // Grille tarifaire
+  // Grille tarifaire (chargée seulement une fois la session confirmée,
+  // sinon la RLS Supabase renvoie 0 ligne silencieusement avant que le token soit prêt)
   useEffect(() => {
+    if (!session) return;
     getPricingRules().then(setPricingRules).catch((e) => setError(e.message));
-  }, []);
+  }, [session]);
 
   function priceFor(type: VehicleType): number | null {
     const rule = pricingRules.find((r) => r.vehicle_type === type);
@@ -291,7 +293,7 @@ function Screen1({
 }) {
   const types: { key: VehicleType; icon: string }[] = [
     { key: 'berline', icon: '/icon_berline.png' },
-    { key: 'prestige', icon: '/icon_van.png' },
+    { key: 'van', icon: '/icon_van.png' },
     { key: 'suv', icon: '/icon_suv.png' },
   ];
   return (
