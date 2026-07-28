@@ -10,11 +10,11 @@ const supabaseAnonKey =
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export type VehicleType = "suv" | "prestige" | "berline";
+export type VehicleType = "suv" | "van" | "berline";
 
 export const VEHICLE_LABELS: Record<VehicleType, string> = {
   suv: "SUV",
-  prestige: "Prestige",
+  van: "Van",
   berline: "Berline",
 };
 

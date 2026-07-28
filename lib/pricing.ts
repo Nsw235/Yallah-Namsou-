@@ -50,12 +50,12 @@ export function formatFCFA(amount: number | null | undefined): string {
 
 export const VEHICLE_LABELS: Record<VehicleType, string> = {
   berline: 'BERLINE',
-  prestige: 'PRESTIGE',
+  van: 'VAN',
   suv: 'SUV',
 };
 
 export const VEHICLE_EMOJI: Record<VehicleType, string> = {
   berline: '🚗',
-  prestige: '🚙',
+  van: '🚐',
   suv: '🚘',
 };
