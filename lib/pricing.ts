@@ -59,3 +59,9 @@ export const VEHICLE_EMOJI: Record<VehicleType, string> = {
   van: '🚐',
   suv: '🚘',
 };
+
+export const VEHICLE_ICON: Record<VehicleType, string> = {
+  berline: '/icon_berline.png',
+  van: '/icon_van.png',
+  suv: '/icon_suv.png',
+};
