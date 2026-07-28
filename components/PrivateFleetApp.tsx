@@ -23,7 +23,7 @@ import {
 import { GeoResult, searchAddress } from '@/lib/geocode';
 import AuthGate from '@/components/AuthGate';
 import Header from '@/components/Header';
-import MapBackground from '@/components/MapBackground';
+import RealMap from '@/components/RealMap';
 import HistoryModal from '@/components/HistoryModal';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
@@ -221,7 +221,6 @@ export default function PrivateFleetApp() {
     return (
       <div className="wrap-outer">
         <div className="device">
-          <div className="notch" />
           <AuthGate onAuthed={() => {}} />
         </div>
       </div>
@@ -231,7 +230,6 @@ export default function PrivateFleetApp() {
   return (
     <div className="wrap-outer">
       <div className="device">
-        <div className="notch" />
         <div className="stepper">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <i key={i} className={i < step ? 'done' : i === step ? 'active' : ''} />
@@ -266,8 +264,9 @@ export default function PrivateFleetApp() {
           />
         )}
 
-        {step === 3 && (
+        {step === 3 && trip && (
           <Screen3
+            trip={trip}
             options={availableOptions}
             loading={loadingDrivers}
             busy={busy}
@@ -341,17 +340,12 @@ function Screen1({
   const ready = !!pickup && !!dropoff;
   return (
     <div className="screen fade">
-      <MapBackground
+      <RealMap
+        pickup={pickup ? { lat: pickup.lat, lng: pickup.lng } : null}
+        dropoff={dropoff ? { lat: dropoff.lat, lng: dropoff.lng } : null}
+        showRoute={ready}
         routeColor="#e8c9a8"
-        routePath={ready ? 'M100,420 L100,480 L300,480 L300,300' : undefined}
-      >
-        {pickup && (
-          <div style={{ position: 'absolute', top: 416, left: 96, width: 14, height: 14, borderRadius: '50% 50% 50% 0', background: '#e8c9a8', transform: 'rotate(-45deg)', boxShadow: '0 0 8px #e8c9a8' }} />
-        )}
-        {dropoff && (
-          <div style={{ position: 'absolute', top: 296, left: 295, width: 14, height: 14, borderRadius: '50% 50% 50% 0', background: '#ff5f5f', transform: 'rotate(-45deg)', boxShadow: '0 0 8px #ff5f5f' }} />
-        )}
-      </MapBackground>
+      />
       <Header onOptionsClick={onOptions} />
       <div className="sheet glass" style={{ paddingTop: 16 }}>
         <AddressField
@@ -506,7 +500,12 @@ function Screen2({
 }) {
   return (
     <div className="screen fade">
-      <MapBackground routeColor="#e8c9a8" routePath="M100,420 L100,480 L300,480 L300,300" />
+      <RealMap
+        pickup={{ lat: pickup.lat, lng: pickup.lng }}
+        dropoff={{ lat: dropoff.lat, lng: dropoff.lng }}
+        showRoute
+        routeColor="#e8c9a8"
+      />
       <Header onOptionsClick={onOptions} />
       <RouteCard pickup={pickup} dropoff={dropoff} />
       <div className="sheet glass">
@@ -533,12 +532,14 @@ function Screen2({
 /* ÉCRAN 3 — Recherche de chauffeur                                       */
 /* ---------------------------------------------------------------------- */
 function Screen3({
+  trip,
   options,
   loading,
   busy,
   onSelect,
   onOptions,
 }: {
+  trip: Trip;
   options: AvailableOption[];
   loading: boolean;
   busy: boolean;
@@ -547,7 +548,7 @@ function Screen3({
 }) {
   return (
     <div className="screen fade">
-      <MapBackground />
+      <RealMap pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }} />
       <Header onOptionsClick={onOptions} />
       <div className="title-banner glass" style={{ top: 100 }}>
         <div className="route-label">CHAUFFEURS DISPONIBLES</div>
@@ -609,9 +610,10 @@ function Screen4({
 }) {
   return (
     <div className="screen fade">
-      <MapBackground routeColor="#e8c9a8" routePath="M300,300 L300,480 L100,480">
-        <div style={{ position: 'absolute', top: 400, left: 230, fontSize: 34, filter: 'drop-shadow(0 6px 10px rgba(0,0,0,0.6))', transform: 'scaleX(-1)' }}>🚗</div>
-      </MapBackground>
+      <RealMap
+        pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
+        pins={[{ position: { lat: trip.pickup_lat, lng: trip.pickup_lng }, emoji: '🚗' }]}
+      />
       <Header onOptionsClick={onOptions} />
       <div className="title-banner glass">
         <h2>CHAUFFEUR ARRIVE</h2>
@@ -684,16 +686,16 @@ function Screen5({
               </div>
             </div>
           </div>
-          <div className="brand-tag">◐ mapbox</div>
         </div>
         <div className="split-divider" />
         <div className="split-right">
           <div className="split-header" style={{ left: '50%', right: 0 }}>SUIVI DU TRAJET</div>
           <div className="mini-map">
-            <MapBackground
-              viewBox="0 0 200 280"
+            <RealMap
+              pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
+              dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
+              showRoute
               routeColor="#e8c9a8"
-              routePath="M150,20 L150,140 L40,140 L40,260"
             />
           </div>
           <div className="split-content" style={{ paddingTop: 300 }}>
@@ -735,10 +737,13 @@ function Screen6({
 }) {
   return (
     <div className="screen fade">
-      <MapBackground routeColor="#e8c9a8" routePath="M300,300 L300,480 L100,480">
-        <div style={{ position: 'absolute', top: 296, left: 295, fontSize: 20 }}>🏁</div>
-        <div style={{ position: 'absolute', top: 400, left: 230, fontSize: 34, filter: 'drop-shadow(0 6px 10px rgba(0,0,0,0.6))', transform: 'scaleX(-1)' }}>🚗</div>
-      </MapBackground>
+      <RealMap
+        pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
+        dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
+        showRoute
+        routeColor="#e8c9a8"
+        pins={[{ position: { lat: trip.dropoff_lat, lng: trip.dropoff_lng }, emoji: '🏁' }]}
+      />
       <Header />
       <div className="title-banner glass"><h2>COURSE TERMINÉE</h2></div>
       <div className="sheet glass">
