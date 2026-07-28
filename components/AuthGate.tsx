@@ -81,7 +81,7 @@ export default function AuthGate({ onAuthed }: { onAuthed: () => void }) {
             required
           />
         </div>
-        <button className="btn cyan" type="submit" disabled={loading}>
+        <button className="btn copper" type="submit" disabled={loading}>
           {loading ? 'Veuillez patienter…' : mode === 'signin' ? 'SE CONNECTER' : "CRÉER MON COMPTE"}
         </button>
       </form>
