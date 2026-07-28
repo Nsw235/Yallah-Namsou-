@@ -1,4 +1,4 @@
-export type VehicleType = 'berline' | 'prestige' | 'suv';
+export type VehicleType = 'berline' | 'van' | 'suv';
 export type TripStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
 export type PaymentMethod = 'airtel_money' | 'moov_money' | 'cash';
 export type PaymentStatus = 'pending' | 'paid' | 'failed';
