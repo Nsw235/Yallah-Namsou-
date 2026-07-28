@@ -289,10 +289,10 @@ function Screen1({
   onSearch: () => void;
   onOptions: () => void;
 }) {
-  const types: { key: VehicleType; cls: string }[] = [
-    { key: 'berline', cls: 'amber' },
-    { key: 'prestige', cls: 'cyan' },
-    { key: 'suv', cls: 'emerald' },
+  const types: { key: VehicleType; icon: string }[] = [
+    { key: 'berline', icon: '/icon_berline.png' },
+    { key: 'prestige', icon: '/icon_van.png' },
+    { key: 'suv', icon: '/icon_suv.png' },
   ];
   return (
     <div className="screen fade">
@@ -310,11 +310,10 @@ function Screen1({
           {types.map((t) => (
             <div
               key={t.key}
-              className={`vcard ${t.cls} ${vehicle === t.key ? 'selected' : ''}`}
+              className={`vcard ${vehicle === t.key ? 'selected' : ''}`}
               onClick={() => onSelect(t.key)}
             >
-              <span className="vimg">{VEHICLE_EMOJI[t.key]}</span>
-              <div className="vname">{VEHICLE_LABELS[t.key]}</div>
+              <img src={t.icon} alt={VEHICLE_LABELS[t.key]} className="vimg" />
               <div className="vprice">{formatFCFA(priceFor(t.key))}</div>
             </div>
           ))}
