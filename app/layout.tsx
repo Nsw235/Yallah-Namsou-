@@ -2,8 +2,11 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Private Fleet — VTC N\u2019Djamena',
-  description: 'Application de réservation VTC haut de gamme, mode sombre, N\u2019Djamena.',
+  title: 'Yalla Nimshi — Service de transport d\u2019exception, N\u2019Djamena',
+  description: 'L\u2019élégance accessible à tous. Application de réservation VTC haut de gamme à N\u2019Djamena.',
+  icons: {
+    icon: '/logo.png',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
