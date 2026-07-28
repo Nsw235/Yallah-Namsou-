@@ -297,11 +297,11 @@ function Screen1({
   return (
     <div className="screen fade">
       <MapBackground
-        routeColor="#ffb238"
+        routeColor="#e8c9a8"
         routePath="M100,420 L100,480 L300,480 L300,300"
       >
         <div style={{ position: 'absolute', top: 296, left: 295, width: 14, height: 14, borderRadius: '50% 50% 50% 0', background: '#ff5f5f', transform: 'rotate(-45deg)', boxShadow: '0 0 8px #ff5f5f' }} />
-        <div style={{ position: 'absolute', top: 416, left: 96, width: 14, height: 14, borderRadius: '50% 50% 50% 0', background: '#35e6a0', transform: 'rotate(-45deg)', boxShadow: '0 0 8px #35e6a0' }} />
+        <div style={{ position: 'absolute', top: 416, left: 96, width: 14, height: 14, borderRadius: '50% 50% 50% 0', background: '#e8c9a8', transform: 'rotate(-45deg)', boxShadow: '0 0 8px #e8c9a8' }} />
       </MapBackground>
       <Header onOptionsClick={onOptions} />
       <RouteCard />
@@ -367,7 +367,7 @@ function Screen2({
 }) {
   return (
     <div className="screen fade">
-      <MapBackground routeColor="#ffb238" routePath="M100,420 L100,480 L300,480 L300,300" />
+      <MapBackground routeColor="#e8c9a8" routePath="M100,420 L100,480 L300,480 L300,300" />
       <Header onOptionsClick={onOptions} />
       <RouteCard />
       <div className="sheet glass">
@@ -398,7 +398,7 @@ function Screen3({ onOptions }: { onOptions: () => void }) {
     <div className="screen fade">
       <MapBackground />
       <Header onOptionsClick={onOptions} />
-      <div className="title-banner glass" style={{ top: 118 }}>
+      <div className="title-banner glass" style={{ top: 160 }}>
         <div className="route-label">DESTINATION</div>
         <div className="route-addr">{DEMO_ROUTE.dropoff.label}</div>
         <div className="route-sub">{DEMO_ROUTE.dropoff.address}</div>
@@ -443,7 +443,7 @@ function Screen4({
 }) {
   return (
     <div className="screen fade">
-      <MapBackground routeColor="#ffb238" routePath="M300,300 L300,480 L100,480">
+      <MapBackground routeColor="#e8c9a8" routePath="M300,300 L300,480 L100,480">
         <div style={{ position: 'absolute', top: 400, left: 230, fontSize: 34, filter: 'drop-shadow(0 6px 10px rgba(0,0,0,0.6))', transform: 'scaleX(-1)' }}>🚗</div>
       </MapBackground>
       <Header onOptionsClick={onOptions} />
@@ -526,7 +526,7 @@ function Screen5({
           <div className="mini-map">
             <MapBackground
               viewBox="0 0 200 280"
-              routeColor="#ffb238"
+              routeColor="#e8c9a8"
               routePath="M150,20 L150,140 L40,140 L40,260"
             />
           </div>
@@ -569,7 +569,7 @@ function Screen6({
 }) {
   return (
     <div className="screen fade">
-      <MapBackground routeColor="#35e6a0" routePath="M300,300 L300,480 L100,480">
+      <MapBackground routeColor="#e8c9a8" routePath="M300,300 L300,480 L100,480">
         <div style={{ position: 'absolute', top: 296, left: 295, fontSize: 20 }}>🏁</div>
         <div style={{ position: 'absolute', top: 400, left: 230, fontSize: 34, filter: 'drop-shadow(0 6px 10px rgba(0,0,0,0.6))', transform: 'scaleX(-1)' }}>🚗</div>
       </MapBackground>
