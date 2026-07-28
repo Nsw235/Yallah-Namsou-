@@ -52,19 +52,16 @@ export const VEHICLE_LABELS: Record<VehicleType, string> = {
   berline: 'BERLINE',
   van: 'VAN',
   suv: 'SUV',
-  prestige: 'PRESTIGE',
 };
 
 export const VEHICLE_EMOJI: Record<VehicleType, string> = {
   berline: '🚗',
   van: '🚐',
   suv: '🚘',
-  prestige: '🚖',
 };
 
 export const VEHICLE_ICON: Record<VehicleType, string> = {
   berline: '/icon_berline.png',
   van: '/icon_van.png',
   suv: '/icon_suv.png',
-  prestige: '/icon_prestige.png',
 };
