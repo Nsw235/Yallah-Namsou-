@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 import { PricingRule, Trip, TripWithDriver, VehicleType } from '@/types/database';
-import { DEMO_ROUTE } from '@/lib/pricing';
+import { GeoResult } from '@/lib/geocode';
 
 /** Récupère la grille tarifaire (une ligne par type de véhicule). */
 export async function getPricingRules(): Promise<PricingRule[]> {
@@ -14,18 +14,20 @@ export async function createTrip(params: {
   passengerId: string;
   vehicleType: VehicleType;
   estimatedPrice: number;
+  pickup: GeoResult;
+  dropoff: GeoResult;
 }): Promise<Trip> {
   const { data, error } = await supabase
     .from('trips')
     .insert({
       passenger_id: params.passengerId,
       vehicle_type: params.vehicleType,
-      pickup_lat: DEMO_ROUTE.pickup.lat,
-      pickup_lng: DEMO_ROUTE.pickup.lng,
-      pickup_address: DEMO_ROUTE.pickup.address,
-      dropoff_lat: DEMO_ROUTE.dropoff.lat,
-      dropoff_lng: DEMO_ROUTE.dropoff.lng,
-      dropoff_address: DEMO_ROUTE.dropoff.address,
+      pickup_lat: params.pickup.lat,
+      pickup_lng: params.pickup.lng,
+      pickup_address: params.pickup.address,
+      dropoff_lat: params.dropoff.lat,
+      dropoff_lng: params.dropoff.lng,
+      dropoff_address: params.dropoff.address,
       estimated_price: params.estimatedPrice,
       status: 'pending',
     })
@@ -35,61 +37,64 @@ export async function createTrip(params: {
   return data as Trip;
 }
 
-/**
- * Cherche un chauffeur approuvé et disponible pour le type de véhicule demandé,
- * puis l'assigne à la course (équivalent de "un chauffeur accepte la course").
- *
- * NB : dans une vraie appli de production, cette étape se ferait côté chauffeur
- * (son propre appareil accepte la course) ou via une fonction serveur sécurisée.
- * Ici, pour la démo passager seul, le client assigne directement le chauffeur.
- */
-export async function findAndAssignDriver(tripId: string, vehicleType: VehicleType) {
-  const { data: vehicle, error: vehicleError } = await supabase
+/** Liste les chauffeurs réellement disponibles pour le type de véhicule demandé. */
+export async function listAvailableVehicles(vehicleType: VehicleType) {
+  const { data: vehicles, error: vehicleError } = await supabase
     .from('vehicles')
     .select('id, driver_id, plate, brand, model, status, type')
     .eq('type', vehicleType)
-    .eq('status', 'available')
-    .limit(1)
-    .maybeSingle();
-
+    .eq('status', 'available');
   if (vehicleError) throw vehicleError;
-  if (!vehicle) {
-    throw new Error('Aucun chauffeur disponible pour ce type de véhicule pour le moment.');
-  }
+  if (!vehicles || vehicles.length === 0) return [];
 
-  const { data: driver, error: driverError } = await supabase
+  const driverIds = vehicles.map((v) => v.driver_id);
+
+  const { data: drivers, error: driversError } = await supabase
     .from('drivers')
     .select('id, rating_avg, validation_status')
-    .eq('id', vehicle.driver_id)
-    .eq('validation_status', 'approved')
-    .single();
-  if (driverError) throw driverError;
+    .in('id', driverIds)
+    .eq('validation_status', 'approved');
+  if (driversError) throw driversError;
 
-  const { data: trip, error: tripError } = await supabase
+  const { data: profiles, error: profilesError } = await supabase
+    .from('profiles')
+    .select('id, full_name, phone')
+    .in('id', driverIds);
+  if (profilesError) throw profilesError;
+
+  return vehicles
+    .map((v) => {
+      const driver = drivers?.find((d) => d.id === v.driver_id);
+      if (!driver) return null;
+      const profile = profiles?.find((p) => p.id === v.driver_id);
+      return {
+        vehicle: v,
+        driver: {
+          id: driver.id,
+          rating_avg: driver.rating_avg,
+          full_name: profile?.full_name ?? null,
+          phone: profile?.phone ?? null,
+        },
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+}
+
+/** Assigne le chauffeur choisi par le passager à la course. */
+export async function assignDriver(tripId: string, driverId: string, vehicleId: string): Promise<Trip> {
+  const { data, error } = await supabase
     .from('trips')
     .update({
-      driver_id: driver.id,
-      vehicle_id: vehicle.id,
+      driver_id: driverId,
+      vehicle_id: vehicleId,
       status: 'accepted',
       accepted_at: new Date().toISOString(),
     })
     .eq('id', tripId)
     .select()
     .single();
-  if (tripError) throw tripError;
-
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('full_name, phone')
-    .eq('id', driver.id)
-    .single();
-  if (profileError) throw profileError;
-
-  return {
-    trip: trip as Trip,
-    driver: { ...driver, ...profile },
-    vehicle,
-  };
+  if (error) throw error;
+  return data as Trip;
 }
 
 /** Passe la course en "en cours" (le passager est monté à bord). */
