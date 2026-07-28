@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { PricingRule, Trip, VehicleType } from '@/types/database';
 import {
   DEMO_ROUTE,
-  VEHICLE_EMOJI,
+  VEHICLE_ICON,
   VEHICLE_LABELS,
   estimatePrice,
   formatFCFA,
@@ -372,7 +372,7 @@ function Screen2({
       <Header onOptionsClick={onOptions} />
       <RouteCard />
       <div className="sheet glass">
-        <div className="veh-hero"><span className="big">{VEHICLE_EMOJI[vehicle]}</span></div>
+        <div className="veh-hero"><img src={VEHICLE_ICON[vehicle]} alt={VEHICLE_LABELS[vehicle]} className="veh-hero-img" /></div>
         <div className="confirm-title">{VEHICLE_LABELS[vehicle]} SÉLECTIONNÉE</div>
         <div className="confirm-sub">Standard, 4 places — {formatFCFA(price)}</div>
         <div className="pay-box">
