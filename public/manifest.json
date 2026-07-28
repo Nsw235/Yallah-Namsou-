@@ -1,10 +1,16 @@
 {
-  "name": "Yallah-Namsou نمشوا",
-  "short_name": "Yallah-Namsou",
-  "description": "Commandez une voiture à la demande à N'Djamena",
+  "name": "Yalla Nimshi يلا نمشي",
+  "short_name": "Yalla Nimshi",
+  "description": "Service de transport d'exception à N'Djamena — Commandez une voiture à la demande",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F2EEE6",
   "theme_color": "#1B2A4A",
-  "icons": []
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
 }
