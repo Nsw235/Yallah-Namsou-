@@ -105,11 +105,9 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 
 .vehicles{display:flex; gap:10px; margin-bottom:16px;}
 .vcard{ flex:1; border-radius:16px; padding:10px 8px 12px; text-align:center; background:rgba(255,255,255,0.03); border:1.5px solid rgba(255,255,255,0.09); cursor:pointer; transition:all .25s ease; position:relative; }
-.vcard .vimg{font-size:30px; margin-bottom:6px; display:block;}
-.vcard .vname{font-size:12px; font-weight:800; letter-spacing:.6px;}
-.vcard .vprice{font-size:11px; color:var(--text-dim); margin-top:2px;}
-.vcard.amber.selected, .vcard.cyan.selected, .vcard.emerald.selected{border-color:var(--copper); box-shadow:0 0 0 1px var(--copper), 0 0 18px rgba(169,122,91,0.55); background:rgba(169,122,91,0.1);}
-.vcard.amber .vname, .vcard.cyan .vname, .vcard.emerald .vname{color:var(--copper-light);}
+.vcard .vimg{width:100%; max-width:78px; height:auto; margin-bottom:6px; display:block; margin-left:auto; margin-right:auto; border-radius:14px;}
+.vcard .vprice{font-size:11px; color:var(--text-dim); margin-top:2px; font-weight:700;}
+.vcard.selected{border-color:var(--copper); box-shadow:0 0 0 1px var(--copper), 0 0 18px rgba(169,122,91,0.55); background:rgba(169,122,91,0.1);}
 
 .btn{ width:100%; border:none; border-radius:16px; padding:17px; font-size:15px; font-weight:800; letter-spacing:.4px; cursor:pointer; font-family:var(--font); display:flex; align-items:center; justify-content:center; gap:8px; transition:transform .15s ease; color:#06070a; }
 .btn:disabled{opacity:.5; cursor:not-allowed;}
