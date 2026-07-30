@@ -12,13 +12,15 @@ import {
   haversineKm,
 } from '@/lib/pricing';
 import {
-  assignDriver,
   completeTrip,
   createTrip,
+  dispatchTrip,
+  getAssignedDriverInfo,
   getPricingRules,
-  listAvailableVehicles,
   rateTrip,
   startTrip,
+  subscribeToTrip,
+  subscribeToVehiclePosition,
 } from '@/lib/rides';
 import { GeoResult, searchAddress } from '@/lib/geocode';
 import AuthGate from '@/components/AuthGate';
@@ -41,7 +43,7 @@ type VehicleInfo = {
   model: string | null;
 };
 
-type AvailableOption = Awaited<ReturnType<typeof listAvailableVehicles>>[number];
+type LatLng = { lat: number; lng: number };
 
 export default function PrivateFleetApp() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -57,8 +59,10 @@ export default function PrivateFleetApp() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [availableOptions, setAvailableOptions] = useState<AvailableOption[]>([]);
-  const [loadingDrivers, setLoadingDrivers] = useState(false);
+  const [dispatchStatus, setDispatchStatus] = useState<'idle' | 'searching' | 'no_driver' | 'error'>('idle');
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
+  const [driverPos, setDriverPos] = useState<LatLng | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
 
   const distanceKm = useMemo(() => {
     if (!pickup || !dropoff) return null;
@@ -93,7 +97,9 @@ export default function PrivateFleetApp() {
     setVehicleInfo(null);
     setRating(0);
     setError(null);
-    setAvailableOptions([]);
+    setDispatchStatus('idle');
+    setDispatchError(null);
+    setDriverPos(null);
   }
 
   async function handleConfirmTrip() {
@@ -119,51 +125,61 @@ export default function PrivateFleetApp() {
     }
   }
 
-  // Chargement de la vraie liste des chauffeurs disponibles à l'entrée sur l'écran 3
+  // Dispatch automatique : dès l'entrée sur l'écran 3, on demande au serveur
+  // (Edge Function -> RPC assign_nearest_driver) de trouver et d'assigner le
+  // chauffeur disponible le plus proche. Le passager ne choisit plus lui-même.
   useEffect(() => {
     if (step !== 3 || !trip) return;
     let cancelled = false;
-    setLoadingDrivers(true);
-    setAvailableOptions([]);
-    listAvailableVehicles(trip.vehicle_type)
-      .then((options) => {
-        if (!cancelled) setAvailableOptions(options);
+    setDispatchStatus('searching');
+    setDispatchError(null);
+
+    dispatchTrip(trip.id)
+      .then(async (updated) => {
+        if (cancelled) return;
+        const info = await getAssignedDriverInfo(updated);
+        if (cancelled || !info) return;
+        setDriver(info.driver);
+        setVehicleInfo(info.vehicle);
+        if (info.vehicle.last_lat != null && info.vehicle.last_lng != null) {
+          setDriverPos({ lat: info.vehicle.last_lat, lng: info.vehicle.last_lng });
+        }
+        setTrip(updated);
+        setStep(4);
       })
-      .catch((e) => {
-        if (!cancelled) setError(e?.message ?? 'Impossible de charger les chauffeurs disponibles.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingDrivers(false);
+      .catch((e: any) => {
+        if (cancelled) return;
+        const msg = e?.message ?? 'Impossible de trouver un chauffeur.';
+        setDispatchStatus(msg.includes('Aucun chauffeur') ? 'no_driver' : 'error');
+        setDispatchError(msg);
       });
+
     return () => {
       cancelled = true;
     };
-  }, [step, trip]);
+  }, [step, trip, retryToken]);
 
-  async function handleSelectDriver(option: AvailableOption) {
-    if (!trip) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const updated = await assignDriver(trip.id, option.driver.id, option.vehicle.id);
-      setDriver({
-        id: option.driver.id,
-        full_name: option.driver.full_name,
-        phone: option.driver.phone,
-        rating_avg: option.driver.rating_avg,
-      });
-      setVehicleInfo({
-        plate: option.vehicle.plate,
-        brand: option.vehicle.brand,
-        model: option.vehicle.model,
-      });
+  // Position du chauffeur en direct dès qu'un véhicule est assigné (écrans 4 et 5).
+  useEffect(() => {
+    if (!trip?.vehicle_id || step < 4) return;
+    const unsubscribe = subscribeToVehiclePosition(trip.vehicle_id, setDriverPos);
+    return unsubscribe;
+  }, [trip?.vehicle_id, step]);
+
+  // Statut de la course en direct : si le chauffeur démarre/termine la course
+  // depuis SON app, l'écran passager avance automatiquement sans action manuelle.
+  useEffect(() => {
+    if (!trip?.id || step < 4) return;
+    const unsubscribe = subscribeToTrip(trip.id, (updated) => {
       setTrip(updated);
-      setStep(4);
-    } catch (e: any) {
-      setError(e?.message ?? 'Impossible de choisir ce chauffeur.');
-    } finally {
-      setBusy(false);
-    }
+      if (updated.status === 'in_progress') setStep(5);
+      if (updated.status === 'completed') setStep(6);
+    });
+    return unsubscribe;
+  }, [trip?.id, step]);
+
+  function handleRetryDispatch() {
+    setRetryToken((t) => t + 1);
   }
 
   async function handleReady() {
@@ -267,10 +283,9 @@ export default function PrivateFleetApp() {
         {step === 3 && trip && (
           <Screen3
             trip={trip}
-            options={availableOptions}
-            loading={loadingDrivers}
-            busy={busy}
-            onSelect={handleSelectDriver}
+            status={dispatchStatus}
+            error={dispatchError}
+            onRetry={handleRetryDispatch}
             onOptions={() => setShowHistory(true)}
           />
         )}
@@ -280,6 +295,7 @@ export default function PrivateFleetApp() {
             driver={driver}
             vehicleInfo={vehicleInfo}
             trip={trip}
+            driverPos={driverPos}
             busy={busy}
             onReady={handleReady}
             onOptions={() => setShowHistory(true)}
@@ -287,7 +303,7 @@ export default function PrivateFleetApp() {
         )}
 
         {step === 5 && driver && trip && (
-          <Screen5 driver={driver} trip={trip} onFinish={handleFinish} busy={busy} />
+          <Screen5 driver={driver} trip={trip} driverPos={driverPos} onFinish={handleFinish} busy={busy} />
         )}
 
         {step === 6 && driver && trip && (
@@ -533,17 +549,15 @@ function Screen2({
 /* ---------------------------------------------------------------------- */
 function Screen3({
   trip,
-  options,
-  loading,
-  busy,
-  onSelect,
+  status,
+  error,
+  onRetry,
   onOptions,
 }: {
   trip: Trip;
-  options: AvailableOption[];
-  loading: boolean;
-  busy: boolean;
-  onSelect: (option: AvailableOption) => void;
+  status: 'idle' | 'searching' | 'no_driver' | 'error';
+  error: string | null;
+  onRetry: () => void;
   onOptions: () => void;
 }) {
   return (
@@ -551,39 +565,33 @@ function Screen3({
       <RealMap pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }} />
       <Header onOptionsClick={onOptions} />
       <div className="title-banner glass" style={{ top: 100 }}>
-        <div className="route-label">CHAUFFEURS DISPONIBLES</div>
-        <div className="route-sub">{loading ? 'Recherche en cours…' : `${options.length} chauffeur(s) trouvé(s)`}</div>
+        <div className="route-label">RECHERCHE D&apos;UN CHAUFFEUR</div>
+        <div className="route-sub">
+          {status === 'searching' && 'Attribution automatique du chauffeur le plus proche…'}
+          {status === 'no_driver' && 'Aucun chauffeur disponible pour le moment'}
+          {status === 'error' && 'Une erreur est survenue'}
+        </div>
       </div>
       <div className="sheet glass" style={{ paddingTop: 16, maxHeight: '60%', overflowY: 'auto' }}>
-        {loading && (
+        {status === 'searching' && (
           <div className="search-sheet">
             <div className="spinner" />
-            <div className="search-text">RECHERCHE DES CHAUFFEURS<br />DISPONIBLES...</div>
+            <div className="search-text">RECHERCHE DU CHAUFFEUR<br />LE PLUS PROCHE...</div>
           </div>
         )}
 
-        {!loading && options.length === 0 && (
+        {(status === 'no_driver' || status === 'error') && (
           <div className="search-sheet">
-            <div className="search-text">AUCUN CHAUFFEUR DISPONIBLE<br />POUR CE TYPE DE VÉHICULE POUR LE MOMENT.</div>
+            <div className="search-text">
+              {status === 'no_driver'
+                ? 'AUCUN CHAUFFEUR DISPONIBLE\nPOUR CE TYPE DE VÉHICULE POUR LE MOMENT.'
+                : (error ?? 'ERREUR DE DISPATCH.')}
+            </div>
+            <button className="btn cyan" style={{ marginTop: 16 }} onClick={onRetry}>
+              RÉESSAYER
+            </button>
           </div>
         )}
-
-        {!loading &&
-          options.map((option) => (
-            <div key={option.vehicle.id} className="driver-row" style={{ marginBottom: 12, cursor: 'pointer' }}>
-              <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
-              <div className="driver-info">
-                <div className="driver-name">{option.driver.full_name ?? 'Chauffeur'}</div>
-                <div className="driver-meta">
-                  <span className="star-badge">{Number(option.driver.rating_avg).toFixed(1)} ★</span>
-                </div>
-                <div className="route-sub">{option.vehicle.brand} {option.vehicle.model} — {option.vehicle.plate}</div>
-              </div>
-              <button className="btn cyan" style={{ width: 'auto', padding: '10px 16px' }} disabled={busy} onClick={() => onSelect(option)}>
-                CHOISIR
-              </button>
-            </div>
-          ))}
         <div className="home-indicator" />
       </div>
     </div>
@@ -597,6 +605,7 @@ function Screen4({
   driver,
   vehicleInfo,
   trip,
+  driverPos,
   busy,
   onReady,
   onOptions,
@@ -604,6 +613,7 @@ function Screen4({
   driver: DriverInfo;
   vehicleInfo: VehicleInfo;
   trip: Trip;
+  driverPos: LatLng | null;
   busy: boolean;
   onReady: () => void;
   onOptions: () => void;
@@ -612,7 +622,7 @@ function Screen4({
     <div className="screen fade">
       <RealMap
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
-        pins={[{ position: { lat: trip.pickup_lat, lng: trip.pickup_lng }, emoji: '🚗' }]}
+        pins={[{ position: driverPos ?? { lat: trip.pickup_lat, lng: trip.pickup_lng }, emoji: '🚗' }]}
       />
       <Header onOptionsClick={onOptions} />
       <div className="title-banner glass">
@@ -662,11 +672,13 @@ function Screen4({
 function Screen5({
   driver,
   trip,
+  driverPos,
   onFinish,
   busy,
 }: {
   driver: DriverInfo;
   trip: Trip;
+  driverPos: LatLng | null;
   onFinish: () => void;
   busy: boolean;
 }) {
@@ -694,6 +706,7 @@ function Screen5({
             <RealMap
               pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
               dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
+              pins={driverPos ? [{ position: driverPos, emoji: '🚗' }] : []}
               showRoute
               routeColor="#e8c9a8"
             />

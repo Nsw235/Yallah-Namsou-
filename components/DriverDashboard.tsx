@@ -16,6 +16,7 @@ import {
   getMyTripHistory,
   getPendingTrips,
   setVehicleStatus,
+  startSharingLocation,
   startTrip,
 } from '@/lib/driver';
 import AuthGate from '@/components/AuthGate';
@@ -58,6 +59,16 @@ export default function DriverDashboard() {
     if (session?.user) refreshAll(session.user.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id]);
+
+  // Partage GPS en direct : dès qu'un véhicule est "en ligne" (available ou
+  // busy), on pousse la position réelle du téléphone toutes les ~5s vers
+  // Supabase, pour que le passager voie le chauffeur bouger sur sa carte.
+  const onlineVehicleId = vehicles.find((v) => v.status !== 'offline')?.id ?? null;
+  useEffect(() => {
+    if (!onlineVehicleId) return;
+    const { stop } = startSharingLocation(onlineVehicleId);
+    return stop;
+  }, [onlineVehicleId]);
 
   async function handleToggleVehicle(v: MyVehicle) {
     setBusy(true);
