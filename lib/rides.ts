@@ -1,5 +1,11 @@
 import { supabase } from '@/lib/supabaseClient';
-import { PaymentMethod, PricingRule, Trip, TripWithDriver, VehicleType } from '@/types/database';
+import {
+  PaymentMethod,
+  PricingRule,
+  Trip,
+  TripWithDriver,
+  VehicleType,
+} from '@/types/database';
 import { GeoResult } from '@/lib/geocode';
 
 /** Récupère la grille tarifaire (une ligne par type de véhicule). */
@@ -9,15 +15,22 @@ export async function getPricingRules(): Promise<PricingRule[]> {
   return data as PricingRule[];
 }
 
-/** Crée une nouvelle course à l'état "pending" pour le passager connecté. */
+/**
+ * Crée une nouvelle course "pending" + son paiement associé, avec la méthode
+ * choisie par le passager AVANT le départ (comme dans le vrai flux Uber).
+ * La course est immédiatement visible de tous les chauffeurs disponibles du
+ * bon type de véhicule via Supabase Realtime.
+ */
 export async function createTrip(params: {
   passengerId: string;
   vehicleType: VehicleType;
   estimatedPrice: number;
   pickup: GeoResult;
   dropoff: GeoResult;
+  paymentMethod: PaymentMethod;
+  paymentPhone?: string;
 }): Promise<Trip> {
-  const { data, error } = await supabase
+  const { data: trip, error } = await supabase
     .from('trips')
     .insert({
       passenger_id: params.passengerId,
@@ -34,127 +47,84 @@ export async function createTrip(params: {
     .select()
     .single();
   if (error) throw error;
-  return data as Trip;
-}
-
-/** Liste les chauffeurs réellement disponibles pour le type de véhicule demandé. */
-export async function listAvailableVehicles(vehicleType: VehicleType) {
-  const { data: vehicles, error: vehicleError } = await supabase
-    .from('vehicles')
-    .select('id, driver_id, plate, brand, model, status, type')
-    .eq('type', vehicleType)
-    .eq('status', 'available');
-  if (vehicleError) throw vehicleError;
-  if (!vehicles || vehicles.length === 0) return [];
-
-  const driverIds = vehicles.map((v) => v.driver_id);
-
-  const { data: drivers, error: driversError } = await supabase
-    .from('drivers')
-    .select('id, rating_avg, validation_status')
-    .in('id', driverIds)
-    .eq('validation_status', 'approved');
-  if (driversError) throw driversError;
-
-  const { data: profiles, error: profilesError } = await supabase
-    .from('profiles')
-    .select('id, full_name, phone')
-    .in('id', driverIds);
-  if (profilesError) throw profilesError;
-
-  return vehicles
-    .map((v) => {
-      const driver = drivers?.find((d) => d.id === v.driver_id);
-      if (!driver) return null;
-      const profile = profiles?.find((p) => p.id === v.driver_id);
-      return {
-        vehicle: v,
-        driver: {
-          id: driver.id,
-          rating_avg: driver.rating_avg,
-          full_name: profile?.full_name ?? null,
-          phone: profile?.phone ?? null,
-        },
-      };
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null);
-}
-
-/** Assigne le chauffeur choisi par le passager à la course. */
-export async function assignDriver(tripId: string, driverId: string, vehicleId: string): Promise<Trip> {
-  const { data, error } = await supabase
-    .from('trips')
-    .update({
-      driver_id: driverId,
-      vehicle_id: vehicleId,
-      status: 'accepted',
-      accepted_at: new Date().toISOString(),
-    })
-    .eq('id', tripId)
-    .select()
-    .single();
-  if (error) throw error;
-  return data as Trip;
-}
-
-/** Passe la course en "en cours" (le passager est monté à bord). */
-export async function startTrip(tripId: string): Promise<Trip> {
-  const { data, error } = await supabase
-    .from('trips')
-    .update({ status: 'in_progress', started_at: new Date().toISOString() })
-    .eq('id', tripId)
-    .select()
-    .single();
-  if (error) throw error;
-  return data as Trip;
-}
-
-/**
- * Termine la course, enregistre le prix final et crée l'enregistrement de
- * paiement pour la méthode choisie par le passager (cash, Airtel Money ou
- * Moov Money). Le paiement est toujours créé "pending" :
- *  - cash        -> confirmé par le chauffeur (encaissement) via confirmCashPayment
- *  - mobile money -> confirmé par le passager (transfert effectué de son côté)
- *                    via confirmMobilePayment, une fois le transfert réalisé.
- */
-export async function completeTrip(
-  tripId: string,
-  finalPrice: number,
-  method: PaymentMethod = 'cash',
-  providerReference?: string
-): Promise<Trip> {
-  const { data, error } = await supabase
-    .from('trips')
-    .update({
-      status: 'completed',
-      completed_at: new Date().toISOString(),
-      final_price: finalPrice,
-    })
-    .eq('id', tripId)
-    .select()
-    .single();
-  if (error) throw error;
 
   const { error: paymentError } = await supabase.from('payments').insert({
-    trip_id: tripId,
-    method,
-    amount: finalPrice,
+    trip_id: trip.id,
+    method: params.paymentMethod,
+    amount: params.estimatedPrice,
     status: 'pending',
-    provider_reference: providerReference ?? null,
+    provider_reference: params.paymentPhone ?? null,
   });
   if (paymentError) throw paymentError;
 
+  return trip as Trip;
+}
+
+/** Annule une course encore en attente (avant qu'un chauffeur ne l'accepte). */
+export async function cancelTrip(tripId: string) {
+  const { error } = await supabase
+    .from('trips')
+    .update({ status: 'cancelled' })
+    .eq('id', tripId)
+    .eq('status', 'pending');
+  if (error) throw error;
+}
+
+/** Charge une course par son id (pour rafraîchir l'état après un événement realtime). */
+export async function getTrip(tripId: string): Promise<Trip> {
+  const { data, error } = await supabase.from('trips').select('*').eq('id', tripId).single();
+  if (error) throw error;
   return data as Trip;
 }
 
-/** Le passager confirme avoir effectué le transfert Airtel Money / Moov Money. */
-export async function confirmMobilePayment(tripId: string, method: 'airtel_money' | 'moov_money') {
-  const { error } = await supabase
-    .from('payments')
-    .update({ status: 'paid' })
-    .eq('trip_id', tripId)
-    .eq('method', method);
-  if (error) throw error;
+/** Infos chauffeur + véhicule assigné à une course (une fois acceptée). */
+export async function getDriverAndVehicle(driverId: string, vehicleId: string) {
+  const [{ data: profile, error: profileError }, { data: driver, error: driverError }, { data: vehicle, error: vehicleError }] =
+    await Promise.all([
+      supabase.from('profiles').select('full_name, phone').eq('id', driverId).single(),
+      supabase.from('drivers').select('rating_avg').eq('id', driverId).single(),
+      supabase.from('vehicles').select('id, plate, brand, model, current_lat, current_lng').eq('id', vehicleId).single(),
+    ]);
+  if (profileError) throw profileError;
+  if (driverError) throw driverError;
+  if (vehicleError) throw vehicleError;
+
+  return {
+    driver: {
+      id: driverId,
+      full_name: profile?.full_name ?? null,
+      phone: profile?.phone ?? null,
+      rating_avg: driver?.rating_avg ?? 5,
+    },
+    vehicle: {
+      id: vehicle.id,
+      plate: vehicle.plate,
+      brand: vehicle.brand,
+      model: vehicle.model,
+      current_lat: vehicle.current_lat as number | null,
+      current_lng: vehicle.current_lng as number | null,
+    },
+  };
+}
+
+/**
+ * Écoute en temps réel une course précise (id connu) : le passager est
+ * notifié instantanément quand un chauffeur l'accepte, démarre le trajet,
+ * ou le termine — sans avoir à recharger la page.
+ */
+export function subscribeToTrip(tripId: string, onUpdate: (trip: Trip) => void): () => void {
+  const channel = supabase
+    .channel(`trip-${tripId}`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'trips', filter: `id=eq.${tripId}` },
+      (payload) => onUpdate(payload.new as Trip)
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /**
@@ -185,13 +155,19 @@ export function subscribeToVehicleLocation(
   };
 }
 
+/** Le passager confirme avoir effectué le transfert Airtel Money / Moov Money. */
+export async function confirmMobilePayment(tripId: string, method: 'airtel_money' | 'moov_money') {
+  const { error } = await supabase
+    .from('payments')
+    .update({ status: 'paid' })
+    .eq('trip_id', tripId)
+    .eq('method', method);
+  if (error) throw error;
+}
+
 /** Enregistre la note laissée par le passager pour cette course. */
 export async function rateTrip(tripId: string, ratedBy: string, rating: number) {
-  const { error } = await supabase.from('ratings').insert({
-    trip_id: tripId,
-    rated_by: ratedBy,
-    rating,
-  });
+  const { error } = await supabase.from('ratings').insert({ trip_id: tripId, rated_by: ratedBy, rating });
   if (error) throw error;
 }
 

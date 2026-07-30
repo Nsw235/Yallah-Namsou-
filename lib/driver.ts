@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
 import { Trip, VehicleType } from '@/types/database';
-import { completeTrip } from '@/lib/rides';
 
 export type MyVehicle = {
   id: string;
@@ -41,13 +40,13 @@ export async function getMyDriverData(userId: string) {
   if (vehiclesError) throw vehiclesError;
 
   return {
-    profile: profile as MyDriverProfile & { full_name: string | null; phone: string | null },
+    profile: profile as { full_name: string | null; phone: string | null },
     driver: driver as { rating_avg: number; validation_status: string },
     vehicles: (vehicles ?? []) as MyVehicle[],
   };
 }
 
-/** Change le statut d'un véhicule (en ligne / hors ligne). */
+/** Change le statut d'un véhicule (en ligne / hors ligne / en course). */
 export async function setVehicleStatus(vehicleId: string, status: 'offline' | 'available' | 'busy') {
   const { error } = await supabase.from('vehicles').update({ status }).eq('id', vehicleId);
   if (error) throw error;
@@ -78,15 +77,25 @@ export async function getMyActiveTrip(driverId: string): Promise<Trip | null> {
   return (data as Trip) ?? null;
 }
 
-/** Le chauffeur accepte une course en attente avec l'un de ses véhicules disponibles. */
-export async function acceptTrip(tripId: string, driverId: string, vehicleId: string): Promise<Trip> {
+/**
+ * Le chauffeur tente d'accepter une course en attente. Premier arrivé,
+ * premier servi : l'UPDATE ne peut réussir que si la course est encore
+ * "pending" et sans chauffeur (contrainte imposée par la policy RLS
+ * `trips_accept_by_approved_driver`). Si un autre chauffeur a été plus
+ * rapide, aucune ligne n'est retournée -> on le signale à l'appelant.
+ */
+export async function acceptTrip(tripId: string, driverId: string, vehicleId: string): Promise<Trip | null> {
   const { data, error } = await supabase
     .from('trips')
     .update({ driver_id: driverId, vehicle_id: vehicleId, status: 'accepted', accepted_at: new Date().toISOString() })
     .eq('id', tripId)
+    .eq('status', 'pending')
+    .is('driver_id', null)
     .select()
-    .single();
+    .maybeSingle();
   if (error) throw error;
+  if (!data) return null; // course déjà prise par un autre chauffeur
+
   await setVehicleStatus(vehicleId, 'busy');
   return data as Trip;
 }
@@ -102,11 +111,30 @@ export async function startTrip(tripId: string): Promise<Trip> {
   return data as Trip;
 }
 
-/** Termine la course (crée aussi la ligne de paiement espèces "pending") et libère le véhicule. */
+/** Consulte le paiement associé à une course (méthode choisie par le passager). */
+export async function getTripPayment(tripId: string): Promise<{ method: string; status: string } | null> {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('method, status')
+    .eq('trip_id', tripId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/** Termine la course, fixe le prix final et libère le véhicule. */
 export async function finishTrip(tripId: string, vehicleId: string, finalPrice: number): Promise<Trip> {
-  const trip = await completeTrip(tripId, finalPrice);
+  const { data, error } = await supabase
+    .from('trips')
+    .update({ status: 'completed', completed_at: new Date().toISOString(), final_price: finalPrice })
+    .eq('id', tripId)
+    .select()
+    .single();
+  if (error) throw error;
+
+  await supabase.from('payments').update({ amount: finalPrice }).eq('trip_id', tripId);
   await setVehicleStatus(vehicleId, 'available');
-  return trip;
+  return data as Trip;
 }
 
 /** Le chauffeur confirme avoir encaissé le paiement en espèces. */
@@ -117,47 +145,6 @@ export async function confirmCashPayment(tripId: string) {
     .eq('trip_id', tripId)
     .eq('method', 'cash');
   if (error) throw error;
-}
-
-/**
- * Démarre le partage GPS temps réel du chauffeur : suit sa position via
- * navigator.geolocation.watchPosition et la pousse dans public.vehicles
- * (current_lat/current_lng), lue en Realtime côté passager pendant la course.
- * Retourne une fonction d'arrêt (stopSharingLocation) à appeler au démontage
- * ou quand le chauffeur passe hors-ligne.
- */
-export function startSharingLocation(vehicleId: string): () => void {
-  if (typeof navigator === 'undefined' || !navigator.geolocation) {
-    return () => {};
-  }
-
-  const watchId = navigator.geolocation.watchPosition(
-    (pos) => {
-      supabase
-        .from('vehicles')
-        .update({
-          current_lat: pos.coords.latitude,
-          current_lng: pos.coords.longitude,
-          location_updated_at: new Date().toISOString(),
-        })
-        .eq('id', vehicleId)
-        .then(() => {});
-    },
-    () => {
-      // géolocalisation refusée ou indisponible : on ignore silencieusement,
-      // le tableau de bord reste utilisable sans position live.
-    },
-    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
-  );
-
-  return () => stopSharingLocation(watchId);
-}
-
-/** Arrête le partage GPS démarré par startSharingLocation. */
-export function stopSharingLocation(watchId: number) {
-  if (typeof navigator !== 'undefined' && navigator.geolocation) {
-    navigator.geolocation.clearWatch(watchId);
-  }
 }
 
 /** Historique + statistiques du chauffeur. */
@@ -173,28 +160,60 @@ export async function getMyTripHistory(driverId: string): Promise<Trip[]> {
 }
 
 /**
- * Écoute en temps réel (Supabase Realtime) les courses créées ou mises à
- * jour dans `trips`. Le chauffeur est notifié instantanément d'une nouvelle
- * demande "pending" sans avoir à recharger la page.
- * Retourne une fonction de désinscription à appeler au démontage.
+ * Écoute en temps réel (Supabase Realtime) les courses de la table `trips`.
+ * Utilisé par le tableau de bord chauffeur pour être notifié instantanément
+ * d'une nouvelle demande "pending", ou de la disparition d'une course prise
+ * par un collègue (mise à jour de la liste sans recharger la page).
  */
-export function subscribeToTripChanges(onChange: (payload: {
-  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
-  trip: Trip;
-}) => void): () => void {
+export function subscribeToTripChanges(
+  onChange: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; trip: Trip }) => void
+): () => void {
   const channel = supabase
     .channel('driver-trips-realtime')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'trips' },
-      (payload) => {
-        const trip = (payload.eventType === 'DELETE' ? payload.old : payload.new) as Trip;
-        onChange({ eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE', trip });
-      }
-    )
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'trips' }, (payload) => {
+      const trip = (payload.eventType === 'DELETE' ? payload.old : payload.new) as Trip;
+      onChange({ eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE', trip });
+    })
     .subscribe();
 
   return () => {
     supabase.removeChannel(channel);
   };
+}
+
+/**
+ * Démarre le partage GPS temps réel du chauffeur : suit sa position via
+ * navigator.geolocation.watchPosition et la pousse dans public.vehicles
+ * (current_lat/current_lng), lue en Realtime côté passager pendant la course.
+ * Retourne une fonction d'arrêt à appeler au démontage ou en passant hors-ligne.
+ */
+export function startSharingLocation(vehicleId: string): () => void {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) return () => {};
+
+  const watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      supabase
+        .from('vehicles')
+        .update({
+          current_lat: pos.coords.latitude,
+          current_lng: pos.coords.longitude,
+          location_updated_at: new Date().toISOString(),
+        })
+        .eq('id', vehicleId)
+        .then(() => {});
+    },
+    () => {
+      // géolocalisation refusée ou indisponible : on ignore silencieusement
+    },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+  );
+
+  return () => stopSharingLocation(watchId);
+}
+
+/** Arrête le partage GPS démarré par startSharingLocation. */
+export function stopSharingLocation(watchId: number) {
+  if (typeof navigator !== 'undefined' && navigator.geolocation) {
+    navigator.geolocation.clearWatch(watchId);
+  }
 }
