@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
 import { Trip } from '@/types/database';
@@ -18,8 +18,29 @@ import {
   setVehicleStatus,
   startSharingLocation,
   startTrip,
+  subscribeToTripChanges,
 } from '@/lib/driver';
 import AuthGate from '@/components/AuthGate';
+
+function playNotificationBeep() {
+  try {
+    const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.5);
+  } catch {
+    // silencieux si l'audio est bloqué par le navigateur
+  }
+}
 
 export default function DriverDashboard() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -30,11 +51,20 @@ export default function DriverDashboard() {
   const [history, setHistory] = useState<Trip[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [newRequestAlert, setNewRequestAlert] = useState(false);
+  const gpsStopFns = useRef<Record<string, () => void>>({});
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => sub.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      Object.values(gpsStopFns.current).forEach((stop) => stop());
+      gpsStopFns.current = {};
+    };
   }, []);
 
   async function refreshAll(userId: string) {
@@ -60,15 +90,22 @@ export default function DriverDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id]);
 
-  // Partage GPS en direct : dès qu'un véhicule est "en ligne" (available ou
-  // busy), on pousse la position réelle du téléphone toutes les ~5s vers
-  // Supabase, pour que le passager voie le chauffeur bouger sur sa carte.
-  const onlineVehicleId = vehicles.find((v) => v.status !== 'offline')?.id ?? null;
+  // Écoute temps réel : nouvelle course "pending" -> notification + rafraîchissement
+  // instantané des listes, sans attendre une action manuelle du chauffeur.
   useEffect(() => {
-    if (!onlineVehicleId) return;
-    const { stop } = startSharingLocation(onlineVehicleId);
-    return stop;
-  }, [onlineVehicleId]);
+    if (!session?.user) return;
+    const userId = session.user.id;
+    const unsubscribe = subscribeToTripChanges(({ eventType, trip }) => {
+      if (eventType === 'INSERT' && trip.status === 'pending') {
+        setNewRequestAlert(true);
+        playNotificationBeep();
+        window.setTimeout(() => setNewRequestAlert(false), 4000);
+      }
+      refreshAll(userId);
+    });
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
 
   async function handleToggleVehicle(v: MyVehicle) {
     setBusy(true);
@@ -76,6 +113,13 @@ export default function DriverDashboard() {
     try {
       const next = v.status === 'offline' ? 'available' : 'offline';
       await setVehicleStatus(v.id, next);
+      if (next === 'available') {
+        gpsStopFns.current[v.id]?.();
+        gpsStopFns.current[v.id] = startSharingLocation(v.id);
+      } else {
+        gpsStopFns.current[v.id]?.();
+        delete gpsStopFns.current[v.id];
+      }
       if (session?.user) await refreshAll(session.user.id);
     } catch (e: any) {
       setError(e?.message ?? 'Impossible de changer le statut.');
@@ -155,6 +199,11 @@ export default function DriverDashboard() {
       </div>
 
       {error && <div className="top-error">{error}</div>}
+      {newRequestAlert && (
+        <div className="driver-card" style={{ borderColor: 'var(--amber, #e8c9a8)' }}>
+          🔔 Nouvelle course disponible !
+        </div>
+      )}
 
       <div className="driver-card">
         <h2>Mes véhicules</h2>

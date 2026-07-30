@@ -21,6 +21,7 @@ import {
   listAvailableVehicles,
   rateTrip,
   startTrip,
+  subscribeToVehicleLocation,
 } from '@/lib/rides';
 import { GeoResult, searchAddress } from '@/lib/geocode';
 import AuthGate from '@/components/AuthGate';
@@ -66,6 +67,7 @@ export default function PrivateFleetApp() {
   const [paymentPhone, setPaymentPhone] = useState<string | undefined>(undefined);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [mobilePaymentConfirmed, setMobilePaymentConfirmed] = useState(false);
+  const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
 
   const distanceKm = useMemo(() => {
     if (!pickup || !dropoff) return null;
@@ -149,6 +151,17 @@ export default function PrivateFleetApp() {
       cancelled = true;
     };
   }, [step, trip]);
+
+  // Position GPS en direct du chauffeur assigné (écrans 4 "chauffeur arrive" et 5 "en course")
+  useEffect(() => {
+    if ((step !== 4 && step !== 5) || !trip?.vehicle_id) {
+      setDriverPos(null);
+      return;
+    }
+    setDriverPos(null);
+    const unsubscribe = subscribeToVehicleLocation(trip.vehicle_id, setDriverPos);
+    return unsubscribe;
+  }, [step, trip?.vehicle_id]);
 
   async function handleSelectDriver(option: AvailableOption) {
     if (!trip) return;
@@ -308,13 +321,14 @@ export default function PrivateFleetApp() {
             trip={trip}
             busy={busy}
             paymentMethod={paymentMethod}
+            driverPos={driverPos}
             onReady={handleReady}
             onOptions={() => setShowHistory(true)}
           />
         )}
 
         {step === 5 && driver && trip && (
-          <Screen5 driver={driver} trip={trip} onFinish={handleFinish} busy={busy} />
+          <Screen5 driver={driver} trip={trip} driverPos={driverPos} onFinish={handleFinish} busy={busy} />
         )}
 
         {step === 6 && driver && trip && (
@@ -650,6 +664,7 @@ function Screen4({
   trip,
   busy,
   paymentMethod,
+  driverPos,
   onReady,
   onOptions,
 }: {
@@ -658,6 +673,7 @@ function Screen4({
   trip: Trip;
   busy: boolean;
   paymentMethod: PaymentMethod;
+  driverPos: { lat: number; lng: number } | null;
   onReady: () => void;
   onOptions: () => void;
 }) {
@@ -665,7 +681,7 @@ function Screen4({
     <div className="screen fade">
       <RealMap
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
-        pins={[{ position: { lat: trip.pickup_lat, lng: trip.pickup_lng }, emoji: '🚗' }]}
+        pins={[{ position: driverPos ?? { lat: trip.pickup_lat, lng: trip.pickup_lng }, emoji: '🚗' }]}
       />
       <Header onOptionsClick={onOptions} />
       <div className="title-banner glass">
@@ -717,11 +733,13 @@ function Screen4({
 function Screen5({
   driver,
   trip,
+  driverPos,
   onFinish,
   busy,
 }: {
   driver: DriverInfo;
   trip: Trip;
+  driverPos: { lat: number; lng: number } | null;
   onFinish: () => void;
   busy: boolean;
 }) {
@@ -751,12 +769,13 @@ function Screen5({
               dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
               showRoute
               routeColor="#e8c9a8"
+              pins={driverPos ? [{ position: driverPos, emoji: '🚗' }] : []}
             />
           </div>
           <div className="split-content" style={{ paddingTop: 300 }}>
             <div className="fare-box">
               <div className="fare-row"><span className="k">DESTINATION</span><span className="v">{trip.dropoff_address}</span></div>
-              <div className="fare-row"><span className="k">Prix (espèces)</span><span className="v">{formatFCFA(trip.estimated_price)}</span></div>
+              <div className="fare-row"><span className="k">Prix</span><span className="v">{formatFCFA(trip.estimated_price)}</span></div>
             </div>
           </div>
         </div>
