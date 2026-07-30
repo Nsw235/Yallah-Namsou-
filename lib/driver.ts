@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
 import { Trip, VehicleType } from '@/types/database';
-import { completeTrip } from '@/lib/rides';
 
 export type MyVehicle = {
   id: string;
@@ -91,22 +90,53 @@ export async function acceptTrip(tripId: string, driverId: string, vehicleId: st
   return data as Trip;
 }
 
+/** Le chauffeur démarre la course qui lui a été assignée (RPC sécurisée). */
 export async function startTrip(tripId: string): Promise<Trip> {
-  const { data, error } = await supabase
-    .from('trips')
-    .update({ status: 'in_progress', started_at: new Date().toISOString() })
-    .eq('id', tripId)
-    .select()
-    .single();
-  if (error) throw error;
+  const { data, error } = await supabase.rpc('driver_start_trip', { p_trip_id: tripId });
+  if (error) throw new Error(error.message === 'trip_not_startable' ? 'Cette course ne peut plus être démarrée.' : error.message);
   return data as Trip;
 }
 
-/** Termine la course (crée aussi la ligne de paiement espèces "pending") et libère le véhicule. */
-export async function finishTrip(tripId: string, vehicleId: string, finalPrice: number): Promise<Trip> {
-  const trip = await completeTrip(tripId, finalPrice);
-  await setVehicleStatus(vehicleId, 'available');
-  return trip;
+/** Termine la course (RPC atomique : statut + paiement cash "pending" + véhicule libéré). */
+export async function finishTrip(tripId: string, _vehicleId: string, finalPrice: number): Promise<Trip> {
+  const { data, error } = await supabase.rpc('driver_complete_trip', {
+    p_trip_id: tripId,
+    p_final_price: finalPrice,
+  });
+  if (error) throw new Error(error.message === 'trip_not_completable' ? 'Cette course ne peut plus être terminée.' : error.message);
+  return data as Trip;
+}
+
+/**
+ * Partage la position GPS du chauffeur en direct (toutes les ~5s ou à chaque
+ * mouvement significatif) tant que le véhicule est en ligne. À appeler quand
+ * le chauffeur passe "en ligne" et à arrêter quand il repasse "hors ligne"
+ * ou ferme l'app. Retourne une fonction `stop()`.
+ */
+export function startSharingLocation(vehicleId: string): { stop: () => void } {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return { stop: () => {} };
+  }
+
+  const watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      supabase
+        .rpc('update_my_vehicle_location', {
+          p_vehicle_id: vehicleId,
+          p_lat: pos.coords.latitude,
+          p_lng: pos.coords.longitude,
+        })
+        .then(({ error }) => {
+          if (error) console.error('Erreur envoi position GPS :', error.message);
+        });
+    },
+    (err) => console.error('Erreur géolocalisation :', err.message),
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+  );
+
+  return {
+    stop: () => navigator.geolocation.clearWatch(watchId),
+  };
 }
 
 /** Le chauffeur confirme avoir encaissé le paiement en espèces. */

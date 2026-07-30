@@ -80,59 +80,130 @@ export async function listAvailableVehicles(vehicleType: VehicleType) {
     .filter((x): x is NonNullable<typeof x> => x !== null);
 }
 
-/** Assigne le chauffeur choisi par le passager à la course. */
-export async function assignDriver(tripId: string, driverId: string, vehicleId: string): Promise<Trip> {
-  const { data, error } = await supabase
-    .from('trips')
-    .update({
-      driver_id: driverId,
-      vehicle_id: vehicleId,
-      status: 'accepted',
-      accepted_at: new Date().toISOString(),
-    })
-    .eq('id', tripId)
-    .select()
-    .single();
-  if (error) throw error;
-  return data as Trip;
-}
+/**
+ * Dispatch automatique : demande à l'Edge Function `dispatch-trip` de trouver
+ * et d'assigner le chauffeur disponible le plus proche (calcul de distance
+ * réelle côté serveur, verrouillage anti-double-assignation). Le client ne
+ * choisit plus lui-même le chauffeur — c'est désormais interdit par les RLS.
+ */
+export async function dispatchTrip(tripId: string): Promise<Trip> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) throw new Error('Session expirée, reconnectez-vous.');
 
-/** Passe la course en "en cours" (le passager est monté à bord). */
-export async function startTrip(tripId: string): Promise<Trip> {
-  const { data, error } = await supabase
-    .from('trips')
-    .update({ status: 'in_progress', started_at: new Date().toISOString() })
-    .eq('id', tripId)
-    .select()
-    .single();
-  if (error) throw error;
-  return data as Trip;
-}
-
-/** Termine la course, enregistre le prix final et crée l'enregistrement de paiement cash. */
-export async function completeTrip(tripId: string, finalPrice: number): Promise<Trip> {
-  const { data, error } = await supabase
-    .from('trips')
-    .update({
-      status: 'completed',
-      completed_at: new Date().toISOString(),
-      final_price: finalPrice,
-    })
-    .eq('id', tripId)
-    .select()
-    .single();
-  if (error) throw error;
-
-  // Le paiement espèces est enregistré "pending" : c'est le chauffeur qui
-  // confirmera l'encaissement (policy RLS dédiée côté chauffeur).
-  const { error: paymentError } = await supabase.from('payments').insert({
-    trip_id: tripId,
-    method: 'cash',
-    amount: finalPrice,
-    status: 'pending',
+  const { data, error } = await supabase.functions.invoke('dispatch-trip', {
+    body: { trip_id: tripId },
+    headers: { Authorization: `Bearer ${token}` },
   });
-  if (paymentError) throw paymentError;
 
+  if (error) {
+    // Le corps d'erreur de la function contient un message exploitable
+    // (ex: "no_driver_available") remonté par supabase-js dans error.context.
+    const ctx = (error as any)?.context;
+    let message = error.message;
+    try {
+      const body = typeof ctx?.body === 'string' ? JSON.parse(ctx.body) : null;
+      if (body?.error) message = body.error;
+    } catch {
+      /* ignore parse errors, garder error.message */
+    }
+    if (message === 'no_driver_available') {
+      throw new Error('Aucun chauffeur disponible pour le moment. Réessayez dans un instant.');
+    }
+    throw new Error(message ?? 'Dispatch impossible.');
+  }
+
+  return (data as { trip: Trip }).trip;
+}
+
+/** Détails chauffeur + véhicule assignés à une course (après dispatch). */
+export async function getAssignedDriverInfo(trip: Trip) {
+  if (!trip.driver_id || !trip.vehicle_id) return null;
+
+  const [{ data: profile }, { data: driver }, { data: vehicle }] = await Promise.all([
+    supabase.from('profiles').select('full_name, phone').eq('id', trip.driver_id).maybeSingle(),
+    supabase.from('drivers').select('rating_avg').eq('id', trip.driver_id).maybeSingle(),
+    supabase.from('vehicles').select('plate, brand, model, last_lat, last_lng').eq('id', trip.vehicle_id).maybeSingle(),
+  ]);
+
+  return {
+    driver: {
+      id: trip.driver_id,
+      full_name: profile?.full_name ?? null,
+      phone: profile?.phone ?? null,
+      rating_avg: driver?.rating_avg ?? 5,
+    },
+    vehicle: {
+      plate: vehicle?.plate ?? '',
+      brand: vehicle?.brand ?? null,
+      model: vehicle?.model ?? null,
+      last_lat: vehicle?.last_lat ?? null,
+      last_lng: vehicle?.last_lng ?? null,
+    },
+  };
+}
+
+/**
+ * Abonnement temps réel au statut d'une course (Realtime Postgres Changes).
+ * Retourne une fonction de désabonnement à appeler au démontage.
+ */
+export function subscribeToTrip(tripId: string, onUpdate: (trip: Trip) => void): () => void {
+  const channel = supabase
+    .channel(`trip-${tripId}`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'trips', filter: `id=eq.${tripId}` },
+      (payload) => onUpdate(payload.new as Trip)
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+/**
+ * Abonnement temps réel à la position d'un véhicule (mise à jour envoyée par
+ * le chauffeur via `update_my_vehicle_location`). Utilisé pour faire bouger
+ * le pin du chauffeur sur la carte du passager en direct.
+ */
+export function subscribeToVehiclePosition(
+  vehicleId: string,
+  onUpdate: (pos: { lat: number; lng: number }) => void
+): () => void {
+  const channel = supabase
+    .channel(`vehicle-${vehicleId}`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'vehicles', filter: `id=eq.${vehicleId}` },
+      (payload) => {
+        const row = payload.new as { last_lat: number | null; last_lng: number | null };
+        if (row.last_lat != null && row.last_lng != null) {
+          onUpdate({ lat: row.last_lat, lng: row.last_lng });
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+/** Passe la course en "en cours" (le passager confirme être monté à bord). */
+export async function startTrip(tripId: string): Promise<Trip> {
+  const { data, error } = await supabase.rpc('passenger_confirm_boarding', { p_trip_id: tripId });
+  if (error) throw new Error(error.message === 'trip_not_startable' ? 'Cette course ne peut plus être démarrée.' : error.message);
+  return data as Trip;
+}
+
+/** Termine la course côté passager (RPC atomique : statut + ligne de paiement cash "pending"). */
+export async function completeTrip(tripId: string, finalPrice: number): Promise<Trip> {
+  const { data, error } = await supabase.rpc('passenger_complete_trip', {
+    p_trip_id: tripId,
+    p_final_price: finalPrice,
+  });
+  if (error) throw new Error(error.message === 'trip_not_completable' ? 'Cette course ne peut plus être terminée.' : error.message);
   return data as Trip;
 }
 
