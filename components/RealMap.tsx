@@ -25,12 +25,18 @@ export default function RealMap({
   showRoute = false,
   routeColor = '#e8c9a8',
   pins = [],
+  pitch = 0,
+  buildings3d = false,
 }: {
   pickup?: LatLng | null;
   dropoff?: LatLng | null;
   showRoute?: boolean;
   routeColor?: string;
   pins?: MapPin[];
+  /** Inclinaison de la caméra (0 = vue du dessus, ~55-60 = look isométrique 3D). */
+  pitch?: number;
+  /** Active l'extrusion 3D des bâtiments, teintée cuivre, pour l'effet "ville miniature". */
+  buildings3d?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -53,7 +59,8 @@ export default function RealMap({
         center: [DEFAULT_CENTER.lng, DEFAULT_CENTER.lat],
         zoom: 13,
         attributionControl: true,
-        pitch: 0,
+        pitch,
+        bearing: buildings3d ? -17 : 0,
         antialias: true,
       });
       mapRef.current = map;
@@ -91,6 +98,46 @@ export default function RealMap({
           layout: { 'line-cap': 'round', 'line-join': 'round' },
           paint: { 'line-width': 4, 'line-color': routeColor, 'line-opacity': 0.9 },
         });
+
+        if (buildings3d) {
+          // Extrusion 3D des bâtiments (données vectorielles réelles Mapbox),
+          // teintée cuivre pour coller à l'identité visuelle "ville miniature".
+          const firstSymbolLayer = map
+            .getStyle()
+            .layers?.find((l: any) => l.type === 'symbol')?.id;
+          map.addLayer(
+            {
+              id: '3d-buildings',
+              source: 'composite',
+              'source-layer': 'building',
+              type: 'fill-extrusion',
+              minzoom: 12,
+              filter: ['==', 'extrude', 'true'],
+              paint: {
+                'fill-extrusion-color': [
+                  'interpolate',
+                  ['linear'],
+                  ['get', 'height'],
+                  0, '#3a2c22',
+                  40, '#6b4a35',
+                  120, '#a97a5b',
+                ],
+                'fill-extrusion-height': ['get', 'height'],
+                'fill-extrusion-base': ['get', 'min_height'],
+                'fill-extrusion-opacity': 0.88,
+              },
+            },
+            firstSymbolLayer
+          );
+          map.setFog({
+            range: [0.5, 10],
+            color: '#1c1512',
+            'high-color': '#3a2c22',
+            'horizon-blend': 0.15,
+            'space-color': '#0a0b0d',
+            'star-intensity': 0,
+          });
+        }
       });
     })();
 

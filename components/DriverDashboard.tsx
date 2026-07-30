@@ -22,6 +22,7 @@ import {
   subscribeToTripChanges,
 } from '@/lib/driver';
 import AuthGate from '@/components/AuthGate';
+import RealMap from '@/components/RealMap';
 
 function playNotificationBeep() {
   try {
@@ -234,16 +235,78 @@ export default function DriverDashboard() {
       </div>
 
       {active ? (
-        <div className="driver-card">
-          <h2>Course en cours</h2>
-          <p className="route-addr">{active.pickup_address} → {active.dropoff_address}</p>
-          <p className="route-sub">Statut : {active.status} · {formatFCFA(active.estimated_price)}</p>
-          {active.status === 'accepted' && (
-            <button className="btn cyan" disabled={busy} onClick={handleStart}>DÉMARRER LA COURSE</button>
-          )}
-          {active.status === 'in_progress' && (
-            <button className="btn emerald" disabled={busy} onClick={handleFinish}>TERMINER LA COURSE</button>
-          )}
+        <div className="driver-trip-shell">
+          <RealMap
+            pitch={50}
+            buildings3d
+            pickup={{ lat: active.pickup_lat, lng: active.pickup_lng }}
+            dropoff={{ lat: active.dropoff_lat, lng: active.dropoff_lng }}
+            showRoute
+            routeColor="#e8c9a8"
+          />
+          <div className="driver-trip-overlay">
+            <div className="driver-trip-title">N&apos;Djamena</div>
+
+            <div className="trip-top-row">
+              <div className="trip-status-card glass">
+                <div className="trip-status-pill">
+                  <span className="pdot" />
+                  {active.status === 'accepted' ? 'PASSAGER EN ATTENTE' : 'COURSE EN COURS'}
+                </div>
+                <div className="route-label">RÉCUPÉRATION À</div>
+                <div className="route-addr" style={{ fontSize: 14 }}>{active.pickup_address ?? '—'}</div>
+              </div>
+              <div className="trip-detail-card glass">
+                <div className="trip-eta-label">ETA CLIENT</div>
+                <div className="trip-eta-val">—</div>
+                <div className="trip-client-label">COURSE ESTIMÉE</div>
+                <div className="trip-client-val">{formatFCFA(active.estimated_price)}</div>
+              </div>
+            </div>
+
+            <div className="trip-metrics-panel glass copper-texture">
+              <div className="trip-metrics-grid">
+                <div className="metric-box">
+                  <div>
+                    <div className="mk">TEMPS D&apos;ITINÉRAIRE</div>
+                    <div className="mv">Fluide</div>
+                  </div>
+                  <span>📈</span>
+                </div>
+                <div className="metric-box">
+                  <div>
+                    <div className="mk">STATUT</div>
+                    <div className="mv">{active.status === 'accepted' ? 'Accepté' : 'En course'}</div>
+                  </div>
+                  <span>⏱</span>
+                </div>
+                <div className="metric-box">
+                  <div>
+                    <div className="mk">TRAFIC SUR ITINÉRAIRE</div>
+                    <div className="mv">Fluide</div>
+                  </div>
+                  <span>🚦</span>
+                </div>
+                <div className="metric-box">
+                  <div>
+                    <div className="mk">PROCHAINE ÉTAPE</div>
+                    <div className="mv">Suivre la route principale</div>
+                  </div>
+                  <span>🧭</span>
+                </div>
+              </div>
+              <div className="trip-action-row">
+                {active.status === 'accepted' ? (
+                  <>
+                    <button className="btn done" disabled style={{ flex: 1 }}>ARRIVÉ SUR SITE</button>
+                    <button className="btn amber" disabled={busy} onClick={handleStart} style={{ flex: 1 }}>DÉMARRER LA COURSE</button>
+                  </>
+                ) : (
+                  <button className="btn amber" disabled={busy} onClick={handleFinish} style={{ flex: 1 }}>TERMINER LA COURSE</button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="driver-card">

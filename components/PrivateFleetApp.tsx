@@ -392,13 +392,15 @@ function Screen1({
   return (
     <div className="screen fade">
       <RealMap
+        pitch={55}
+        buildings3d
         pickup={pickup ? { lat: pickup.lat, lng: pickup.lng } : null}
         dropoff={dropoff ? { lat: dropoff.lat, lng: dropoff.lng } : null}
         showRoute={ready}
         routeColor="#e8c9a8"
       />
       <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
-      <div className="sheet glass" style={{ paddingTop: 16 }}>
+      <div className="sheet glass copper-texture" style={{ paddingTop: 16 }}>
         <AddressField label="DÉPART" placeholder="D'où partez-vous ?" value={pickup} onChange={onPickupChange} />
         <div style={{ height: 10 }} />
         <AddressField label="DESTINATION" placeholder="Où allez-vous ?" value={dropoff} onChange={onDropoffChange} />
@@ -407,12 +409,14 @@ function Screen1({
           {types.map((t) => (
             <div key={t.key} className={`vcard ${vehicle === t.key ? 'selected' : ''}`} onClick={() => onSelect(t.key)}>
               <img src={t.icon} alt={VEHICLE_LABELS[t.key]} className="vimg" />
+              <div className="driver-name" style={{ fontSize: 12 }}>{VEHICLE_LABELS[t.key]}</div>
               <div className="vprice">{ready ? formatFCFA(priceFor(t.key)) : '—'}</div>
             </div>
           ))}
         </div>
+        {!ready && <div className="confirm-title" style={{ marginBottom: 10 }}>CHOISISSEZ VOS ADRESSES</div>}
         <button className="btn amber" onClick={onSearch} disabled={!ready}>
-          {ready ? 'RECHERCHER' : 'CHOISISSEZ VOS ADRESSES'}
+          {ready ? 'CONFIRMER' : 'CHOISISSEZ VOS ADRESSES'}
         </button>
         <div className="home-indicator" />
       </div>
