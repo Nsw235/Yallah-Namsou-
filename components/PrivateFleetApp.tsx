@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
-import { PricingRule, Trip, VehicleType } from '@/types/database';
+import { PaymentMethod, PricingRule, Trip, VehicleType } from '@/types/database';
 import {
+  PAYMENT_METHOD_LABELS,
   VEHICLE_ICON,
   VEHICLE_LABELS,
   estimatePrice,
@@ -12,21 +13,21 @@ import {
   haversineKm,
 } from '@/lib/pricing';
 import {
+  assignDriver,
   completeTrip,
+  confirmMobilePayment,
   createTrip,
-  dispatchTrip,
-  getAssignedDriverInfo,
   getPricingRules,
+  listAvailableVehicles,
   rateTrip,
   startTrip,
-  subscribeToTrip,
-  subscribeToVehiclePosition,
 } from '@/lib/rides';
 import { GeoResult, searchAddress } from '@/lib/geocode';
 import AuthGate from '@/components/AuthGate';
 import Header from '@/components/Header';
 import RealMap from '@/components/RealMap';
 import HistoryModal from '@/components/HistoryModal';
+import PaymentModal from '@/components/PaymentModal';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -43,7 +44,7 @@ type VehicleInfo = {
   model: string | null;
 };
 
-type LatLng = { lat: number; lng: number };
+type AvailableOption = Awaited<ReturnType<typeof listAvailableVehicles>>[number];
 
 export default function PrivateFleetApp() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -59,10 +60,12 @@ export default function PrivateFleetApp() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [dispatchStatus, setDispatchStatus] = useState<'idle' | 'searching' | 'no_driver' | 'error'>('idle');
-  const [dispatchError, setDispatchError] = useState<string | null>(null);
-  const [driverPos, setDriverPos] = useState<LatLng | null>(null);
-  const [retryToken, setRetryToken] = useState(0);
+  const [availableOptions, setAvailableOptions] = useState<AvailableOption[]>([]);
+  const [loadingDrivers, setLoadingDrivers] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  const [paymentPhone, setPaymentPhone] = useState<string | undefined>(undefined);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [mobilePaymentConfirmed, setMobilePaymentConfirmed] = useState(false);
 
   const distanceKm = useMemo(() => {
     if (!pickup || !dropoff) return null;
@@ -97,9 +100,10 @@ export default function PrivateFleetApp() {
     setVehicleInfo(null);
     setRating(0);
     setError(null);
-    setDispatchStatus('idle');
-    setDispatchError(null);
-    setDriverPos(null);
+    setAvailableOptions([]);
+    setPaymentMethod('cash');
+    setPaymentPhone(undefined);
+    setMobilePaymentConfirmed(false);
   }
 
   async function handleConfirmTrip() {
@@ -125,61 +129,51 @@ export default function PrivateFleetApp() {
     }
   }
 
-  // Dispatch automatique : dès l'entrée sur l'écran 3, on demande au serveur
-  // (Edge Function -> RPC assign_nearest_driver) de trouver et d'assigner le
-  // chauffeur disponible le plus proche. Le passager ne choisit plus lui-même.
+  // Chargement de la vraie liste des chauffeurs disponibles à l'entrée sur l'écran 3
   useEffect(() => {
     if (step !== 3 || !trip) return;
     let cancelled = false;
-    setDispatchStatus('searching');
-    setDispatchError(null);
-
-    dispatchTrip(trip.id)
-      .then(async (updated) => {
-        if (cancelled) return;
-        const info = await getAssignedDriverInfo(updated);
-        if (cancelled || !info) return;
-        setDriver(info.driver);
-        setVehicleInfo(info.vehicle);
-        if (info.vehicle.last_lat != null && info.vehicle.last_lng != null) {
-          setDriverPos({ lat: info.vehicle.last_lat, lng: info.vehicle.last_lng });
-        }
-        setTrip(updated);
-        setStep(4);
+    setLoadingDrivers(true);
+    setAvailableOptions([]);
+    listAvailableVehicles(trip.vehicle_type)
+      .then((options) => {
+        if (!cancelled) setAvailableOptions(options);
       })
-      .catch((e: any) => {
-        if (cancelled) return;
-        const msg = e?.message ?? 'Impossible de trouver un chauffeur.';
-        setDispatchStatus(msg.includes('Aucun chauffeur') ? 'no_driver' : 'error');
-        setDispatchError(msg);
+      .catch((e) => {
+        if (!cancelled) setError(e?.message ?? 'Impossible de charger les chauffeurs disponibles.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDrivers(false);
       });
-
     return () => {
       cancelled = true;
     };
-  }, [step, trip, retryToken]);
+  }, [step, trip]);
 
-  // Position du chauffeur en direct dès qu'un véhicule est assigné (écrans 4 et 5).
-  useEffect(() => {
-    if (!trip?.vehicle_id || step < 4) return;
-    const unsubscribe = subscribeToVehiclePosition(trip.vehicle_id, setDriverPos);
-    return unsubscribe;
-  }, [trip?.vehicle_id, step]);
-
-  // Statut de la course en direct : si le chauffeur démarre/termine la course
-  // depuis SON app, l'écran passager avance automatiquement sans action manuelle.
-  useEffect(() => {
-    if (!trip?.id || step < 4) return;
-    const unsubscribe = subscribeToTrip(trip.id, (updated) => {
+  async function handleSelectDriver(option: AvailableOption) {
+    if (!trip) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await assignDriver(trip.id, option.driver.id, option.vehicle.id);
+      setDriver({
+        id: option.driver.id,
+        full_name: option.driver.full_name,
+        phone: option.driver.phone,
+        rating_avg: option.driver.rating_avg,
+      });
+      setVehicleInfo({
+        plate: option.vehicle.plate,
+        brand: option.vehicle.brand,
+        model: option.vehicle.model,
+      });
       setTrip(updated);
-      if (updated.status === 'in_progress') setStep(5);
-      if (updated.status === 'completed') setStep(6);
-    });
-    return unsubscribe;
-  }, [trip?.id, step]);
-
-  function handleRetryDispatch() {
-    setRetryToken((t) => t + 1);
+      setStep(4);
+    } catch (e: any) {
+      setError(e?.message ?? 'Impossible de choisir ce chauffeur.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleReady() {
@@ -203,11 +197,25 @@ export default function PrivateFleetApp() {
     setError(null);
     try {
       const finalPrice = trip.estimated_price ?? 0;
-      const updated = await completeTrip(trip.id, finalPrice);
+      const updated = await completeTrip(trip.id, finalPrice, paymentMethod, paymentPhone);
       setTrip(updated);
       setStep(6);
     } catch (e: any) {
       setError(e?.message ?? 'Impossible de terminer la course.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleConfirmMobilePayment() {
+    if (!trip || (paymentMethod !== 'airtel_money' && paymentMethod !== 'moov_money')) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await confirmMobilePayment(trip.id, paymentMethod);
+      setMobilePaymentConfirmed(true);
+    } catch (e: any) {
+      setError(e?.message ?? 'Impossible de confirmer le paiement.');
     } finally {
       setBusy(false);
     }
@@ -275,6 +283,8 @@ export default function PrivateFleetApp() {
             pickup={pickup}
             dropoff={dropoff}
             busy={busy}
+            paymentMethod={paymentMethod}
+            onChangePayment={() => setShowPaymentModal(true)}
             onConfirm={handleConfirmTrip}
             onOptions={() => setShowHistory(true)}
           />
@@ -283,9 +293,10 @@ export default function PrivateFleetApp() {
         {step === 3 && trip && (
           <Screen3
             trip={trip}
-            status={dispatchStatus}
-            error={dispatchError}
-            onRetry={handleRetryDispatch}
+            options={availableOptions}
+            loading={loadingDrivers}
+            busy={busy}
+            onSelect={handleSelectDriver}
             onOptions={() => setShowHistory(true)}
           />
         )}
@@ -295,15 +306,15 @@ export default function PrivateFleetApp() {
             driver={driver}
             vehicleInfo={vehicleInfo}
             trip={trip}
-            driverPos={driverPos}
             busy={busy}
+            paymentMethod={paymentMethod}
             onReady={handleReady}
             onOptions={() => setShowHistory(true)}
           />
         )}
 
         {step === 5 && driver && trip && (
-          <Screen5 driver={driver} trip={trip} driverPos={driverPos} onFinish={handleFinish} busy={busy} />
+          <Screen5 driver={driver} trip={trip} onFinish={handleFinish} busy={busy} />
         )}
 
         {step === 6 && driver && trip && (
@@ -311,8 +322,25 @@ export default function PrivateFleetApp() {
             driver={driver}
             trip={trip}
             rating={rating}
+            paymentMethod={paymentMethod}
+            mobilePaymentConfirmed={mobilePaymentConfirmed}
+            busy={busy}
+            onConfirmMobilePayment={handleConfirmMobilePayment}
             onRate={handleRate}
             onDone={resetToBooking}
+          />
+        )}
+
+        {showPaymentModal && (
+          <PaymentModal
+            amount={priceFor(vehicle)}
+            selected={paymentMethod}
+            onClose={() => setShowPaymentModal(false)}
+            onSelect={(method, phone) => {
+              setPaymentMethod(method);
+              setPaymentPhone(phone);
+              setShowPaymentModal(false);
+            }}
           />
         )}
 
@@ -503,6 +531,8 @@ function Screen2({
   pickup,
   dropoff,
   busy,
+  paymentMethod,
+  onChangePayment,
   onConfirm,
   onOptions,
 }: {
@@ -511,6 +541,8 @@ function Screen2({
   pickup: GeoResult;
   dropoff: GeoResult;
   busy: boolean;
+  paymentMethod: PaymentMethod;
+  onChangePayment: () => void;
   onConfirm: () => void;
   onOptions: () => void;
 }) {
@@ -528,15 +560,18 @@ function Screen2({
         <div className="veh-hero"><img src={VEHICLE_ICON[vehicle]} alt={VEHICLE_LABELS[vehicle]} className="veh-hero-img" /></div>
         <div className="confirm-title">{VEHICLE_LABELS[vehicle]} SÉLECTIONNÉE</div>
         <div className="confirm-sub">Standard, 4 places — {formatFCFA(price)}</div>
-        <div className="pay-box">
-          <span>💵</span>
+        <div className="pay-box" onClick={onChangePayment} style={{ cursor: 'pointer' }}>
+          <span>{paymentMethod === 'cash' ? '💵' : paymentMethod === 'airtel_money' ? '📱' : '📲'}</span>
           <div>
-            <div className="lbl">PAIEMENT EN ESPÈCES UNIQUEMENT</div>
-            <div className="sub">Paiement à la fin de la course au chauffeur.</div>
+            <div className="lbl">{PAYMENT_METHOD_LABELS[paymentMethod].toUpperCase()}</div>
+            <div className="sub">Paiement à la fin de la course.</div>
           </div>
+          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--copper-light)', fontWeight: 700 }}>
+            MODIFIER
+          </span>
         </div>
         <button className="btn cyan" onClick={onConfirm} disabled={busy}>
-          {busy ? 'CONFIRMATION…' : 'CONFIRMER LA COURSE (ESPÈCES)'}
+          {busy ? 'CONFIRMATION…' : `CONFIRMER LA COURSE (${PAYMENT_METHOD_LABELS[paymentMethod].toUpperCase()})`}
         </button>
         <div className="home-indicator" />
       </div>
@@ -549,15 +584,17 @@ function Screen2({
 /* ---------------------------------------------------------------------- */
 function Screen3({
   trip,
-  status,
-  error,
-  onRetry,
+  options,
+  loading,
+  busy,
+  onSelect,
   onOptions,
 }: {
   trip: Trip;
-  status: 'idle' | 'searching' | 'no_driver' | 'error';
-  error: string | null;
-  onRetry: () => void;
+  options: AvailableOption[];
+  loading: boolean;
+  busy: boolean;
+  onSelect: (option: AvailableOption) => void;
   onOptions: () => void;
 }) {
   return (
@@ -565,33 +602,39 @@ function Screen3({
       <RealMap pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }} />
       <Header onOptionsClick={onOptions} />
       <div className="title-banner glass" style={{ top: 100 }}>
-        <div className="route-label">RECHERCHE D&apos;UN CHAUFFEUR</div>
-        <div className="route-sub">
-          {status === 'searching' && 'Attribution automatique du chauffeur le plus proche…'}
-          {status === 'no_driver' && 'Aucun chauffeur disponible pour le moment'}
-          {status === 'error' && 'Une erreur est survenue'}
-        </div>
+        <div className="route-label">CHAUFFEURS DISPONIBLES</div>
+        <div className="route-sub">{loading ? 'Recherche en cours…' : `${options.length} chauffeur(s) trouvé(s)`}</div>
       </div>
       <div className="sheet glass" style={{ paddingTop: 16, maxHeight: '60%', overflowY: 'auto' }}>
-        {status === 'searching' && (
+        {loading && (
           <div className="search-sheet">
             <div className="spinner" />
-            <div className="search-text">RECHERCHE DU CHAUFFEUR<br />LE PLUS PROCHE...</div>
+            <div className="search-text">RECHERCHE DES CHAUFFEURS<br />DISPONIBLES...</div>
           </div>
         )}
 
-        {(status === 'no_driver' || status === 'error') && (
+        {!loading && options.length === 0 && (
           <div className="search-sheet">
-            <div className="search-text">
-              {status === 'no_driver'
-                ? 'AUCUN CHAUFFEUR DISPONIBLE\nPOUR CE TYPE DE VÉHICULE POUR LE MOMENT.'
-                : (error ?? 'ERREUR DE DISPATCH.')}
-            </div>
-            <button className="btn cyan" style={{ marginTop: 16 }} onClick={onRetry}>
-              RÉESSAYER
-            </button>
+            <div className="search-text">AUCUN CHAUFFEUR DISPONIBLE<br />POUR CE TYPE DE VÉHICULE POUR LE MOMENT.</div>
           </div>
         )}
+
+        {!loading &&
+          options.map((option) => (
+            <div key={option.vehicle.id} className="driver-row" style={{ marginBottom: 12, cursor: 'pointer' }}>
+              <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
+              <div className="driver-info">
+                <div className="driver-name">{option.driver.full_name ?? 'Chauffeur'}</div>
+                <div className="driver-meta">
+                  <span className="star-badge">{Number(option.driver.rating_avg).toFixed(1)} ★</span>
+                </div>
+                <div className="route-sub">{option.vehicle.brand} {option.vehicle.model} — {option.vehicle.plate}</div>
+              </div>
+              <button className="btn cyan" style={{ width: 'auto', padding: '10px 16px' }} disabled={busy} onClick={() => onSelect(option)}>
+                CHOISIR
+              </button>
+            </div>
+          ))}
         <div className="home-indicator" />
       </div>
     </div>
@@ -605,16 +648,16 @@ function Screen4({
   driver,
   vehicleInfo,
   trip,
-  driverPos,
   busy,
+  paymentMethod,
   onReady,
   onOptions,
 }: {
   driver: DriverInfo;
   vehicleInfo: VehicleInfo;
   trip: Trip;
-  driverPos: LatLng | null;
   busy: boolean;
+  paymentMethod: PaymentMethod;
   onReady: () => void;
   onOptions: () => void;
 }) {
@@ -622,7 +665,7 @@ function Screen4({
     <div className="screen fade">
       <RealMap
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
-        pins={[{ position: driverPos ?? { lat: trip.pickup_lat, lng: trip.pickup_lng }, emoji: '🚗' }]}
+        pins={[{ position: { lat: trip.pickup_lat, lng: trip.pickup_lng }, emoji: '🚗' }]}
       />
       <Header onOptionsClick={onOptions} />
       <div className="title-banner glass">
@@ -649,7 +692,9 @@ function Screen4({
         </div>
         <div className="pay-confirmed">
           <div>
-            <div style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 700 }}>PAIEMENT EN ESPÈCES</div>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 700 }}>
+              PAIEMENT — {PAYMENT_METHOD_LABELS[paymentMethod].toUpperCase()}
+            </div>
             <div className="amt">{formatFCFA(trip.estimated_price)}</div>
           </div>
           <div className="check-circle">✓</div>
@@ -672,13 +717,11 @@ function Screen4({
 function Screen5({
   driver,
   trip,
-  driverPos,
   onFinish,
   busy,
 }: {
   driver: DriverInfo;
   trip: Trip;
-  driverPos: LatLng | null;
   onFinish: () => void;
   busy: boolean;
 }) {
@@ -706,7 +749,6 @@ function Screen5({
             <RealMap
               pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
               dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
-              pins={driverPos ? [{ position: driverPos, emoji: '🚗' }] : []}
               showRoute
               routeColor="#e8c9a8"
             />
@@ -739,15 +781,24 @@ function Screen6({
   driver,
   trip,
   rating,
+  paymentMethod,
+  mobilePaymentConfirmed,
+  busy,
+  onConfirmMobilePayment,
   onRate,
   onDone,
 }: {
   driver: DriverInfo;
   trip: Trip;
   rating: number;
+  paymentMethod: PaymentMethod;
+  mobilePaymentConfirmed: boolean;
+  busy: boolean;
+  onConfirmMobilePayment: () => void;
   onRate: (n: number) => void;
   onDone: () => void;
 }) {
+  const isMobileMoney = paymentMethod === 'airtel_money' || paymentMethod === 'moov_money';
   return (
     <div className="screen fade">
       <RealMap
@@ -764,7 +815,9 @@ function Screen6({
           <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
           <div className="driver-info">
             <div className="driver-name">{driver.full_name ?? 'Chauffeur'}</div>
-            <div className="driver-eta" style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Paiement : En Espèces</div>
+            <div className="driver-eta" style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
+              Paiement : {PAYMENT_METHOD_LABELS[paymentMethod]}
+            </div>
           </div>
           <div className="check-circle">✓</div>
         </div>
@@ -772,6 +825,18 @@ function Screen6({
           <div className="amt">{formatFCFA(trip.final_price ?? trip.estimated_price)}</div>
           <div className="check-circle">✓</div>
         </div>
+
+        {isMobileMoney && !mobilePaymentConfirmed && (
+          <button className="btn cyan" style={{ marginTop: 10 }} onClick={onConfirmMobilePayment} disabled={busy}>
+            {busy ? 'CONFIRMATION…' : `J'AI ENVOYÉ LE PAIEMENT ${PAYMENT_METHOD_LABELS[paymentMethod].toUpperCase()}`}
+          </button>
+        )}
+        {isMobileMoney && mobilePaymentConfirmed && (
+          <div className="route-sub" style={{ marginTop: 10, color: 'var(--copper-light)', fontWeight: 700 }}>
+            ✓ Paiement {PAYMENT_METHOD_LABELS[paymentMethod]} confirmé
+          </div>
+        )}
+
         <div className="stars">
           {[1, 2, 3, 4, 5].map((i) => (
             <button key={i} className={`star ${rating >= i ? 'active' : ''}`} onClick={() => onRate(i)}>★</button>
