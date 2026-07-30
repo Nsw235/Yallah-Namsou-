@@ -118,6 +118,37 @@ export async function getDriverStats(): Promise<DriverStatRow[]> {
   }));
 }
 
+export type AdminMetrics = {
+  revenueToday: number; // FCFA, somme des courses acceptées/en cours/terminées aujourd'hui
+  cancellationRate: number; // % de courses annulées aujourd'hui
+  tripsToday: number;
+};
+
+/** Métriques du jour pour le panneau "Performance Clé" du backoffice. */
+export async function getAdminMetrics(): Promise<AdminMetrics> {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const { data: trips, error } = await supabase
+    .from('trips')
+    .select('status, estimated_price, final_price, requested_at')
+    .gte('requested_at', startOfDay.toISOString());
+  if (error) throw error;
+
+  const rows = trips ?? [];
+  const tripsToday = rows.length;
+  const cancelled = rows.filter((t) => t.status === 'cancelled').length;
+  const revenueToday = rows
+    .filter((t) => ['accepted', 'in_progress', 'completed'].includes(t.status))
+    .reduce((sum, t) => sum + Number(t.final_price ?? t.estimated_price ?? 0), 0);
+
+  return {
+    tripsToday,
+    cancellationRate: tripsToday > 0 ? Math.round((cancelled / tripsToday) * 1000) / 10 : 0,
+    revenueToday,
+  };
+}
+
 /** Approuve ou suspend un chauffeur. */
 export async function setDriverValidation(driverId: string, status: 'approved' | 'rejected' | 'suspended') {
   const { error } = await supabase.from('drivers').update({ validation_status: status }).eq('id', driverId);
