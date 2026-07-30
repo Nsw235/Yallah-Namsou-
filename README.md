@@ -1,93 +1,78 @@
-# Private Fleet — App VTC (N'Djamena)
+# Yalla Nimshi — App VTC (N'Djamena)
 
-Application de réservation VTC haut de gamme (Next.js 14 + Supabase), reprenant
-le flux de réservation en 6 écrans : sélection véhicule → confirmation →
-recherche chauffeur → chauffeur trouvé → course en cours → notation.
+Réservation VTC (Next.js 14 + Supabase). Design, logo et icônes de véhicules
+inchangés. La logique de réservation a été reconstruite pour suivre le vrai
+flux Uber : une course "pending" est diffusée en temps réel (Supabase
+Realtime) à **tous** les chauffeurs disponibles du bon type de véhicule ;
+le premier qui clique "ACCEPTER" l'obtient (concurrence gérée par les
+policies RLS, pas côté client).
 
-Connectée à une vraie base **Supabase** (projet `moto-taxi-tchad`) :
-comptes passagers/chauffeurs, courses, paiements, notations, historique.
+## 1. Remettre la base Supabase à zéro
 
-## 1. Installer en local
+Dans le **SQL Editor** de ton projet Supabase :
+
+```sql
+drop schema public cascade;
+create schema public;
+grant all on schema public to postgres, anon, authenticated, service_role;
+```
+
+Puis colle et exécute le contenu de `supabase/migrations/0001_init.sql`
+(fichier unique, il contient tout : tables, RLS, Realtime, grille tarifaire).
+
+## 2. Installer en local
 
 ```bash
 npm install
-cp .env.local.example .env.local   # les clés sont déjà pré-remplies dedans
+cp .env.local.example .env.local   # clés déjà pré-remplies
 npm run dev
 ```
 
-Ouvrez http://localhost:3000 — créez un compte passager (email + mot de passe),
-puis réservez une course.
+## 3. Créer un compte chauffeur (pas d'inscription chauffeur dans l'UI)
 
-## 2. Déployer sur GitHub
+1. Crée un compte normal dans l'app (ça crée la ligne `profiles`, role
+   `passenger` par défaut).
+2. Dans le SQL Editor, promeus ce compte en chauffeur :
 
-```bash
-git init
-git add .
-git commit -m "Private Fleet — app VTC initiale"
-git branch -M main
-git remote add origin https://github.com/<votre-compte>/<votre-repo>.git
-git push -u origin main
+```sql
+-- remplace <USER_ID> par l'id de auth.users (visible dans Authentication > Users)
+update public.profiles set role = 'driver' where id = '<USER_ID>';
+
+insert into public.drivers (id, license_number, validation_status)
+values ('<USER_ID>', 'PERMIS-0001', 'approved');
+
+insert into public.vehicles (driver_id, type, plate, brand, model, passenger_capacity, status)
+values ('<USER_ID>', 'berline', 'TC-123-AB', 'Toyota', 'Corolla', 4, 'offline');
 ```
 
-## 3. Déployer sur Vercel
+3. Connecte-toi avec ce compte sur `/chauffeur`.
 
-1. Sur [vercel.com](https://vercel.com) → **Add New Project** → importez le repo GitHub.
-2. Vercel détecte automatiquement Next.js (aucune configuration de build nécessaire).
-3. Dans **Environment Variables**, ajoutez :
-   - `NEXT_PUBLIC_SUPABASE_URL` = `https://jijvqzrldnijjfhlawda.supabase.co`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = (voir `.env.local.example`)
-4. **Deploy**. C'est tout — l'app est branchée sur Supabase dès le premier déploiement.
+## 4. Créer un compte admin
 
-## 4. Ce qui est déjà en place côté Supabase
+```sql
+update public.profiles set role = 'admin' where id = '<USER_ID>';
+```
 
-Le projet Supabase `moto-taxi-tchad` contient déjà :
+Puis connecte-toi sur `/admin`.
 
-| Table            | Rôle                                                              |
-|------------------|--------------------------------------------------------------------|
-| `profiles`       | Utilisateurs (passagers ET chauffeurs), créés automatiquement à l'inscription |
-| `drivers`        | Infos chauffeur (validation, note moyenne)                         |
-| `vehicles`       | Véhicules par chauffeur (type, plaque, statut dispo)               |
-| `pricing_rules`  | Grille tarifaire par type de véhicule (base + prix/km)              |
-| `trips`          | Les courses (statut : pending → accepted → in_progress → completed)|
-| `payments`       | Paiement (espèces pour l'instant), confirmé côté chauffeur          |
-| `ratings`        | Notes laissées par le passager                                     |
+## 5. Flux applicatif
 
-3 chauffeurs de démonstration sont déjà seedés (1 par catégorie) :
-**Moussa B.** (Berline, TC-123-AB), **Ahmat K.** (Prestige, TC-456-CD),
-**Fatimé N.** (SUV, TC-789-EF).
+| Écran (passager)              | Déclencheur                                                   |
+|--------------------------------|----------------------------------------------------------------|
+| 1. Véhicule + adresses         | Géocodage réel (Nominatim/OSM), tarif en FCFA depuis `pricing_rules` |
+| 2. Confirmation + paiement     | Choix Cash / Airtel Money / Moov Money → crée `trips` + `payments` (pending) |
+| 3. Recherche chauffeur         | Écoute Realtime sur la course ; annulable tant que "pending"   |
+| 4. Chauffeur en route          | Position GPS live du véhicule (table `vehicles`)               |
+| 5. En course                   | Suivi carte + statut, le chauffeur termine depuis son tableau de bord |
+| 6. Terminée + note             | Confirmation mobile money par le passager si besoin, notation  |
 
-Le dossier `supabase/migrations/` contient le SQL correspondant, au cas où
-vous voudriez recréer la base sur un nouveau projet Supabase.
+Côté chauffeur (`/chauffeur`) : liste temps réel des courses en attente
+(son du navigateur à l'arrivée d'une nouvelle demande), "ACCEPTER" (premier
+arrivé premier servi), "DÉMARRER", "TERMINER", partage GPS automatique tant
+que le véhicule est "en ligne".
 
-## 5. Fonctionnement du flux (résumé technique)
+## ⚠️ Sécurité
 
-- **Écran 1-2** : choix du véhicule + prix (calculé à partir de `pricing_rules`
-  et de la distance démo entre Quartier Klemat et Ave de l'Indépendance).
-  À la confirmation → insertion dans `trips` (statut `pending`).
-- **Écran 3** : recherche d'un véhicule `available` du bon type dans `vehicles`,
-  puis assignation du chauffeur (`trips.driver_id`, statut `accepted`).
-- **Écran 4** : affichage des infos chauffeur/véhicule. "Je suis prêt" →
-  statut `in_progress`.
-- **Écran 5** : suivi de trajet (statique pour la démo).
-- **Écran 6** : "Terminer" → statut `completed` + création d'un `payments`
-  (espèces, en attente de confirmation par le chauffeur). La note est
-  enregistrée dans `ratings`.
-- **Historique** : bouton "•••" en haut à droite → liste des courses
-  `completed` du passager connecté.
-
-## ⚠️ Notes de sécurité (important avant une mise en prod réelle)
-
-- Les policies RLS actuelles autorisent le **passager** à mettre à jour
-  librement le statut de sa propre course (y compris assigner un chauffeur).
-  C'est un raccourci volontaire pour permettre la démo sans avoir de vraie
-  appli chauffeur. En production, l'assignation du chauffeur et les
-  changements de statut sensibles devraient passer par une **fonction
-  serveur** (Edge Function / route API) utilisant la `service_role key`,
-  jamais exposée côté client.
-- Les clés `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` sont
-  des clés **publiques**, protégées par les policies RLS : ce n'est pas un
-  problème qu'elles soient visibles côté client. Ne mettez en revanche
-  **jamais** la `service_role key` dans le code ou sur GitHub.
-- Les comptes chauffeurs de démo utilisent un mot de passe partagé
-  (`demo-Pf-2026!`), uniquement à but de test interne — à supprimer avant
-  une ouverture publique.
+Les clés `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` sont
+publiques et protégées par les policies RLS — ne jamais exposer la
+`service_role key` côté client ou sur GitHub.
