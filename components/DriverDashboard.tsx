@@ -15,6 +15,7 @@ import {
   getMyDriverData,
   getMyTripHistory,
   getPendingTrips,
+  getTripPayment,
   setVehicleStatus,
   startSharingLocation,
   startTrip,
@@ -138,10 +139,13 @@ export default function DriverDashboard() {
     setBusy(true);
     setError(null);
     try {
-      await acceptTrip(trip.id, session.user.id, myVehicle.id);
+      const accepted = await acceptTrip(trip.id, session.user.id, myVehicle.id);
+      if (!accepted) {
+        setError('Trop tard : un autre chauffeur a déjà accepté cette course.');
+      }
       await refreshAll(session.user.id);
     } catch (e: any) {
-      setError(e?.message ?? 'Impossible d\u2019accepter cette course.');
+      setError(e?.message ?? "Impossible d'accepter cette course.");
     } finally {
       setBusy(false);
     }
@@ -167,7 +171,10 @@ export default function DriverDashboard() {
     setError(null);
     try {
       await finishTrip(active.id, active.vehicle_id, active.estimated_price ?? 0);
-      await confirmCashPayment(active.id);
+      const payment = await getTripPayment(active.id);
+      if (payment?.method === 'cash') {
+        await confirmCashPayment(active.id);
+      }
       if (session?.user) await refreshAll(session.user.id);
     } catch (e: any) {
       setError(e?.message ?? 'Impossible de terminer la course.');
@@ -235,7 +242,7 @@ export default function DriverDashboard() {
             <button className="btn cyan" disabled={busy} onClick={handleStart}>DÉMARRER LA COURSE</button>
           )}
           {active.status === 'in_progress' && (
-            <button className="btn emerald" disabled={busy} onClick={handleFinish}>TERMINER LA COURSE (ENCAISSÉ)</button>
+            <button className="btn emerald" disabled={busy} onClick={handleFinish}>TERMINER LA COURSE</button>
           )}
         </div>
       ) : (
