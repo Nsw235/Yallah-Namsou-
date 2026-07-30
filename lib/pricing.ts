@@ -1,4 +1,4 @@
-import { PricingRule, VehicleType } from '@/types/database';
+import { PaymentMethod, PricingRule, VehicleType } from '@/types/database';
 
 // Coordonnées démo pour le trajet affiché dans l'app (N'Djamena).
 // À remplacer plus tard par une vraie saisie d'adresse / géocodage.
@@ -64,4 +64,16 @@ export const VEHICLE_ICON: Record<VehicleType, string> = {
   berline: '/icon_berline.png',
   van: '/icon_van.png',
   suv: '/icon_suv.png',
+};
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  cash: 'Espèces',
+  airtel_money: 'Airtel Money',
+  moov_money: 'Moov Money',
+};
+
+export const PAYMENT_METHOD_ICON: Record<PaymentMethod, string> = {
+  cash: '💵',
+  airtel_money: '📱',
+  moov_money: '📲',
 };
