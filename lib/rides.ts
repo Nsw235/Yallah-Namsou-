@@ -157,6 +157,34 @@ export async function confirmMobilePayment(tripId: string, method: 'airtel_money
   if (error) throw error;
 }
 
+/**
+ * Écoute en temps réel la position GPS du véhicule assigné (mise à jour par
+ * le chauffeur via startSharingLocation) pour l'afficher en direct côté
+ * passager (écrans "chauffeur arrive" / "en course").
+ */
+export function subscribeToVehicleLocation(
+  vehicleId: string,
+  onUpdate: (pos: { lat: number; lng: number }) => void
+): () => void {
+  const channel = supabase
+    .channel(`vehicle-location-${vehicleId}`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'vehicles', filter: `id=eq.${vehicleId}` },
+      (payload) => {
+        const v = payload.new as { current_lat: number | null; current_lng: number | null };
+        if (v.current_lat != null && v.current_lng != null) {
+          onUpdate({ lat: v.current_lat, lng: v.current_lng });
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 /** Enregistre la note laissée par le passager pour cette course. */
 export async function rateTrip(tripId: string, ratedBy: string, rating: number) {
   const { error } = await supabase.from('ratings').insert({

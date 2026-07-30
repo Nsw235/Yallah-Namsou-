@@ -119,6 +119,47 @@ export async function confirmCashPayment(tripId: string) {
   if (error) throw error;
 }
 
+/**
+ * Démarre le partage GPS temps réel du chauffeur : suit sa position via
+ * navigator.geolocation.watchPosition et la pousse dans public.vehicles
+ * (current_lat/current_lng), lue en Realtime côté passager pendant la course.
+ * Retourne une fonction d'arrêt (stopSharingLocation) à appeler au démontage
+ * ou quand le chauffeur passe hors-ligne.
+ */
+export function startSharingLocation(vehicleId: string): () => void {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return () => {};
+  }
+
+  const watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      supabase
+        .from('vehicles')
+        .update({
+          current_lat: pos.coords.latitude,
+          current_lng: pos.coords.longitude,
+          location_updated_at: new Date().toISOString(),
+        })
+        .eq('id', vehicleId)
+        .then(() => {});
+    },
+    () => {
+      // géolocalisation refusée ou indisponible : on ignore silencieusement,
+      // le tableau de bord reste utilisable sans position live.
+    },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+  );
+
+  return () => stopSharingLocation(watchId);
+}
+
+/** Arrête le partage GPS démarré par startSharingLocation. */
+export function stopSharingLocation(watchId: number) {
+  if (typeof navigator !== 'undefined' && navigator.geolocation) {
+    navigator.geolocation.clearWatch(watchId);
+  }
+}
+
 /** Historique + statistiques du chauffeur. */
 export async function getMyTripHistory(driverId: string): Promise<Trip[]> {
   const { data, error } = await supabase
