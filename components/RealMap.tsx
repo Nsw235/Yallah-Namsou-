@@ -8,10 +8,16 @@ export type MapPin = { position: LatLng; emoji?: string; color?: string };
 // Centre par défaut : N'Djamena, Tchad.
 const DEFAULT_CENTER: LatLng = { lat: 12.1348, lng: 15.0557 };
 
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
+
+// Style sombre sur-mesure (base Mapbox "Standard" en mode nuit, teinté cuivre
+// pour coller à l'identité de la marque) + calque trafic live officiel.
+const MAP_STYLE = 'mapbox://styles/mapbox/navigation-night-v1';
+
 /**
- * Vraie carte (tuiles OpenStreetMap, sans clé API) avec marqueurs et
- * itinéraire routier réel (via le service public OSRM). Remplace l'ancien
- * décor en CSS (div "blockA/blockB/road...").
+ * Carte vecteur Mapbox GL JS : rendu fluide, trafic en temps réel,
+ * itinéraire "driving-traffic" (tient compte des embouteillages),
+ * marqueurs animés en continu (position interpolée, pas de saut).
  */
 export default function RealMap({
   pickup,
@@ -27,112 +33,209 @@ export default function RealMap({
   pins?: MapPin[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapInstance = useRef<any>(null);
-  const ownLayers = useRef<any[]>([]);
+  const mapRef = useRef<any>(null);
+  const markersRef = useRef<Record<string, any>>({});
+  const animFrames = useRef<Record<string, number>>({});
 
+  // Initialisation (une seule fois).
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
-      const L = (await import('leaflet')).default;
-      if (cancelled || !containerRef.current) return;
+      if (!containerRef.current || mapRef.current) return;
+      const mapboxgl = (await import('mapbox-gl')).default;
+      if (cancelled) return;
+      mapboxgl.accessToken = MAPBOX_TOKEN;
 
-      if (!mapInstance.current) {
-        mapInstance.current = L.map(containerRef.current, {
-          zoomControl: false,
-          attributionControl: true,
-        }).setView([DEFAULT_CENTER.lat, DEFAULT_CENTER.lng], 13);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          attribution: '&copy; OpenStreetMap',
-        }).addTo(mapInstance.current);
-      }
-      const map = mapInstance.current;
-
-      // Nettoie les couches ajoutées lors du rendu précédent.
-      ownLayers.current.forEach((layer) => map.removeLayer(layer));
-      ownLayers.current = [];
-
-      const dropPin = (color: string) =>
-        L.divIcon({
-          className: '',
-          html: `<div style="width:16px;height:16px;background:${color};border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 0 8px ${color};border:2px solid rgba(0,0,0,0.45)"></div>`,
-          iconSize: [16, 16],
-          iconAnchor: [8, 16],
-        });
-
-      const emojiPin = (emoji: string) =>
-        L.divIcon({
-          className: '',
-          html: `<div style="font-size:26px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.6))">${emoji}</div>`,
-          iconSize: [30, 30],
-          iconAnchor: [15, 15],
-        });
-
-      const bounds: [number, number][] = [];
-
-      if (pickup) {
-        ownLayers.current.push(L.marker([pickup.lat, pickup.lng], { icon: dropPin('#e8c9a8') }).addTo(map));
-        bounds.push([pickup.lat, pickup.lng]);
-      }
-      if (dropoff) {
-        ownLayers.current.push(L.marker([dropoff.lat, dropoff.lng], { icon: dropPin('#ff5f5f') }).addTo(map));
-        bounds.push([dropoff.lat, dropoff.lng]);
-      }
-      pins.forEach((p) => {
-        ownLayers.current.push(
-          L.marker([p.position.lat, p.position.lng], { icon: emojiPin(p.emoji ?? '🚗') }).addTo(map)
-        );
-        bounds.push([p.position.lat, p.position.lng]);
+      const map = new mapboxgl.Map({
+        container: containerRef.current,
+        style: MAP_STYLE,
+        center: [DEFAULT_CENTER.lng, DEFAULT_CENTER.lat],
+        zoom: 13,
+        attributionControl: true,
+        pitch: 0,
+        antialias: true,
       });
+      mapRef.current = map;
 
-      if (showRoute && pickup && dropoff) {
-        try {
-          const url = `https://router.project-osrm.org/route/v1/driving/${pickup.lng},${pickup.lat};${dropoff.lng},${dropoff.lat}?overview=full&geometries=geojson`;
-          const res = await fetch(url);
-          const data = await res.json();
-          const coords: number[][] | undefined = data?.routes?.[0]?.geometry?.coordinates;
-          if (coords && !cancelled) {
-            const latlngs = coords.map((c) => [c[1], c[0]] as [number, number]);
-            ownLayers.current.push(
-              L.polyline(latlngs, { color: routeColor, weight: 4, opacity: 0.9 }).addTo(map)
-            );
-            bounds.push(...latlngs);
-          }
-        } catch {
-          // Itinéraire indisponible (hors-ligne) : trait pointillé direct en secours.
-          ownLayers.current.push(
-            L.polyline(
-              [
-                [pickup.lat, pickup.lng],
-                [dropoff.lat, dropoff.lng],
-              ],
-              { color: routeColor, weight: 3, opacity: 0.6, dashArray: '6 8' }
-            ).addTo(map)
-          );
-        }
-      }
+      map.on('load', () => {
+        // Calque trafic live officiel Mapbox (congestion en temps réel).
+        map.addSource('mapbox-traffic', {
+          type: 'vector',
+          url: 'mapbox://mapbox.mapbox-traffic-v1',
+        });
+        map.addLayer({
+          id: 'traffic',
+          type: 'line',
+          source: 'mapbox-traffic',
+          'source-layer': 'traffic',
+          paint: {
+            'line-width': 2.2,
+            'line-color': [
+              'match',
+              ['get', 'congestion'],
+              'low', '#7fbf94',
+              'moderate', '#e8c9a8',
+              'heavy', '#d97b6a',
+              'severe', '#c0392b',
+              'rgba(0,0,0,0)',
+            ],
+          },
+        });
 
-      if (!cancelled) {
-        if (bounds.length === 1) map.setView(bounds[0], 15);
-        else if (bounds.length > 1) map.fitBounds(bounds as any, { padding: [40, 40] });
-      }
+        map.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        map.addLayer({
+          id: 'route-line',
+          type: 'line',
+          source: 'route',
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: { 'line-width': 4, 'line-color': routeColor, 'line-opacity': 0.9 },
+        });
+      });
     })();
 
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, showRoute, routeColor, JSON.stringify(pins)]);
+  }, []);
 
-  // Nettoyage complet au démontage du composant.
   useEffect(() => {
     return () => {
-      mapInstance.current?.remove();
-      mapInstance.current = null;
+      Object.values(animFrames.current).forEach((id) => cancelAnimationFrame(id));
+      mapRef.current?.remove();
+      mapRef.current = null;
     };
   }, []);
 
+  // Marqueurs pickup / dropoff + pins (chauffeur, etc.), avec déplacement animé.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    async function render() {
+      const mapboxgl = (await import('mapbox-gl')).default;
+      const wanted: Record<string, { pos: LatLng; el: () => HTMLElement }> = {};
+
+      if (pickup) {
+        wanted['pickup'] = { pos: pickup, el: () => dropEl('#e8c9a8') };
+      }
+      if (dropoff) {
+        wanted['dropoff'] = { pos: dropoff, el: () => dropEl('#d97b6a') };
+      }
+      pins.forEach((p, i) => {
+        wanted[`pin-${i}`] = { pos: p.position, el: () => emojiEl(p.emoji ?? '🚗') };
+      });
+
+      // Retire les marqueurs qui ne sont plus utilisés.
+      Object.keys(markersRef.current).forEach((key) => {
+        if (!wanted[key]) {
+          markersRef.current[key].remove();
+          delete markersRef.current[key];
+        }
+      });
+
+      Object.entries(wanted).forEach(([key, { pos, el }]) => {
+        const existing = markersRef.current[key];
+        if (!existing) {
+          const marker = new mapboxgl.Marker({ element: el() }).setLngLat([pos.lng, pos.lat]).addTo(map);
+          markersRef.current[key] = marker;
+          return;
+        }
+        // Anime la transition vers la nouvelle position plutôt qu'un saut brut :
+        // rend le déplacement du véhicule "vivant" plutôt que téléporté.
+        const from = existing.getLngLat();
+        const to = { lng: pos.lng, lat: pos.lat };
+        if (from.lng === to.lng && from.lat === to.lat) return;
+        if (animFrames.current[key]) cancelAnimationFrame(animFrames.current[key]);
+        const duration = 900;
+        const start = performance.now();
+        const step = (now: number) => {
+          const t = Math.min(1, (now - start) / duration);
+          const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+          existing.setLngLat([from.lng + (to.lng - from.lng) * ease, from.lat + (to.lat - from.lat) * ease]);
+          if (t < 1) animFrames.current[key] = requestAnimationFrame(step);
+        };
+        animFrames.current[key] = requestAnimationFrame(step);
+      });
+
+      const coords: [number, number][] = [];
+      if (pickup) coords.push([pickup.lng, pickup.lat]);
+      if (dropoff) coords.push([dropoff.lng, dropoff.lat]);
+      pins.forEach((p) => coords.push([p.position.lng, p.position.lat]));
+      if (coords.length === 1) {
+        map.easeTo({ center: coords[0], zoom: 15, duration: 800 });
+      } else if (coords.length > 1) {
+        const bounds = coords.reduce(
+          (b, c) => b.extend(c as any),
+          new (await import('mapbox-gl')).default.LngLatBounds(coords[0], coords[0])
+        );
+        map.fitBounds(bounds, { padding: 60, duration: 800 });
+      }
+    }
+
+    if (map.isStyleLoaded()) render();
+    else map.once('load', render);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, JSON.stringify(pins)]);
+
+  // Itinéraire réel tenant compte du trafic (Mapbox Directions, profil driving-traffic).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !showRoute || !pickup || !dropoff) return;
+
+    async function drawRoute() {
+      const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${pickup!.lng},${pickup!.lat};${dropoff!.lng},${dropoff!.lat}?geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`;
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const geometry = data?.routes?.[0]?.geometry;
+        if (!geometry) return;
+        const src = map.getSource('route');
+        if (src) src.setData({ type: 'Feature', properties: {}, geometry });
+      } catch {
+        // Hors-ligne : trait direct pickup → dropoff en secours.
+        const src = map.getSource('route');
+        if (src) {
+          src.setData({
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [pickup!.lng, pickup!.lat],
+                [dropoff!.lng, dropoff!.lat],
+              ],
+            },
+          });
+        }
+      }
+    }
+
+    if (map.isStyleLoaded()) drawRoute();
+    else map.once('load', drawRoute);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, showRoute]);
+
   return <div ref={containerRef} className="real-map" />;
+}
+
+function dropEl(color: string): HTMLElement {
+  const el = document.createElement('div');
+  el.style.width = '16px';
+  el.style.height = '16px';
+  el.style.background = color;
+  el.style.borderRadius = '50% 50% 50% 0';
+  el.style.transform = 'rotate(-45deg)';
+  el.style.boxShadow = `0 0 8px ${color}`;
+  el.style.border = '2px solid rgba(0,0,0,0.45)';
+  return el;
+}
+
+function emojiEl(emoji: string): HTMLElement {
+  const el = document.createElement('div');
+  el.style.fontSize = '26px';
+  el.style.filter = 'drop-shadow(0 4px 8px rgba(0,0,0,0.6))';
+  el.textContent = emoji;
+  return el;
 }

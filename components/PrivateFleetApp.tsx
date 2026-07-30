@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
 import { PaymentMethod, PricingRule, Trip, VehicleType } from '@/types/database';
@@ -66,6 +66,7 @@ export default function PrivateFleetApp() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [mobilePaymentConfirmed, setMobilePaymentConfirmed] = useState(false);
   const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
+  const submittingTrip = useRef(false);
 
   const distanceKm = useMemo(() => {
     if (!pickup || !dropoff) return null;
@@ -108,6 +109,8 @@ export default function PrivateFleetApp() {
 
   async function handleConfirmTrip() {
     if (!session?.user || !pickup || !dropoff) return;
+    if (submittingTrip.current) return;
+    submittingTrip.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -125,8 +128,21 @@ export default function PrivateFleetApp() {
       setTrip(newTrip);
       setStep(3);
     } catch (e: any) {
-      setError(e?.message ?? 'Impossible de créer la course.');
+      // Une requête en double (relance réseau, double-clic) peut échouer après
+      // qu'une autre a déjà réussi et fait avancer l'écran : on n'affiche
+      // jamais une erreur obsolète par-dessus un écran déjà passé à l'étape 3.
+      setStep((current) => {
+        if (current === 2) {
+          setError(
+            e?.message?.includes('row-level security')
+              ? "La demande n'a pas pu être envoyée, réessayez."
+              : e?.message ?? 'Impossible de créer la course.'
+          );
+        }
+        return current;
+      });
     } finally {
+      submittingTrip.current = false;
       setBusy(false);
     }
   }
