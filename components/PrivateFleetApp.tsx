@@ -28,6 +28,7 @@ import Header from '@/components/Header';
 import RealMap from '@/components/RealMap';
 import HistoryModal from '@/components/HistoryModal';
 import PaymentModal from '@/components/PaymentModal';
+import AccountMenu from '@/components/AccountMenu';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -59,6 +60,7 @@ export default function PrivateFleetApp() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [paymentPhone, setPaymentPhone] = useState<string | undefined>(undefined);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -253,6 +255,7 @@ export default function PrivateFleetApp() {
             onDropoffChange={setDropoff}
             onSearch={() => setStep(2)}
             onOptions={() => setShowHistory(true)}
+            onMenu={() => setShowMenu(true)}
           />
         )}
 
@@ -267,11 +270,18 @@ export default function PrivateFleetApp() {
             onChangePayment={() => setShowPaymentModal(true)}
             onConfirm={handleConfirmTrip}
             onOptions={() => setShowHistory(true)}
+            onMenu={() => setShowMenu(true)}
           />
         )}
 
         {step === 3 && trip && (
-          <Screen3 trip={trip} busy={busy} onCancel={handleCancelSearch} onOptions={() => setShowHistory(true)} />
+          <Screen3
+            trip={trip}
+            busy={busy}
+            onCancel={handleCancelSearch}
+            onOptions={() => setShowHistory(true)}
+            onMenu={() => setShowMenu(true)}
+          />
         )}
 
         {step === 4 && driver && vehicleInfo && trip && (
@@ -283,11 +293,12 @@ export default function PrivateFleetApp() {
             paymentMethod={paymentMethod}
             driverPos={driverPos}
             onOptions={() => setShowHistory(true)}
+            onMenu={() => setShowMenu(true)}
           />
         )}
 
         {step === 5 && driver && trip && (
-          <Screen5 driver={driver} trip={trip} driverPos={driverPos} />
+          <Screen5 driver={driver} trip={trip} driverPos={driverPos} onMenu={() => setShowMenu(true)} />
         )}
 
         {step === 6 && driver && trip && (
@@ -301,6 +312,7 @@ export default function PrivateFleetApp() {
             onConfirmMobilePayment={handleConfirmMobilePayment}
             onRate={handleRate}
             onDone={resetToBooking}
+            onMenu={() => setShowMenu(true)}
           />
         )}
 
@@ -320,6 +332,10 @@ export default function PrivateFleetApp() {
         {showHistory && session.user && (
           <HistoryModal passengerId={session.user.id} onClose={() => setShowHistory(false)} />
         )}
+
+        {showMenu && (
+          <AccountMenu session={session} onClose={() => setShowMenu(false)} onHistory={() => setShowHistory(true)} />
+        )}
       </div>
     </div>
   );
@@ -338,6 +354,7 @@ function Screen1({
   onDropoffChange,
   onSearch,
   onOptions,
+  onMenu,
 }: {
   vehicle: VehicleType;
   onSelect: (v: VehicleType) => void;
@@ -348,6 +365,7 @@ function Screen1({
   onDropoffChange: (g: GeoResult) => void;
   onSearch: () => void;
   onOptions: () => void;
+  onMenu: () => void;
 }) {
   const types: { key: VehicleType; icon: string }[] = [
     { key: 'berline', icon: '/icon_berline.png' },
@@ -363,7 +381,7 @@ function Screen1({
         showRoute={ready}
         routeColor="#e8c9a8"
       />
-      <Header onOptionsClick={onOptions} />
+      <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
       <div className="sheet glass" style={{ paddingTop: 16 }}>
         <AddressField label="DÉPART" placeholder="D'où partez-vous ?" value={pickup} onChange={onPickupChange} />
         <div style={{ height: 10 }} />
@@ -495,6 +513,7 @@ function Screen2({
   onChangePayment,
   onConfirm,
   onOptions,
+  onMenu,
 }: {
   vehicle: VehicleType;
   price: number | null;
@@ -505,11 +524,12 @@ function Screen2({
   onChangePayment: () => void;
   onConfirm: () => void;
   onOptions: () => void;
+  onMenu: () => void;
 }) {
   return (
     <div className="screen fade">
       <RealMap pickup={{ lat: pickup.lat, lng: pickup.lng }} dropoff={{ lat: dropoff.lat, lng: dropoff.lng }} showRoute routeColor="#e8c9a8" />
-      <Header onOptionsClick={onOptions} />
+      <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
       <RouteCard pickup={pickup} dropoff={dropoff} />
       <div className="sheet glass">
         <div className="veh-hero"><img src={VEHICLE_ICON[vehicle]} alt={VEHICLE_LABELS[vehicle]} className="veh-hero-img" /></div>
@@ -540,16 +560,18 @@ function Screen3({
   busy,
   onCancel,
   onOptions,
+  onMenu,
 }: {
   trip: Trip;
   busy: boolean;
   onCancel: () => void;
   onOptions: () => void;
+  onMenu: () => void;
 }) {
   return (
     <div className="screen fade">
       <RealMap pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }} />
-      <Header onOptionsClick={onOptions} />
+      <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
       <div className="title-banner glass" style={{ top: 100 }}>
         <div className="route-label">RECHERCHE D&apos;UN CHAUFFEUR</div>
         <div className="route-sub">Votre demande a été envoyée à tous les {VEHICLE_LABELS[trip.vehicle_type]} disponibles.</div>
@@ -583,6 +605,7 @@ function Screen4({
   paymentMethod,
   driverPos,
   onOptions,
+  onMenu,
 }: {
   driver: DriverInfo;
   vehicleInfo: VehicleInfo;
@@ -591,6 +614,7 @@ function Screen4({
   paymentMethod: PaymentMethod;
   driverPos: { lat: number; lng: number } | null;
   onOptions: () => void;
+  onMenu: () => void;
 }) {
   return (
     <div className="screen fade">
@@ -598,7 +622,7 @@ function Screen4({
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
         pins={[{ position: driverPos ?? { lat: trip.pickup_lat, lng: trip.pickup_lng }, emoji: '🚗' }]}
       />
-      <Header onOptionsClick={onOptions} />
+      <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
       <div className="title-banner glass">
         <h2>CHAUFFEUR EN ROUTE</h2>
         <div className="sub-route">📍 {trip.pickup_address} → {trip.dropoff_address}</div>
@@ -654,10 +678,12 @@ function Screen5({
   driver,
   trip,
   driverPos,
+  onMenu,
 }: {
   driver: DriverInfo;
   trip: Trip;
   driverPos: { lat: number; lng: number } | null;
+  onMenu: () => void;
 }) {
   return (
     <div className="screen fade">
@@ -696,7 +722,7 @@ function Screen5({
           </div>
         </div>
       </div>
-      <Header />
+      <Header onMenuClick={onMenu} />
       <div className="route-sub" style={{ position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 40 }}>
         Le chauffeur termine la course depuis son tableau de bord.
       </div>
@@ -717,6 +743,7 @@ function Screen6({
   onConfirmMobilePayment,
   onRate,
   onDone,
+  onMenu,
 }: {
   driver: DriverInfo;
   trip: Trip;
@@ -727,6 +754,7 @@ function Screen6({
   onConfirmMobilePayment: () => void;
   onRate: (n: number) => void;
   onDone: () => void;
+  onMenu: () => void;
 }) {
   const isMobileMoney = paymentMethod === 'airtel_money' || paymentMethod === 'moov_money';
   return (
@@ -738,7 +766,7 @@ function Screen6({
         routeColor="#e8c9a8"
         pins={[{ position: { lat: trip.dropoff_lat, lng: trip.dropoff_lng }, emoji: '🏁' }]}
       />
-      <Header />
+      <Header onMenuClick={onMenu} />
       <div className="title-banner glass"><h2>COURSE TERMINÉE</h2></div>
       <div className="sheet glass">
         <div className="driver-row">
