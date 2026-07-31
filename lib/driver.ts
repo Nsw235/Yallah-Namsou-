@@ -187,11 +187,15 @@ export function subscribeToTripChanges(
  * (current_lat/current_lng), lue en Realtime côté passager pendant la course.
  * Retourne une fonction d'arrêt à appeler au démontage ou en passant hors-ligne.
  */
-export function startSharingLocation(vehicleId: string): () => void {
+export function startSharingLocation(
+  vehicleId: string,
+  onPosition?: (pos: { lat: number; lng: number }) => void
+): () => void {
   if (typeof navigator === 'undefined' || !navigator.geolocation) return () => {};
 
   const watchId = navigator.geolocation.watchPosition(
     (pos) => {
+      onPosition?.({ lat: pos.coords.latitude, lng: pos.coords.longitude });
       supabase
         .from('vehicles')
         .update({
