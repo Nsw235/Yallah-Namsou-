@@ -1,5 +1,5 @@
-import AdminDashboard from '@/components/AdminDashboard';
+import SupervisionOverview from '@/components/SupervisionOverview';
 
 export default function AdminPage() {
-  return <AdminDashboard />;
+  return <SupervisionOverview />;
 }
