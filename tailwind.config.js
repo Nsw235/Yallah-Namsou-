@@ -1,8 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
-    './app/supervision/**/*.{ts,tsx}',
-    './components/supervision/**/*.{ts,tsx}',
+    './app/**/*.{ts,tsx}',
+    './components/**/*.{ts,tsx}',
   ],
   // Le reste de l'app (passager / chauffeur / admin) utilise déjà son propre
   // CSS global. On désactive le "preflight" de Tailwind pour que ce nouveau
