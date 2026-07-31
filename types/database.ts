@@ -52,6 +52,8 @@ export interface Trip {
   dropoff_address: string | null;
   estimated_price: number | null;
   final_price: number | null;
+  distance_km: number | null;
+  driver_notes: string | null;
   status: TripStatus;
   requested_at: string;
   accepted_at: string | null;
@@ -75,6 +77,7 @@ export interface Rating {
   rated_by: string;
   rating: number;
   comment: string | null;
+  tag: 'client_sympa' | 'aucun' | null;
   created_at: string;
 }
 
