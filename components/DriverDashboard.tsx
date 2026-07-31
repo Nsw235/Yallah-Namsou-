@@ -54,6 +54,7 @@ export default function DriverDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [newRequestAlert, setNewRequestAlert] = useState(false);
+  const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
   const gpsStopFns = useRef<Record<string, () => void>>({});
 
   useEffect(() => {
@@ -82,6 +83,15 @@ export default function DriverDashboard() {
       setPending(pendingTrips);
       setActive(activeTrip);
       setHistory(hist);
+
+      // Reprend le suivi GPS local (marqueur chauffeur sur la carte) pour tout
+      // véhicule déjà en ligne — utile après un rechargement de page pendant
+      // une course active, où le watch précédent a été perdu.
+      v.forEach((veh) => {
+        if (veh.status !== 'offline' && !gpsStopFns.current[veh.id]) {
+          gpsStopFns.current[veh.id] = startSharingLocation(veh.id, setDriverPos);
+        }
+      });
     } catch (e: any) {
       setError(e?.message ?? 'Erreur de chargement.');
     }
@@ -117,7 +127,7 @@ export default function DriverDashboard() {
       await setVehicleStatus(v.id, next);
       if (next === 'available') {
         gpsStopFns.current[v.id]?.();
-        gpsStopFns.current[v.id] = startSharingLocation(v.id);
+        gpsStopFns.current[v.id] = startSharingLocation(v.id, setDriverPos);
       } else {
         gpsStopFns.current[v.id]?.();
         delete gpsStopFns.current[v.id];
@@ -239,8 +249,12 @@ export default function DriverDashboard() {
           <RealMap
             pitch={50}
             buildings3d
-            pickup={{ lat: active.pickup_lat, lng: active.pickup_lng }}
-            dropoff={{ lat: active.dropoff_lat, lng: active.dropoff_lng }}
+            driverPosition={driverPos}
+            dropoff={
+              active.status === 'accepted'
+                ? { lat: active.pickup_lat, lng: active.pickup_lng }
+                : { lat: active.dropoff_lat, lng: active.dropoff_lng }
+            }
             showRoute
             routeColor="#e8c9a8"
           />
@@ -253,8 +267,10 @@ export default function DriverDashboard() {
                   <span className="pdot" />
                   {active.status === 'accepted' ? 'PASSAGER EN ATTENTE' : 'COURSE EN COURS'}
                 </div>
-                <div className="route-label">RÉCUPÉRATION À</div>
-                <div className="route-addr" style={{ fontSize: 14 }}>{active.pickup_address ?? '—'}</div>
+                <div className="route-label">{active.status === 'accepted' ? 'RÉCUPÉRATION À' : 'DESTINATION'}</div>
+                <div className="route-addr" style={{ fontSize: 14 }}>
+                  {(active.status === 'accepted' ? active.pickup_address : active.dropoff_address) ?? '—'}
+                </div>
               </div>
               <div className="trip-detail-card glass">
                 <div className="trip-eta-label">ETA CLIENT</div>
