@@ -48,6 +48,16 @@ export default function AdminDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [nav, setNav] = useState<NavKey>('dashboard');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  const NAV_LABELS: Record<NavKey, string> = {
+    dashboard: 'Tableau de bord',
+    map: 'Supervision Carte',
+    fleet: 'Flotte',
+    drivers: 'Chauffeurs',
+    analytics: 'Analyses',
+    settings: 'Paramètres',
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -173,12 +183,27 @@ export default function AdminDashboard() {
 
   return (
     <div className="admin-shell">
-      <div className="admin-nav">
+      <div className="admin-mobile-topbar">
+        <button className="admin-burger-btn" onClick={() => setMobileNavOpen(true)} aria-label="Ouvrir le menu">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </button>
+        <h2>{NAV_LABELS[nav]}</h2>
+        <span style={{ width: 42 }} />
+      </div>
+
+      {mobileNavOpen && <div className="admin-nav-overlay" onClick={() => setMobileNavOpen(false)} />}
+
+      <div className={`admin-nav ${mobileNavOpen ? 'mobile-open' : ''}`}>
         {NAV_ITEMS.map((item) => (
           <button
             key={item.key}
             className={`admin-nav-item ${nav === item.key ? 'active' : ''}`}
-            onClick={() => setNav(item.key)}
+            onClick={() => {
+              setNav(item.key);
+              setMobileNavOpen(false);
+            }}
           >
             <NavIcon>{item.icon}</NavIcon>
             <span style={{ whiteSpace: 'pre-line' }}>{item.label}</span>
@@ -187,7 +212,7 @@ export default function AdminDashboard() {
       </div>
 
       {error && (
-        <div className="top-error" style={{ position: 'static', gridColumn: '2 / span 2' }}>
+        <div className="top-error" style={{ position: 'static' }}>
           {error}
         </div>
       )}
