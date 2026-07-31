@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------------------------------------------ */
+/* Design system "Supervision Totale" — dark premium / cuivre brossé   */
+/* ------------------------------------------------------------------ */
+.supervision-root {
+  --copper: #b08d57;
+  --copper-light: #e8c9a8;
+  --copper-dark: #6b4a35;
+  background: #000;
+  color: #f2f3f5;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+.sv-card {
+  background: linear-gradient(180deg, rgba(28, 21, 18, 0.7), rgba(10, 11, 13, 0.75));
+  border: 1px solid var(--copper);
+  border-color: rgba(176, 141, 87, 0.35);
+  border-radius: 20px;
+  backdrop-filter: blur(14px);
+}
+
+.sv-title {
+  color: var(--copper-light);
+}
+
+.sv-pill {
+  background: rgba(10, 11, 13, 0.7);
+  border: 1px solid rgba(176, 141, 87, 0.4);
+  backdrop-filter: blur(10px);
+}
+
+.sv-btn-copper {
+  background: linear-gradient(180deg, var(--copper-light), var(--copper));
+  color: #241a13;
+}
