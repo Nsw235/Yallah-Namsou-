@@ -17,11 +17,12 @@
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-html,body{height:100%;}
+html,body{height:100%; width:100%; max-width:100%; overflow-x:hidden;}
 body{
   margin:0; font-family:var(--font); background:#000;
   min-height:100dvh; color:var(--text); overflow:hidden;
 }
+img, svg{ max-width:100%; }
 
 /* Conteneur plein écran, responsive : occupe tout l'appareil (mobile),
    se recentre en colonne sur desktop/tablette sans "coque de téléphone". */
@@ -167,11 +168,6 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 .stars{display:flex; gap:8px; justify-content:center; margin:14px 0;}
 .stars .star{font-size:26px; color:#3a3d42; cursor:pointer; transition:color .15s ease, transform .15s ease; background:none; border:none;}
 .stars .star.active{color:var(--copper-light); text-shadow:0 0 10px rgba(169,122,91,0.7); transform:scale(1.12);}
-
-.stepper{position:absolute; top:14px; left:0; right:0; display:flex; gap:5px; justify-content:center; z-index:60; padding:0 20px;}
-.stepper i{flex:1; max-width:44px; height:3px; border-radius:2px; background:rgba(255,255,255,0.15);}
-.stepper i.done{background:var(--copper-light);}
-.stepper i.active{background:var(--copper);}
 
 .nav-controls{display:flex; justify-content:center; gap:10px; margin-top:16px;}
 .navbtn{ background:#16181c; border:1px solid #2a2d32; color:var(--text-dim); padding:8px 14px; border-radius:10px; font-size:12px; font-family:var(--font); cursor:pointer; }
@@ -425,3 +421,79 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 .trip-action-row{ display:flex; gap:10px; }
 .trip-action-row .btn{ font-size:13px; padding:15px; }
 .trip-action-row .btn.done{ background:linear-gradient(180deg,#3a3d42,#26282c); color:var(--text-dim); box-shadow:none; }
+
+/* ================================================================== */
+/* MOBILE-FIRST — Admin & Espace chauffeur (< 768px)                    */
+/* ================================================================== */
+
+.admin-burger-btn{
+  display:none; width:42px; height:42px; border-radius:12px; flex:0 0 auto;
+  background:var(--panel); border:1px solid var(--border); color:var(--text);
+  align-items:center; justify-content:center; cursor:pointer;
+}
+.admin-mobile-topbar{ display:none; }
+.admin-nav-overlay{ display:none; }
+
+@media (max-width: 768px){
+  html, body{ overflow-x:hidden; }
+
+  /* ---- Admin : passage en une colonne, sidebar -> menu burger ---- */
+  .admin-shell{
+    display:flex; flex-direction:column; grid-template-columns:none; padding:12px; gap:10px;
+  }
+  .admin-mobile-topbar{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:10px 14px;
+  }
+  .admin-mobile-topbar h2{ margin:0; font-size:14px; font-weight:800; color:var(--copper-light); }
+  .admin-burger-btn{ display:flex; }
+
+  .admin-nav{
+    position:fixed; top:0; bottom:0; left:0; z-index:100;
+    width:78%; max-width:280px; height:100dvh;
+    flex-direction:column; align-items:stretch; gap:6px;
+    border-radius:0 20px 20px 0; padding:70px 14px 20px;
+    transform:translateX(-105%); transition:transform .25s ease;
+  }
+  .admin-nav.mobile-open{ transform:translateX(0); }
+  .admin-nav-item{ flex-direction:row; justify-content:flex-start; gap:12px; font-size:13px; padding:12px 10px; }
+  .admin-nav-item svg{ width:20px; height:20px; flex:0 0 auto; }
+  .admin-nav-item span{ white-space:normal !important; text-align:left; }
+
+  .admin-nav-overlay{
+    display:block; position:fixed; inset:0; z-index:90; background:rgba(0,0,0,0.55);
+  }
+
+  /* Toutes les zones de grille reprennent toute la largeur en 1 colonne */
+  .admin-main, .admin-side, .admin-actions, .admin-list-view{
+    grid-column:1 !important; grid-row:auto !important; width:100%; max-width:100%;
+  }
+  .admin-side{ overflow-y:visible; }
+  .admin-map-wrap{ min-height:260px; }
+  .admin-actions-grid{ grid-template-columns:repeat(2, 1fr); }
+
+  /* ---- Espace chauffeur / cartes génériques ---- */
+  .driver-wrap{ padding:16px 12px 60px; gap:12px; }
+  .driver-card, .admin-panel{ padding:16px 14px; }
+
+  .driver-list-row{
+    flex-direction:column; align-items:stretch; gap:10px;
+  }
+  .driver-list-row button, .driver-list-row .btn{
+    width:100% !important; padding:12px 14px !important;
+  }
+
+  .trip-top-row{ flex-direction:column; }
+  .trip-status-card, .trip-detail-card{ flex:1 1 auto; }
+  .trip-metrics-grid{ grid-template-columns:1fr 1fr; }
+  .trip-action-row{ flex-direction:column; }
+
+  .kpi-row{ gap:8px; }
+  .fleet-bars{ gap:6px; }
+}
+
+@media (max-width: 420px){
+  .trip-metrics-grid{ grid-template-columns:1fr; }
+  .admin-actions-grid{ grid-template-columns:1fr 1fr; }
+  .vehicles{ gap:6px; }
+}
