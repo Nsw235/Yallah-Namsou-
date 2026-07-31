@@ -62,11 +62,7 @@ export async function createTrip(params: {
 
 /** Annule une course encore en attente (avant qu'un chauffeur ne l'accepte). */
 export async function cancelTrip(tripId: string) {
-  const { error } = await supabase
-    .from('trips')
-    .update({ status: 'cancelled' })
-    .eq('id', tripId)
-    .eq('status', 'pending');
+  const { error } = await supabase.rpc('cancel_my_pending_trip', { p_trip_id: tripId });
   if (error) throw error;
 }
 
@@ -83,7 +79,7 @@ export async function getDriverAndVehicle(driverId: string, vehicleId: string) {
     await Promise.all([
       supabase.from('profiles').select('full_name, phone').eq('id', driverId).single(),
       supabase.from('drivers').select('rating_avg').eq('id', driverId).single(),
-      supabase.from('vehicles').select('id, plate, brand, model, current_lat, current_lng').eq('id', vehicleId).single(),
+      supabase.from('vehicles').select('id, plate, brand, model, last_lat, last_lng').eq('id', vehicleId).single(),
     ]);
   if (profileError) throw profileError;
   if (driverError) throw driverError;
@@ -101,8 +97,8 @@ export async function getDriverAndVehicle(driverId: string, vehicleId: string) {
       plate: vehicle.plate,
       brand: vehicle.brand,
       model: vehicle.model,
-      current_lat: vehicle.current_lat as number | null,
-      current_lng: vehicle.current_lng as number | null,
+      current_lat: vehicle.last_lat as number | null,
+      current_lng: vehicle.last_lng as number | null,
     },
   };
 }
@@ -142,9 +138,9 @@ export function subscribeToVehicleLocation(
       'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'vehicles', filter: `id=eq.${vehicleId}` },
       (payload) => {
-        const v = payload.new as { current_lat: number | null; current_lng: number | null };
-        if (v.current_lat != null && v.current_lng != null) {
-          onUpdate({ lat: v.current_lat, lng: v.current_lng });
+        const v = payload.new as { last_lat: number | null; last_lng: number | null };
+        if (v.last_lat != null && v.last_lng != null) {
+          onUpdate({ lat: v.last_lat, lng: v.last_lng });
         }
       }
     )

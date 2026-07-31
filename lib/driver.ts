@@ -222,7 +222,7 @@ export function subscribeToTripChanges(
 /**
  * Démarre le partage GPS temps réel du chauffeur : suit sa position via
  * navigator.geolocation.watchPosition et la pousse dans public.vehicles
- * (current_lat/current_lng), lue en Realtime côté passager pendant la course.
+ * (last_lat/last_lng), lue en Realtime côté passager pendant la course.
  * Retourne une fonction d'arrêt à appeler au démontage ou en passant hors-ligne.
  */
 export function startSharingLocation(
@@ -237,9 +237,9 @@ export function startSharingLocation(
       supabase
         .from('vehicles')
         .update({
-          current_lat: pos.coords.latitude,
-          current_lng: pos.coords.longitude,
-          location_updated_at: new Date().toISOString(),
+          last_lat: pos.coords.latitude,
+          last_lng: pos.coords.longitude,
+          updated_at: new Date().toISOString(),
         })
         .eq('id', vehicleId)
         .then(() => {});
