@@ -252,12 +252,6 @@ export default function PrivateFleetApp() {
   return (
     <div className="wrap-outer">
       <div className="device">
-        <div className="stepper">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <i key={i} className={i < step ? 'done' : i === step ? 'active' : ''} />
-          ))}
-        </div>
-
         {error && <div className="top-error">{error}</div>}
 
         {step === 1 && (
