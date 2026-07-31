@@ -10,9 +10,28 @@ const DEFAULT_CENTER: LatLng = { lat: 12.1348, lng: 15.0557 };
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
 
-// Style sombre sur-mesure (base Mapbox "Standard" en mode nuit, teinté cuivre
-// pour coller à l'identité de la marque) + calque trafic live officiel.
-const MAP_STYLE = 'mapbox://styles/mapbox/navigation-night-v1';
+// Style Mapbox "Standard" (v3) en mode nuit ("dusk"), avec bâtiments 3D natifs
+// + calque trafic live officiel superposé par-dessus.
+const MAP_STYLE: any = {
+  version: 8,
+  imports: [
+    {
+      id: 'basemap',
+      url: 'mapbox://styles/mapbox/standard',
+      config: {
+        lightPreset: 'dusk',
+        showPointOfInterestLabels: false,
+        showRoadLabels: true,
+        show3dObjects: true,
+      },
+    },
+  ],
+  sources: {},
+  layers: [],
+};
+
+// Modèle 3D par défaut du véhicule (place ton .glb dans /public/models/).
+const DEFAULT_CAR_MODEL_URL = '/models/berline.glb';
 
 /**
  * Carte vecteur Mapbox GL JS : rendu fluide, trafic en temps réel,
@@ -28,6 +47,9 @@ export default function RealMap({
   pins = [],
   pitch = 0,
   buildings3d = false,
+  use3dCar = false,
+  carModelUrl = DEFAULT_CAR_MODEL_URL,
+  carHeading = 90,
 }: {
   pickup?: LatLng | null;
   dropoff?: LatLng | null;
@@ -40,8 +62,14 @@ export default function RealMap({
   pins?: MapPin[];
   /** Inclinaison de la caméra (0 = vue du dessus, ~55-60 = look isométrique 3D). */
   pitch?: number;
-  /** Active l'extrusion 3D des bâtiments, teintée cuivre, pour l'effet "ville miniature". */
+  /** Active les bâtiments 3D natifs du style Mapbox Standard ("ville miniature"). */
   buildings3d?: boolean;
+  /** Affiche un vrai modèle 3D (.glb) pour le véhicule au lieu de l'emoji 🚗. */
+  use3dCar?: boolean;
+  /** Chemin vers le modèle .glb (dans /public), ex: "/models/berline.glb". */
+  carModelUrl?: string;
+  /** Orientation du véhicule en degrés (0-360). */
+  carHeading?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -70,8 +98,12 @@ export default function RealMap({
       });
       mapRef.current = map;
 
-      map.on('load', () => {
-        // Calque trafic live officiel Mapbox (congestion en temps réel).
+      // Avec le style Mapbox Standard (v3, basé sur des "imports"), on attend
+      // 'style.load' plutôt que 'load' pour être sûr que le basemap + sa
+      // config (dusk, bâtiments 3D natifs...) soient bien prêts.
+      map.on('style.load', () => {
+        // Calque trafic live officiel Mapbox (congestion en temps réel),
+        // placé au-dessus du basemap Standard via `slot: 'top'`.
         map.addSource('mapbox-traffic', {
           type: 'vector',
           url: 'mapbox://mapbox.mapbox-traffic-v1',
@@ -81,6 +113,7 @@ export default function RealMap({
           type: 'line',
           source: 'mapbox-traffic',
           'source-layer': 'traffic',
+          slot: 'top',
           paint: {
             'line-width': 2.2,
             'line-color': [
@@ -100,49 +133,23 @@ export default function RealMap({
           id: 'route-line',
           type: 'line',
           source: 'route',
+          slot: 'top',
           layout: { 'line-cap': 'round', 'line-join': 'round' },
           paint: { 'line-width': 4, 'line-color': routeColor, 'line-opacity': 0.9 },
         });
 
-        if (buildings3d) {
-          // Extrusion 3D des bâtiments (données vectorielles réelles Mapbox),
-          // teintée cuivre pour coller à l'identité visuelle "ville miniature".
-          const firstSymbolLayer = map
-            .getStyle()
-            .layers?.find((l: any) => l.type === 'symbol')?.id;
-          map.addLayer(
-            {
-              id: '3d-buildings',
-              source: 'composite',
-              'source-layer': 'building',
-              type: 'fill-extrusion',
-              minzoom: 12,
-              filter: ['==', 'extrude', 'true'],
-              paint: {
-                'fill-extrusion-color': [
-                  'interpolate',
-                  ['linear'],
-                  ['get', 'height'],
-                  0, '#3a2c22',
-                  40, '#6b4a35',
-                  120, '#a97a5b',
-                ],
-                'fill-extrusion-height': ['get', 'height'],
-                'fill-extrusion-base': ['get', 'min_height'],
-                'fill-extrusion-opacity': 0.88,
-              },
-            },
-            firstSymbolLayer
-          );
-          map.setFog({
-            range: [0.5, 10],
-            color: '#1c1512',
-            'high-color': '#3a2c22',
-            'horizon-blend': 0.15,
-            'space-color': '#0a0b0d',
-            'star-intensity': 0,
-          });
-        }
+        // Les bâtiments 3D sont désormais natifs au style Standard
+        // (activés/désactivés via la config `show3dObjects`, cf. init ci-dessus).
+        map.setConfigProperty('basemap', 'show3dObjects', buildings3d);
+
+        map.setFog({
+          range: [0.5, 10],
+          color: '#1c1512',
+          'high-color': '#3a2c22',
+          'horizon-blend': 0.15,
+          'space-color': '#0a0b0d',
+          'star-intensity': 0,
+        });
       });
     })();
 
@@ -175,7 +182,7 @@ export default function RealMap({
       if (dropoff) {
         wanted['dropoff'] = { pos: dropoff, el: () => dropEl('#d97b6a') };
       }
-      if (driverPosition) {
+      if (driverPosition && !use3dCar) {
         wanted['driver'] = { pos: driverPosition, el: () => emojiEl('🚗') };
       }
       pins.forEach((p, i) => {
@@ -234,6 +241,56 @@ export default function RealMap({
     else map.once('load', render);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins)]);
+
+  // Modèle 3D réel du véhicule (.glb), positionné/orienté sur `driverPosition`.
+  // On (re)crée la source/layer "model" à chaque changement de position : les
+  // sources de type "model" n'exposent pas d'API de mise à jour incrémentale
+  // simple, contrairement aux sources GeoJSON.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !use3dCar || !driverPosition) return;
+
+    function upsertCarModel() {
+      if (map.getLayer('car-3d-layer')) map.removeLayer('car-3d-layer');
+      if (map.getSource('car-3d-source')) map.removeSource('car-3d-source');
+
+      map.addSource('car-3d-source', {
+        type: 'model',
+        models: {
+          car: {
+            uri: carModelUrl,
+            position: [driverPosition!.lng, driverPosition!.lat],
+            orientation: [0, 0, carHeading],
+          },
+        },
+      } as any);
+
+      map.addLayer({
+        id: 'car-3d-layer',
+        type: 'model',
+        source: 'car-3d-source',
+        slot: 'top',
+        paint: {
+          'model-scale': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            12, ['literal', [0.5, 0.5, 0.5]],
+            18, ['literal', [2.5, 2.5, 2.5]],
+          ],
+        },
+      } as any);
+    }
+
+    if (map.isStyleLoaded()) upsertCarModel();
+    else map.once('style.load', upsertCarModel);
+
+    return () => {
+      if (map.getLayer('car-3d-layer')) map.removeLayer('car-3d-layer');
+      if (map.getSource('car-3d-source')) map.removeSource('car-3d-source');
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [use3dCar, carModelUrl, carHeading, driverPosition?.lat, driverPosition?.lng]);
 
   // Itinéraire réel tenant compte du trafic (Mapbox Directions, profil driving-traffic).
   // Point de départ : la position live du chauffeur si disponible (suivi temps réel),
