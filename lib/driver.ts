@@ -122,11 +122,35 @@ export async function getTripPayment(tripId: string): Promise<{ method: string; 
   return data;
 }
 
-/** Termine la course, fixe le prix final et libère le véhicule. */
-export async function finishTrip(tripId: string, vehicleId: string, finalPrice: number): Promise<Trip> {
+/** Nom du passager d'une course, affiché sur les cartes chauffeur. */
+export async function getPassengerName(passengerId: string): Promise<string | null> {
+  const { data, error } = await supabase.from('profiles').select('full_name').eq('id', passengerId).single();
+  if (error) return null;
+  return data?.full_name ?? null;
+}
+
+/** Le chauffeur annule une course qu'il a acceptée (avant le départ). */
+export async function cancelTripAsDriver(tripId: string, vehicleId: string) {
+  const { error } = await supabase.from('trips').update({ status: 'cancelled' }).eq('id', tripId);
+  if (error) throw error;
+  await setVehicleStatus(vehicleId, 'available');
+}
+
+/** Termine la course, fixe le prix final, la distance parcourue et libère le véhicule. */
+export async function finishTrip(
+  tripId: string,
+  vehicleId: string,
+  finalPrice: number,
+  distanceKm?: number | null
+): Promise<Trip> {
   const { data, error } = await supabase
     .from('trips')
-    .update({ status: 'completed', completed_at: new Date().toISOString(), final_price: finalPrice })
+    .update({
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+      final_price: finalPrice,
+      distance_km: distanceKm ?? null,
+    })
     .eq('id', tripId)
     .select()
     .single();
@@ -135,6 +159,20 @@ export async function finishTrip(tripId: string, vehicleId: string, finalPrice: 
   await supabase.from('payments').update({ amount: finalPrice }).eq('trip_id', tripId);
   await setVehicleStatus(vehicleId, 'available');
   return data as Trip;
+}
+
+/** Le chauffeur note le passager après le résumé de course (étoiles + commentaire + tag bonus). */
+export async function submitRating(
+  tripId: string,
+  ratedBy: string,
+  rating: number,
+  comment: string | null,
+  tag: 'client_sympa' | 'aucun' | null
+) {
+  const { error } = await supabase
+    .from('ratings')
+    .insert({ trip_id: tripId, rated_by: ratedBy, rating, comment, tag });
+  if (error) throw error;
 }
 
 /** Le chauffeur confirme avoir encaissé le paiement en espèces. */
