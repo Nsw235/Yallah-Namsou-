@@ -22,6 +22,7 @@ const MAP_STYLE = 'mapbox://styles/mapbox/navigation-night-v1';
 export default function RealMap({
   pickup,
   dropoff,
+  driverPosition,
   showRoute = false,
   routeColor = '#e8c9a8',
   pins = [],
@@ -30,6 +31,10 @@ export default function RealMap({
 }: {
   pickup?: LatLng | null;
   dropoff?: LatLng | null;
+  /** Position live du chauffeur (GPS). Si fournie, sert de point de départ
+   *  pour l'itinéraire (à la place de `pickup`) et s'affiche comme un
+   *  marqueur véhicule dédié, animé en continu. */
+  driverPosition?: LatLng | null;
   showRoute?: boolean;
   routeColor?: string;
   pins?: MapPin[];
@@ -170,6 +175,9 @@ export default function RealMap({
       if (dropoff) {
         wanted['dropoff'] = { pos: dropoff, el: () => dropEl('#d97b6a') };
       }
+      if (driverPosition) {
+        wanted['driver'] = { pos: driverPosition, el: () => emojiEl('🚗') };
+      }
       pins.forEach((p, i) => {
         wanted[`pin-${i}`] = { pos: p.position, el: () => emojiEl(p.emoji ?? '🚗') };
       });
@@ -209,6 +217,7 @@ export default function RealMap({
       const coords: [number, number][] = [];
       if (pickup) coords.push([pickup.lng, pickup.lat]);
       if (dropoff) coords.push([dropoff.lng, dropoff.lat]);
+      if (driverPosition) coords.push([driverPosition.lng, driverPosition.lat]);
       pins.forEach((p) => coords.push([p.position.lng, p.position.lat]));
       if (coords.length === 1) {
         map.easeTo({ center: coords[0], zoom: 15, duration: 800 });
@@ -224,15 +233,18 @@ export default function RealMap({
     if (map.isStyleLoaded()) render();
     else map.once('load', render);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, JSON.stringify(pins)]);
+  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins)]);
 
   // Itinéraire réel tenant compte du trafic (Mapbox Directions, profil driving-traffic).
+  // Point de départ : la position live du chauffeur si disponible (suivi temps réel),
+  // sinon le point de prise en charge (comportement historique, ex. écrans passager).
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !showRoute || !pickup || !dropoff) return;
+    const routeStart = driverPosition ?? pickup;
+    if (!map || !showRoute || !routeStart || !dropoff) return;
 
     async function drawRoute() {
-      const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${pickup!.lng},${pickup!.lat};${dropoff!.lng},${dropoff!.lat}?geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`;
+      const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${routeStart!.lng},${routeStart!.lat};${dropoff!.lng},${dropoff!.lat}?geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`;
       try {
         const res = await fetch(url);
         const data = await res.json();
@@ -241,7 +253,7 @@ export default function RealMap({
         const src = map.getSource('route');
         if (src) src.setData({ type: 'Feature', properties: {}, geometry });
       } catch {
-        // Hors-ligne : trait direct pickup → dropoff en secours.
+        // Hors-ligne : trait direct départ → arrivée en secours.
         const src = map.getSource('route');
         if (src) {
           src.setData({
@@ -250,7 +262,7 @@ export default function RealMap({
             geometry: {
               type: 'LineString',
               coordinates: [
-                [pickup!.lng, pickup!.lat],
+                [routeStart!.lng, routeStart!.lat],
                 [dropoff!.lng, dropoff!.lat],
               ],
             },
@@ -262,7 +274,7 @@ export default function RealMap({
     if (map.isStyleLoaded()) drawRoute();
     else map.once('load', drawRoute);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, showRoute]);
+  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, showRoute]);
 
   return <div ref={containerRef} className="real-map" />;
 }
