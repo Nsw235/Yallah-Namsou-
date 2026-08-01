@@ -2,7 +2,23 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { Compass, Star, ThumbsUp, Home, History, Wallet, User as UserIcon } from 'lucide-react';
+import {
+  Compass,
+  Star,
+  ThumbsUp,
+  Home,
+  History,
+  Wallet,
+  User as UserIcon,
+  ArrowUp,
+  ArrowLeft,
+  ArrowRight,
+  CornerUpLeft,
+  CornerUpRight,
+  RotateCcw,
+  Flag,
+  ChevronUp,
+} from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { Trip, VehicleType } from '@/types/database';
 import { formatFCFA, haversineKm, VEHICLE_LABELS } from '@/lib/pricing';
@@ -24,7 +40,7 @@ import {
   subscribeToTripChanges,
 } from '@/lib/driver';
 import AuthGate from '@/components/AuthGate';
-import RealMap from '@/components/RealMap';
+import RealMap, { type NavigationStep } from '@/components/RealMap';
 
 const VEHICLE_TYPES: VehicleType[] = ['berline', 'van', 'suv'];
 
@@ -65,6 +81,22 @@ function initials(name: string | null) {
     .toUpperCase();
 }
 
+/** Icône de manœuvre pour la bannière de guidage, selon le type/modificateur Mapbox Directions. */
+function ManeuverIcon({ type, modifier, size = 18 }: { type: string; modifier?: string; size?: number }) {
+  if (type === 'arrive') return <Flag size={size} />;
+  if (type === 'roundabout' || type === 'rotary') return <RotateCcw size={size} />;
+  if (modifier?.includes('uturn')) return <RotateCcw size={size} />;
+  if (modifier?.includes('left')) return modifier === 'slight left' ? <ArrowUp size={size} /> : <CornerUpLeft size={size} />;
+  if (modifier?.includes('right')) return modifier === 'slight right' ? <ArrowUp size={size} /> : <CornerUpRight size={size} />;
+  return <ArrowUp size={size} />;
+}
+
+/** "230 m" ou "1.4 km" selon la distance restante jusqu'à la prochaine manœuvre. */
+function formatDistance(meters: number): string {
+  if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+  return `${Math.max(10, Math.round(meters / 10) * 10)} m`;
+}
+
 export default function DriverDashboard() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [profile, setProfile] = useState<MyDriverProfile | null>(null);
@@ -86,6 +118,12 @@ export default function DriverDashboard() {
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [navInfo, setNavInfo] = useState<NavigationStep | null>(null);
+  const [tripCardExpanded, setTripCardExpanded] = useState(false);
+
+  useEffect(() => {
+    setTripCardExpanded(false);
+  }, [active?.id]);
   const [autoValidateCountdown, setAutoValidateCountdown] = useState<number | null>(null);
   const gpsStopFns = useRef<Record<string, () => void>>({});
   const summaryFormRef = useRef({ ratingStars, ratingTag, comment });
@@ -384,6 +422,7 @@ export default function DriverDashboard() {
           }
           showRoute={step === 'accepted' || step === 'in_progress'}
           routeColor="#4d9fff"
+          onNavigationUpdate={onTrip ? setNavInfo : undefined}
         />
       </div>
 
@@ -436,13 +475,14 @@ export default function DriverDashboard() {
         </div>
       )}
 
-      {step === 'in_progress' && (
-        <button
-          onClick={openExternalNavigation}
-          className="relative z-10 mx-3 mt-3 rounded-xl bg-[#2d6fe0] py-3 text-sm font-bold text-white"
-        >
-          🧭 Démarrer la navigation vers la destination
-        </button>
+      {navInfo && onTrip && (
+        <div className="relative z-10 mx-3 mt-3 flex items-center gap-2.5 rounded-2xl bg-[#2d6fe0] px-4 py-2.5 text-white">
+          <ManeuverIcon type={navInfo.type} modifier={navInfo.modifier} size={20} />
+          <div className="flex flex-col leading-tight">
+            <span className="text-[11px] font-bold text-white/80">{formatDistance(navInfo.distanceMeters)}</span>
+            <span className="text-xs font-extrabold">{navInfo.instruction}</span>
+          </div>
+        </div>
       )}
 
       <div className="flex-1" />
@@ -490,17 +530,33 @@ export default function DriverDashboard() {
 
         {step === 'accepted' && active && (
           <div className="mx-3 mb-3 rounded-2xl bg-[#f5efe3] p-3">
-            <span className="inline-block rounded-full bg-[#dff3e6] px-2.5 py-1 text-[11px] font-extrabold text-[#1c8a4a]">
-              Course Acceptée - En route pour pickup
-            </span>
-            <TripCardBody trip={active} passengerName={passengerContact?.full_name ?? null} showDestinationLabel="Destination" />
-            {passengerContact?.phone && (
-              <a
-                href={`tel:${passengerContact.phone}`}
-                className="mt-2 flex items-center justify-center gap-1.5 rounded-xl bg-[#2d6fe0] py-2 text-xs font-extrabold text-white"
-              >
-                Contacter le client · {passengerContact.phone}
-              </a>
+            <button
+              onClick={() => setTripCardExpanded((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 text-left"
+            >
+              <span className="inline-block rounded-full bg-[#dff3e6] px-2.5 py-1 text-[11px] font-extrabold text-[#1c8a4a]">
+                En route pour pickup
+              </span>
+              <ChevronUp size={16} className={`flex-none text-[#8a8378] transition-transform ${tripCardExpanded ? '' : 'rotate-180'}`} />
+            </button>
+            {!tripCardExpanded && (
+              <div className="mt-1.5 flex items-center justify-between">
+                <span className="truncate text-sm font-extrabold text-[#1c1108]">{active.pickup_address ?? 'Adresse de prise en charge'}</span>
+                <span className="ml-2 flex-none text-sm font-extrabold text-[#1c1108]">{formatFCFA(active.estimated_price)}</span>
+              </div>
+            )}
+            {tripCardExpanded && (
+              <>
+                <TripCardBody trip={active} passengerName={passengerContact?.full_name ?? null} showDestinationLabel="Destination" />
+                {passengerContact?.phone && (
+                  <a
+                    href={`tel:${passengerContact.phone}`}
+                    className="mt-2 flex items-center justify-center gap-1.5 rounded-xl bg-[#2d6fe0] py-2 text-xs font-extrabold text-white"
+                  >
+                    Contacter le client · {passengerContact.phone}
+                  </a>
+                )}
+              </>
             )}
             <div className="mt-2 flex gap-2">
               <button disabled={busy} onClick={handleCancel} className="flex-1 rounded-xl bg-[#e0453f] py-2.5 text-sm font-extrabold text-white">
@@ -515,17 +571,36 @@ export default function DriverDashboard() {
 
         {step === 'in_progress' && active && (
           <div className="mx-3 mb-3 rounded-2xl bg-[#f5efe3] p-3">
-            <span className="mb-1.5 inline-block rounded-full bg-[#2fae5c] px-2.5 py-1 text-[11px] font-extrabold text-white">
-              En Course - Avec la cliente: {passengerContact?.full_name ?? '—'}
-            </span>
-            <TripCardBody trip={active} passengerName={passengerContact?.full_name ?? null} showDestinationLabel="Destination" />
-            {passengerContact?.phone && (
-              <a
-                href={`tel:${passengerContact.phone}`}
-                className="mt-2 flex items-center justify-center gap-1.5 rounded-xl bg-[#2d6fe0] py-2 text-xs font-extrabold text-white"
-              >
-                Contacter le client · {passengerContact.phone}
-              </a>
+            <button
+              onClick={() => setTripCardExpanded((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 text-left"
+            >
+              <span className="inline-block rounded-full bg-[#2fae5c] px-2.5 py-1 text-[11px] font-extrabold text-white">
+                Avec {passengerContact?.full_name ?? 'la cliente'}
+              </span>
+              <ChevronUp size={16} className={`flex-none text-[#8a8378] transition-transform ${tripCardExpanded ? '' : 'rotate-180'}`} />
+            </button>
+            {!tripCardExpanded && (
+              <div className="mt-1.5 flex items-center justify-between">
+                <span className="truncate text-sm font-extrabold text-[#1c1108]">→ {active.dropoff_address ?? 'Destination'}</span>
+                <span className="ml-2 flex-none text-sm font-extrabold text-[#1c1108]">{formatFCFA(active.estimated_price)}</span>
+              </div>
+            )}
+            {tripCardExpanded && (
+              <>
+                <TripCardBody trip={active} passengerName={passengerContact?.full_name ?? null} showDestinationLabel="Destination" />
+                {passengerContact?.phone && (
+                  <a
+                    href={`tel:${passengerContact.phone}`}
+                    className="mt-2 flex items-center justify-center gap-1.5 rounded-xl bg-[#2d6fe0] py-2 text-xs font-extrabold text-white"
+                  >
+                    Contacter le client · {passengerContact.phone}
+                  </a>
+                )}
+                <button onClick={openExternalNavigation} className="mt-2 w-full text-center text-[11px] font-bold text-[#6b6459] underline">
+                  Ouvrir dans Maps (secours hors-ligne)
+                </button>
+              </>
             )}
             <button disabled={busy} onClick={handleFinish} className="mt-2 w-full rounded-xl bg-[#2fae5c] py-3 text-sm font-extrabold text-white">
               Terminer la course

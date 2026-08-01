@@ -4,6 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 
 export type LatLng = { lat: number; lng: number };
 export type MapPin = { position: LatLng; emoji?: string; color?: string };
+/** Prochaine manœuvre du guidage virage par virage (voir onNavigationUpdate). */
+export type NavigationStep = {
+  instruction: string;
+  type: string;
+  modifier?: string;
+  distanceMeters: number;
+};
 
 // Centre par défaut : N'Djamena, Tchad.
 const DEFAULT_CENTER: LatLng = { lat: 12.1348, lng: 15.0557 };
@@ -36,6 +43,7 @@ export default function RealMap({
   use3dCar = false,
   carModelUrl = DEFAULT_CAR_MODEL_URL,
   carHeading = 90,
+  onNavigationUpdate,
 }: {
   pickup?: LatLng | null;
   dropoff?: LatLng | null;
@@ -56,6 +64,8 @@ export default function RealMap({
   carModelUrl?: string;
   /** Orientation du véhicule en degrés (0-360). */
   carHeading?: number;
+  /** Appelé à chaque recalcul d'itinéraire avec la prochaine manœuvre (guidage virage par virage), ou null si pas d'itinéraire. */
+  onNavigationUpdate?: (step: NavigationStep | null) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -304,22 +314,50 @@ export default function RealMap({
   // Itinéraire réel tenant compte du trafic (Mapbox Directions, profil driving-traffic).
   // Point de départ : la position live du chauffeur si disponible (suivi temps réel),
   // sinon le point de prise en charge (comportement historique, ex. écrans passager).
+  // `steps=true&language=fr` permet aussi de calculer la prochaine manœuvre
+  // (guidage virage par virage) via `onNavigationUpdate`.
   useEffect(() => {
     const map = mapRef.current;
     const routeStart = driverPosition ?? pickup;
-    if (!map || !showRoute || !routeStart || !dropoff) return;
+    if (!map || !showRoute || !routeStart || !dropoff) {
+      onNavigationUpdate?.(null);
+      return;
+    }
 
     async function drawRoute() {
-      const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${routeStart!.lng},${routeStart!.lat};${dropoff!.lng},${dropoff!.lat}?geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`;
+      const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${routeStart!.lng},${routeStart!.lat};${dropoff!.lng},${dropoff!.lat}?geometries=geojson&overview=full&steps=true&language=fr&access_token=${MAPBOX_TOKEN}`;
       try {
         const res = await fetch(url);
         const data = await res.json();
         const geometry = data?.routes?.[0]?.geometry;
-        if (!geometry) return;
+        if (!geometry) {
+          onNavigationUpdate?.(null);
+          return;
+        }
         const src = map.getSource('route');
         if (src) src.setData({ type: 'Feature', properties: {}, geometry });
+
+        // Étapes de l'itinéraire recalculé depuis la position actuelle :
+        // steps[0] = segment en cours (jusqu'à la prochaine manœuvre),
+        // steps[1] = la manœuvre à venir elle-même (instruction à afficher).
+        const routeSteps = data?.routes?.[0]?.legs?.[0]?.steps as
+          | { distance: number; maneuver: { instruction: string; type: string; modifier?: string } }[]
+          | undefined;
+        if (routeSteps && routeSteps.length >= 2) {
+          onNavigationUpdate?.({
+            instruction: routeSteps[1].maneuver.instruction,
+            type: routeSteps[1].maneuver.type,
+            modifier: routeSteps[1].maneuver.modifier,
+            distanceMeters: routeSteps[0].distance,
+          });
+        } else if (routeSteps && routeSteps.length === 1) {
+          onNavigationUpdate?.({ instruction: 'Vous êtes arrivé à destination', type: 'arrive', distanceMeters: 0 });
+        } else {
+          onNavigationUpdate?.(null);
+        }
       } catch {
         // Hors-ligne : trait direct départ → arrivée en secours.
+        onNavigationUpdate?.(null);
         const src = map.getSource('route');
         if (src) {
           src.setData({
