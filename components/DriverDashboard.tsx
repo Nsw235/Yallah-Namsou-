@@ -14,6 +14,7 @@ import {
   finishTrip,
   getMyActiveTrip,
   getMyDriverData,
+  getMyTripHistory,
   getPassengerName,
   getPendingTrips,
   setVehicleStatus,
@@ -74,6 +75,10 @@ export default function DriverDashboard() {
   const [ratingTag, setRatingTag] = useState<'client_sympa' | 'aucun'>('aucun');
   const [comment, setComment] = useState('');
   const [bottomTab, setBottomTab] = useState<'accueil' | 'historique' | 'gains' | 'profil'>('accueil');
+  const [history, setHistory] = useState<Trip[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const gpsStopFns = useRef<Record<string, () => void>>({});
 
   useEffect(() => {
@@ -115,6 +120,26 @@ export default function DriverDashboard() {
     if (session?.user) refreshAll(session.user.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    if ((bottomTab === 'historique' || bottomTab === 'gains') && !historyLoaded) {
+      setHistoryLoading(true);
+      getMyTripHistory(session.user.id)
+        .then((trips) => {
+          setHistory(trips);
+          setHistoryLoaded(true);
+        })
+        .catch((e: any) => setError(e?.message ?? "Impossible de charger l'historique."))
+        .finally(() => setHistoryLoading(false));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bottomTab, session?.user?.id]);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    await supabase.auth.signOut();
+  }
 
   useEffect(() => {
     if (!session?.user) return;
@@ -505,11 +530,137 @@ export default function DriverDashboard() {
       </nav>
 
       {bottomTab !== 'accueil' && (
-        <div className="absolute inset-x-3 bottom-20 z-20 rounded-2xl bg-[#1c1108]/95 p-4 text-center text-sm text-[#e8c9a8]">
-          Section « {bottomTab} » à venir.
-          <button onClick={() => setBottomTab('accueil')} className="mt-2 block w-full text-xs text-[#c9bba8] underline">
-            Retour à l&apos;accueil
-          </button>
+        <div className="absolute inset-x-3 bottom-20 top-20 z-20 flex flex-col overflow-hidden rounded-2xl bg-[#1c1108]/95 p-4 text-sm text-[#e8c9a8]">
+          <div className="mb-3 flex flex-none items-center justify-between">
+            <h2 className="text-base font-extrabold">
+              {bottomTab === 'historique' ? 'Historique des courses' : bottomTab === 'gains' ? 'Mes gains' : 'Mon profil'}
+            </h2>
+            <button onClick={() => setBottomTab('accueil')} className="text-xs text-[#c9bba8] underline">
+              Fermer
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {(bottomTab === 'historique' || bottomTab === 'gains') && historyLoading && (
+              <div className="py-8 text-center text-xs text-[#c9bba8]">Chargement…</div>
+            )}
+
+            {bottomTab === 'historique' && !historyLoading && (
+              <>
+                {history.length === 0 ? (
+                  <div className="rounded-2xl bg-white/5 p-4 text-center text-xs text-[#c9bba8]">
+                    Aucune course terminée pour le moment.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {history.map((t) => (
+                      <div key={t.id} className="rounded-2xl bg-white/5 p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-[#c9bba8]">
+                            {t.completed_at ? new Date(t.completed_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </span>
+                          <span className="rounded-md bg-[#e8c9a8]/15 px-2 py-0.5 text-[10px] font-bold text-[#e8c9a8]">
+                            {VEHICLE_LABELS[t.vehicle_type]}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-sm font-extrabold text-white">{t.pickup_address ?? 'Départ'}</div>
+                        <div className="text-xs text-[#c9bba8]">→ {t.dropoff_address ?? 'Destination'}</div>
+                        <div className="mt-1 flex items-center justify-between">
+                          <span className="text-xs text-[#c9bba8]">{t.distance_km ? `${t.distance_km.toFixed(1)} km` : ''}</span>
+                          <span className="text-sm font-extrabold text-[#5be08a]">{formatFCFA(t.final_price)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {bottomTab === 'gains' && !historyLoading && (
+              <>
+                {(() => {
+                  const now = new Date();
+                  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                  const startOfWeek = new Date(startOfToday);
+                  startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay());
+
+                  const sum = (trips: Trip[]) => trips.reduce((acc, t) => acc + (t.final_price ?? 0), 0);
+                  const withDate = history.filter((t) => t.completed_at);
+                  const today = withDate.filter((t) => new Date(t.completed_at as string) >= startOfToday);
+                  const week = withDate.filter((t) => new Date(t.completed_at as string) >= startOfWeek);
+
+                  const cards = [
+                    { label: "Aujourd'hui", value: sum(today), count: today.length },
+                    { label: 'Cette semaine', value: sum(week), count: week.length },
+                    { label: 'Total', value: sum(history), count: history.length },
+                  ];
+
+                  return (
+                    <div className="flex flex-col gap-2">
+                      {cards.map((c) => (
+                        <div key={c.label} className="rounded-2xl bg-white/5 p-3">
+                          <div className="text-xs font-bold text-[#c9bba8]">{c.label}</div>
+                          <div className="mt-1 text-xl font-extrabold text-[#5be08a]">{formatFCFA(c.value)}</div>
+                          <div className="text-[11px] text-[#c9bba8]">{c.count} course{c.count > 1 ? 's' : ''}</div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </>
+            )}
+
+            {bottomTab === 'profil' && (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3 rounded-2xl bg-white/5 p-3">
+                  <div className="flex h-12 w-12 flex-none items-center justify-center rounded-full border-2 border-[#e8c9a8] bg-[#e8c9a8]/20 text-sm font-extrabold text-[#e8c9a8]">
+                    {initials(profile?.full_name ?? null)}
+                  </div>
+                  <div>
+                    <div className="text-sm font-extrabold text-white">{profile?.full_name ?? 'Chauffeur'}</div>
+                    <div className="text-xs text-[#c9bba8]">{profile?.phone ?? '—'}</div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl bg-white/5 p-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[#c9bba8]">Note moyenne</span>
+                    <span className="flex items-center gap-1 font-extrabold text-[#e8b53a]">
+                      <Star size={13} fill="#e8b53a" color="#e8b53a" /> {profile?.rating_avg?.toFixed(1) ?? '—'}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-xs">
+                    <span className="text-[#c9bba8]">Statut du compte</span>
+                    <span className="font-extrabold text-[#5be08a]">
+                      {profile?.validation_status === 'approved' ? 'Validé' : profile?.validation_status ?? '—'}
+                    </span>
+                  </div>
+                </div>
+
+                {vehicles.length > 0 && (
+                  <div className="rounded-2xl bg-white/5 p-3">
+                    <div className="mb-1.5 text-xs font-bold text-[#c9bba8]">Mon véhicule</div>
+                    {vehicles.map((v) => (
+                      <div key={v.id} className="flex items-center justify-between py-1 text-xs">
+                        <span className="text-white">
+                          {v.brand ?? ''} {v.model ?? ''} · {VEHICLE_LABELS[v.type]}
+                        </span>
+                        <span className="text-[#c9bba8]">{v.plate}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  onClick={handleSignOut}
+                  disabled={signingOut}
+                  className="mt-1 w-full rounded-xl bg-[#e0453f]/90 py-2.5 text-sm font-extrabold text-white"
+                >
+                  {signingOut ? 'Déconnexion…' : 'Se déconnecter'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
