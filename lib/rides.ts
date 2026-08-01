@@ -15,6 +15,41 @@ export async function getPricingRules(): Promise<PricingRule[]> {
   return data as PricingRule[];
 }
 
+export type AvailableVehicle = {
+  id: string;
+  type: VehicleType;
+  last_lat: number | null;
+  last_lng: number | null;
+};
+
+/**
+ * Véhicules actuellement "available" (en ligne, sans course), avec position
+ * GPS connue. Utilisé pour afficher les voitures dispos sur la carte du
+ * passager avant même qu'il ait choisi sa destination.
+ */
+export async function getAvailableVehicles(): Promise<AvailableVehicle[]> {
+  const { data, error } = await supabase
+    .from('vehicles')
+    .select('id, type, last_lat, last_lng')
+    .eq('status', 'available')
+    .not('last_lat', 'is', null)
+    .not('last_lng', 'is', null);
+  if (error) throw error;
+  return (data ?? []) as AvailableVehicle[];
+}
+
+/** Écoute en temps réel les véhicules dispos (position, statut) pour la carte passager. */
+export function subscribeToAvailableVehicles(onChange: () => void): () => void {
+  const channel = supabase
+    .channel('passenger-available-vehicles')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles' }, () => onChange())
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 /**
  * Crée une nouvelle course "pending" + son paiement associé, avec la méthode
  * choisie par le passager AVANT le départ (comme dans le vrai flux Uber).
