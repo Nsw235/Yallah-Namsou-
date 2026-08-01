@@ -235,13 +235,16 @@ export default function RealMap({
       if (driverPosition) coords.push([driverPosition.lng, driverPosition.lat]);
       pins.forEach((p) => coords.push([p.position.lng, p.position.lat]));
       if (coords.length === 1) {
-        map.easeTo({ center: coords[0], zoom: 15, duration: 800 });
+        map.easeTo({ center: coords[0], zoom: 15, pitch, bearing: map.getBearing(), duration: 800 });
       } else if (coords.length > 1) {
         const bounds = coords.reduce(
           (b, c) => b.extend(c as any),
           new (await import('mapbox-gl')).default.LngLatBounds(coords[0], coords[0])
         );
-        map.fitBounds(bounds, { padding: 60, duration: 800 });
+        // IMPORTANT : fitBounds() remet pitch/bearing à 0 par défaut si on ne
+        // les précise pas ici — ça écrasait la vue inclinée (ciel visible) à
+        // chaque recentrage sur plusieurs points (ex: chauffeur + pickup).
+        map.fitBounds(bounds, { padding: 60, duration: 800, pitch, bearing: map.getBearing() });
       }
     }
 
