@@ -16,11 +16,14 @@ import {
   cancelTrip,
   confirmMobilePayment,
   createTrip,
+  getAvailableVehicles,
   getDriverAndVehicle,
   getPricingRules,
   rateTrip,
+  subscribeToAvailableVehicles,
   subscribeToTrip,
   subscribeToVehicleLocation,
+  type AvailableVehicle,
 } from '@/lib/rides';
 import { GeoResult, searchAddress } from '@/lib/geocode';
 import AuthGate from '@/components/AuthGate';
@@ -66,6 +69,8 @@ export default function PrivateFleetApp() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [mobilePaymentConfirmed, setMobilePaymentConfirmed] = useState(false);
   const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [availableVehicles, setAvailableVehicles] = useState<AvailableVehicle[]>([]);
+  const [sheetExpanded, setSheetExpanded] = useState(false);
   const submittingTrip = useRef(false);
 
   const distanceKm = useMemo(() => {
@@ -87,6 +92,19 @@ export default function PrivateFleetApp() {
     getPricingRules().then(setPricingRules).catch((e) => setError(e.message));
   }, [session]);
 
+  // Voitures dispos affichées sur la carte avant même le choix d'une adresse.
+  useEffect(() => {
+    if (!session) return;
+    function load() {
+      getAvailableVehicles()
+        .then(setAvailableVehicles)
+        .catch(() => {});
+    }
+    load();
+    const unsubscribe = subscribeToAvailableVehicles(load);
+    return unsubscribe;
+  }, [session]);
+
   function priceFor(type: VehicleType): number | null {
     if (distanceKm == null) return null;
     const rule = pricingRules.find((r) => r.vehicle_type === type);
@@ -105,6 +123,7 @@ export default function PrivateFleetApp() {
     setPaymentPhone(undefined);
     setMobilePaymentConfirmed(false);
     setDriverPos(null);
+    setSheetExpanded(false);
   }
 
   async function handleConfirmTrip() {
@@ -266,6 +285,9 @@ export default function PrivateFleetApp() {
             onSearch={() => setStep(2)}
             onOptions={() => setShowHistory(true)}
             onMenu={() => setShowMenu(true)}
+            availableVehicles={availableVehicles}
+            sheetExpanded={sheetExpanded}
+            onExpandSheet={() => setSheetExpanded(true)}
           />
         )}
 
@@ -365,6 +387,9 @@ function Screen1({
   onSearch,
   onOptions,
   onMenu,
+  availableVehicles,
+  sheetExpanded,
+  onExpandSheet,
 }: {
   vehicle: VehicleType;
   onSelect: (v: VehicleType) => void;
@@ -376,6 +401,9 @@ function Screen1({
   onSearch: () => void;
   onOptions: () => void;
   onMenu: () => void;
+  availableVehicles: AvailableVehicle[];
+  sheetExpanded: boolean;
+  onExpandSheet: () => void;
 }) {
   const types: { key: VehicleType; icon: string }[] = [
     { key: 'berline', icon: '/icon_berline.png' },
@@ -383,6 +411,10 @@ function Screen1({
     { key: 'suv', icon: '/icon_suv.png' },
   ];
   const ready = !!pickup && !!dropoff;
+  const carPins = availableVehicles
+    .filter((v) => v.last_lat != null && v.last_lng != null)
+    .map((v) => ({ position: { lat: v.last_lat as number, lng: v.last_lng as number }, emoji: '🚗' }));
+
   return (
     <div className="screen fade">
       <RealMap
@@ -392,28 +424,44 @@ function Screen1({
         dropoff={dropoff ? { lat: dropoff.lat, lng: dropoff.lng } : null}
         showRoute={ready}
         routeColor="#e8c9a8"
+        pins={carPins}
       />
       <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
-      <div className="sheet glass copper-texture" style={{ paddingTop: 16 }}>
-        <AddressField label="DÉPART" placeholder="D'où partez-vous ?" value={pickup} onChange={onPickupChange} />
-        <div style={{ height: 10 }} />
-        <AddressField label="DESTINATION" placeholder="Où allez-vous ?" value={dropoff} onChange={onDropoffChange} />
-        <div style={{ height: 14 }} />
-        <div className="vehicles">
-          {types.map((t) => (
-            <div key={t.key} className={`vcard ${vehicle === t.key ? 'selected' : ''}`} onClick={() => onSelect(t.key)}>
-              <img src={t.icon} alt={VEHICLE_LABELS[t.key]} className="vimg" />
-              <div className="driver-name" style={{ fontSize: 12 }}>{VEHICLE_LABELS[t.key]}</div>
-              <div className="vprice">{ready ? formatFCFA(priceFor(t.key)) : '—'}</div>
-            </div>
-          ))}
+
+      {!sheetExpanded ? (
+        <div className="sheet glass copper-texture" style={{ paddingTop: 14, paddingBottom: 18 }} onClick={onExpandSheet}>
+          <div className="route-sub" style={{ marginBottom: 8 }}>
+            {availableVehicles.length > 0
+              ? `${availableVehicles.length} véhicule${availableVehicles.length > 1 ? 's' : ''} disponible${availableVehicles.length > 1 ? 's' : ''} près de vous`
+              : 'Recherche des véhicules à proximité…'}
+          </div>
+          <div className="field" style={{ cursor: 'pointer' }}>
+            <input type="text" placeholder="Où allez-vous ?" readOnly value="" style={{ pointerEvents: 'none' }} />
+          </div>
+          <div className="home-indicator" />
         </div>
-        {!ready && <div className="confirm-title" style={{ marginBottom: 10 }}>CHOISISSEZ VOS ADRESSES</div>}
-        <button className="btn amber" onClick={onSearch} disabled={!ready}>
-          {ready ? 'CONFIRMER' : 'CHOISISSEZ VOS ADRESSES'}
-        </button>
-        <div className="home-indicator" />
-      </div>
+      ) : (
+        <div className="sheet glass copper-texture" style={{ paddingTop: 16 }}>
+          <AddressField label="DÉPART" placeholder="D'où partez-vous ?" value={pickup} onChange={onPickupChange} />
+          <div style={{ height: 10 }} />
+          <AddressField label="DESTINATION" placeholder="Où allez-vous ?" value={dropoff} onChange={onDropoffChange} />
+          <div style={{ height: 14 }} />
+          <div className="vehicles">
+            {types.map((t) => (
+              <div key={t.key} className={`vcard ${vehicle === t.key ? 'selected' : ''}`} onClick={() => onSelect(t.key)}>
+                <img src={t.icon} alt={VEHICLE_LABELS[t.key]} className="vimg" />
+                <div className="driver-name" style={{ fontSize: 12 }}>{VEHICLE_LABELS[t.key]}</div>
+                <div className="vprice">{ready ? formatFCFA(priceFor(t.key)) : '—'}</div>
+              </div>
+            ))}
+          </div>
+          {!ready && <div className="confirm-title" style={{ marginBottom: 10 }}>CHOISISSEZ VOS ADRESSES</div>}
+          <button className="btn amber" onClick={onSearch} disabled={!ready}>
+            {ready ? 'CONFIRMER' : 'CHOISISSEZ VOS ADRESSES'}
+          </button>
+          <div className="home-indicator" />
+        </div>
+      )}
     </div>
   );
 }
