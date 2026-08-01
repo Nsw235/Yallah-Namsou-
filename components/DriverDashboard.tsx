@@ -15,7 +15,7 @@ import {
   getMyActiveTrip,
   getMyDriverData,
   getMyTripHistory,
-  getPassengerName,
+  getPassengerContact,
   getPendingTrips,
   setVehicleStatus,
   startSharingLocation,
@@ -65,7 +65,7 @@ export default function DriverDashboard() {
   const [pending, setPending] = useState<Trip[]>([]);
   const [active, setActive] = useState<Trip | null>(null);
   const [summaryTrip, setSummaryTrip] = useState<Trip | null>(null);
-  const [passengerName, setPassengerName] = useState<string | null>(null);
+  const [passengerContact, setPassengerContact] = useState<{ full_name: string | null; phone: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [newRequestAlert, setNewRequestAlert] = useState(false);
@@ -79,7 +79,12 @@ export default function DriverDashboard() {
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [autoValidateCountdown, setAutoValidateCountdown] = useState<number | null>(null);
   const gpsStopFns = useRef<Record<string, () => void>>({});
+  const summaryFormRef = useRef({ ratingStars, ratingTag, comment });
+  const autoValidateIntervalRef = useRef<number | null>(null);
+
+  const AUTO_VALIDATE_SECONDS = 6;
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -94,6 +99,34 @@ export default function DriverDashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    summaryFormRef.current = { ratingStars, ratingTag, comment };
+  }, [ratingStars, ratingTag, comment]);
+
+  useEffect(() => {
+    if (!summaryTrip || !session?.user) {
+      setAutoValidateCountdown(null);
+      return;
+    }
+    const trip = summaryTrip;
+    const userId = session.user.id;
+    setAutoValidateCountdown(AUTO_VALIDATE_SECONDS);
+    const interval = window.setInterval(() => {
+      setAutoValidateCountdown((s) => {
+        if (s === null) return null;
+        if (s <= 1) {
+          window.clearInterval(interval);
+          void validateSummary(trip, userId);
+          return null;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    autoValidateIntervalRef.current = interval;
+    return () => window.clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summaryTrip?.id, session?.user?.id]);
+
   async function refreshAll(userId: string) {
     try {
       const { profile: p, driver, vehicles: v } = await getMyDriverData(userId);
@@ -103,7 +136,7 @@ export default function DriverDashboard() {
       setPending(pendingTrips);
       setActive(activeTrip);
       if (activeTrip?.passenger_id) {
-        getPassengerName(activeTrip.passenger_id).then(setPassengerName);
+        getPassengerContact(activeTrip.passenger_id).then(setPassengerContact);
       }
 
       v.forEach((veh) => {
@@ -250,18 +283,28 @@ export default function DriverDashboard() {
     }
   }
 
-  async function handleValidateSummary() {
-    if (!summaryTrip || !session?.user) return;
+  async function validateSummary(trip: Trip, userId: string) {
     setBusy(true);
     setError(null);
     try {
-      await submitRating(summaryTrip.id, session.user.id, ratingStars, comment || null, ratingTag);
+      const { ratingStars: rs, ratingTag: rt, comment: c } = summaryFormRef.current;
+      await submitRating(trip.id, userId, rs, c || null, rt);
       setSummaryTrip(null);
     } catch (e: any) {
       setError(e?.message ?? "Impossible d'enregistrer l'évaluation.");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleValidateSummary() {
+    if (autoValidateIntervalRef.current !== null) {
+      window.clearInterval(autoValidateIntervalRef.current);
+      autoValidateIntervalRef.current = null;
+    }
+    setAutoValidateCountdown(null); // annule le décompte : validation manuelle immédiate
+    if (!summaryTrip || !session?.user) return;
+    await validateSummary(summaryTrip, session.user.id);
   }
 
   if (session === undefined) {
@@ -433,7 +476,15 @@ export default function DriverDashboard() {
             <span className="inline-block rounded-full bg-[#dff3e6] px-2.5 py-1 text-[11px] font-extrabold text-[#1c8a4a]">
               Course Acceptée - En route pour pickup
             </span>
-            <TripCardBody trip={active} passengerName={passengerName} showDestinationLabel="Destination" />
+            <TripCardBody trip={active} passengerName={passengerContact?.full_name ?? null} showDestinationLabel="Destination" />
+            {passengerContact?.phone && (
+              <a
+                href={`tel:${passengerContact.phone}`}
+                className="mt-2 flex items-center justify-center gap-1.5 rounded-xl bg-[#2d6fe0] py-2 text-xs font-extrabold text-white"
+              >
+                Contacter le client · {passengerContact.phone}
+              </a>
+            )}
             <div className="mt-2 flex gap-2">
               <button disabled={busy} onClick={handleCancel} className="flex-1 rounded-xl bg-[#e0453f] py-2.5 text-sm font-extrabold text-white">
                 Annuler la course
@@ -448,9 +499,17 @@ export default function DriverDashboard() {
         {step === 'in_progress' && active && (
           <div className="mx-3 mb-3 rounded-2xl bg-[#f5efe3] p-3">
             <span className="mb-1.5 inline-block rounded-full bg-[#2fae5c] px-2.5 py-1 text-[11px] font-extrabold text-white">
-              En Course - Avec la cliente: {passengerName ?? '—'}
+              En Course - Avec la cliente: {passengerContact?.full_name ?? '—'}
             </span>
-            <TripCardBody trip={active} passengerName={passengerName} showDestinationLabel="Destination" />
+            <TripCardBody trip={active} passengerName={passengerContact?.full_name ?? null} showDestinationLabel="Destination" />
+            {passengerContact?.phone && (
+              <a
+                href={`tel:${passengerContact.phone}`}
+                className="mt-2 flex items-center justify-center gap-1.5 rounded-xl bg-[#2d6fe0] py-2 text-xs font-extrabold text-white"
+              >
+                Contacter le client · {passengerContact.phone}
+              </a>
+            )}
             <button disabled={busy} onClick={handleFinish} className="mt-2 w-full rounded-xl bg-[#2fae5c] py-3 text-sm font-extrabold text-white">
               Terminer la course
             </button>
@@ -462,12 +521,12 @@ export default function DriverDashboard() {
           <div className="mx-3 mb-3 rounded-2xl bg-[#f5efe3] p-3">
             <div className="rounded-xl bg-[#2fae5c] py-2 text-center text-sm font-extrabold text-white">Résumé de Course</div>
             <span className="mt-1.5 inline-block rounded-full bg-[#2fae5c] px-2.5 py-1 text-[11px] font-extrabold text-white">
-              En Course - Avec la cliente: {passengerName ?? '—'}
+              En Course - Avec la cliente: {passengerContact?.full_name ?? '—'}
             </span>
 
             <div className="mt-2 flex items-start gap-3">
               <div className="flex h-14 w-14 flex-none items-center justify-center rounded-full bg-[#e8c9a8]/40 text-sm font-extrabold text-[#5a3a1c]">
-                {initials(passengerName)}
+                {initials(passengerContact?.full_name ?? null)}
               </div>
               <div className="flex-1">
                 <div className="text-sm font-extrabold text-[#1c1108]">Course de {elapsedMin ?? '—'} min</div>
@@ -501,9 +560,16 @@ export default function DriverDashboard() {
                 <ThumbsUp size={13} /> Client Sympa (+bonus)
               </button>
               <button disabled={busy} onClick={handleValidateSummary} className="flex-1 rounded-xl bg-[#2fae5c] py-2.5 text-xs font-extrabold text-white">
-                Valider et revenir à l&apos;accueil
+                {autoValidateCountdown !== null
+                  ? `Valider maintenant (${autoValidateCountdown}s)`
+                  : "Valider et revenir à l'accueil"}
               </button>
             </div>
+            {autoValidateCountdown !== null && (
+              <div className="mt-1.5 text-center text-[11px] text-[#8a8378]">
+                Retour automatique en ligne dans {autoValidateCountdown}s…
+              </div>
+            )}
           </div>
         )}
       </div>
