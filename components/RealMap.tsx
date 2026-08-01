@@ -137,18 +137,9 @@ export default function RealMap({
           map.setConfigProperty('basemap', 'show3dObjects', buildings3d);
         }
 
-        try {
-          map.setFog({
-            range: [0.5, 10],
-            color: '#1c1512',
-            'high-color': '#3a2c22',
-            'horizon-blend': 0.15,
-            'space-color': '#0a0b0d',
-            'star-intensity': 0,
-          });
-        } catch {
-          // Certains styles classiques n'ont pas de contexte 3D/ciel : on ignore.
-        }
+        // Pas de map.setFog() ici : le style personnalisé (Mapbox Studio,
+        // panneau "Atmosphere") définit déjà sa propre ambiance de ciel/brume.
+        // La forcer ici en JS écraserait ce réglage à chaque chargement.
       });
     })();
 
