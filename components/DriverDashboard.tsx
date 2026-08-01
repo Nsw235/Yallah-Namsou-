@@ -354,7 +354,7 @@ export default function DriverDashboard() {
     <div className="relative flex h-dvh flex-col overflow-hidden bg-[#0d0906]">
       <div className="absolute inset-0">
         <RealMap
-          pitch={55}
+          pitch={75}
           buildings3d
           driverPosition={driverPos}
           pickup={step === 'accepted' && active ? { lat: active.pickup_lat, lng: active.pickup_lng } : undefined}

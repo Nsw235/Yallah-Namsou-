@@ -418,7 +418,7 @@ function Screen1({
   return (
     <div className="screen fade">
       <RealMap
-        pitch={55}
+        pitch={75}
         buildings3d
         pickup={pickup ? { lat: pickup.lat, lng: pickup.lng } : null}
         dropoff={dropoff ? { lat: dropoff.lat, lng: dropoff.lng } : null}

@@ -228,7 +228,7 @@ export default function AdminDashboard() {
               </div>
             </div>
             <div className="admin-map-wrap">
-              <RealMap pitch={58} buildings3d showRoute={false} />
+              <RealMap pitch={75} buildings3d showRoute={false} />
               <div className="admin-map-overlay">
                 <span className="heatmap-label">🔥 Heatmap de demande — zones actives</span>
                 <div className="vehicle-positions">

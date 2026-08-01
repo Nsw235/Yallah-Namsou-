@@ -272,7 +272,7 @@ export default function SupervisionOverview() {
         <div ref={carteRef} className="px-3 pt-2">
           <div className="relative h-64 overflow-hidden rounded-2xl bg-[#e2ddcf]">
             <RealMap
-              pitch={45}
+              pitch={75}
               buildings3d
               pins={fleet
                 .filter((v) => v.last_lat != null && v.last_lng != null)

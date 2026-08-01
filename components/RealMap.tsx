@@ -79,6 +79,7 @@ export default function RealMap({
         zoom: 13,
         attributionControl: true,
         pitch,
+        maxPitch: 85, // Mapbox limite à 60° par défaut ; on l'augmente pour permettre une vue plus inclinée (voir le ciel).
         bearing: buildings3d ? -17 : 0,
         antialias: true,
       });
