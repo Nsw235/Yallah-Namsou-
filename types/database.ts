@@ -59,6 +59,8 @@ export interface Trip {
   accepted_at: string | null;
   started_at: string | null;
   completed_at: string | null;
+  /** Rempli côté client pour les courses en attente (voir getPendingTrips). */
+  passenger_profile?: Pick<Profile, 'full_name'> | null;
 }
 
 export interface Payment {
