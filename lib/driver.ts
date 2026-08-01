@@ -122,6 +122,13 @@ export async function getTripPayment(tripId: string): Promise<{ method: string; 
   return data;
 }
 
+/** Nom et téléphone du passager d'une course, affichés sur les cartes chauffeur. */
+export async function getPassengerContact(passengerId: string): Promise<{ full_name: string | null; phone: string | null } | null> {
+  const { data, error } = await supabase.from('profiles').select('full_name, phone').eq('id', passengerId).single();
+  if (error) return null;
+  return data ?? null;
+}
+
 /** Nom du passager d'une course, affiché sur les cartes chauffeur. */
 export async function getPassengerName(passengerId: string): Promise<string | null> {
   const { data, error } = await supabase.from('profiles').select('full_name').eq('id', passengerId).single();
