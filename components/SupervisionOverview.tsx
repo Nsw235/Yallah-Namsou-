@@ -24,15 +24,21 @@ import {
 import { supabase } from '@/lib/supabaseClient';
 import { checkIsAdmin } from '@/lib/admin';
 import AuthGate from '@/components/AuthGate';
-import { MOCK_FLEET, MOCK_STATS, STATUS_META } from '@/components/legacy/mockData';
+import { MOCK_STATS } from '@/components/legacy/mockData';
+import { getFleetOverview, subscribeToFleetChanges, type FleetVehicle } from '@/lib/admin';
 import RealMap, { type MapPin } from '@/components/RealMap';
 
 type NavKey = 'flotte' | 'carte' | 'stats' | 'parametres';
 
-const STATUS_DOT: Record<string, string> = {
-  en_course: '#2fae5c',
-  en_attente: '#d99a1f',
-  indisponible: '#d1443f',
+const STATUS_DOT: Record<FleetVehicle['status'], string> = {
+  busy: '#2fae5c',
+  available: '#d99a1f',
+  offline: '#d1443f',
+};
+const STATUS_LABEL: Record<FleetVehicle['status'], string> = {
+  busy: 'En Course',
+  available: 'En Attente',
+  offline: 'Indisponible',
 };
 
 export default function SupervisionOverview() {
@@ -40,6 +46,8 @@ export default function SupervisionOverview() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [nav, setNav] = useState<NavKey>('flotte');
+  const [fleet, setFleet] = useState<FleetVehicle[]>([]);
+  const [fleetError, setFleetError] = useState<string | null>(null);
 
   const flotteRef = useRef<HTMLDivElement>(null);
   const carteRef = useRef<HTMLDivElement>(null);
@@ -58,6 +66,24 @@ export default function SupervisionOverview() {
       .then((ok) => setIsAdmin(ok))
       .catch((e) => setError(e?.message ?? 'Erreur.'));
   }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    function load() {
+      getFleetOverview()
+        .then((rows) => {
+          if (!cancelled) setFleet(rows);
+        })
+        .catch((e) => setFleetError(e?.message ?? "Impossible de charger la flotte."));
+    }
+    load();
+    const unsubscribe = subscribeToFleetChanges(load);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [isAdmin]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -149,31 +175,34 @@ export default function SupervisionOverview() {
               </span>
             </button>
 
-            {MOCK_FLEET.map((v) => {
-              const meta = STATUS_META[v.status];
-              return (
-                <div key={v.id} className="rounded-xl border border-[#e4d7bf] bg-[#fbf7ef] px-3 py-2.5">
-                  <div className="flex justify-between text-[10px] text-[#8a8378]">
-                    <span>Vehicle ID: {v.code}</span>
-                    <span>STATUS:</span>
-                  </div>
-                  <div className="mt-0.5 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 text-sm font-extrabold text-[#1c1108]">
-                      <Car size={15} className="text-[#8a5a2c]" /> {v.label}
-                    </span>
-                    <span className="text-[11px] font-extrabold" style={{ color: STATUS_DOT[v.status] }}>
-                      ● {meta.label}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 flex items-center gap-1 text-[10px] text-[#6b6459]">
-                    <User size={10} /> Chauffeur: {v.driverName.toUpperCase()}
-                  </div>
-                  <button className="mt-1.5 flex w-full items-center justify-center gap-1 rounded-full bg-[#f0dfc4] py-1.5 text-[10px] font-extrabold text-[#7a3a1c]">
-                    <MapPin size={11} /> LOCALISER
-                  </button>
+            {fleetError && <div className="rounded-lg bg-red-100 px-2 py-1 text-[10px] text-red-700">{fleetError}</div>}
+            {fleet.length === 0 && !fleetError && (
+              <div className="rounded-xl border border-[#e4d7bf] bg-[#fbf7ef] px-3 py-4 text-center text-[10px] text-[#8a8378]">
+                Aucun véhicule enregistré.
+              </div>
+            )}
+            {fleet.map((v) => (
+              <div key={v.id} className="rounded-xl border border-[#e4d7bf] bg-[#fbf7ef] px-3 py-2.5">
+                <div className="flex justify-between text-[10px] text-[#8a8378]">
+                  <span>Plaque: {v.plate}</span>
+                  <span>STATUS:</span>
                 </div>
-              );
-            })}
+                <div className="mt-0.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-sm font-extrabold text-[#1c1108]">
+                    <Car size={15} className="text-[#8a5a2c]" /> {v.brand ?? ''} {v.model ?? v.type.toUpperCase()}
+                  </span>
+                  <span className="text-[11px] font-extrabold" style={{ color: STATUS_DOT[v.status] }}>
+                    ● {STATUS_LABEL[v.status]}
+                  </span>
+                </div>
+                <div className="mt-0.5 flex items-center gap-1 text-[10px] text-[#6b6459]">
+                  <User size={10} /> Chauffeur: {(v.driver_name ?? '—').toUpperCase()}
+                </div>
+                <button className="mt-1.5 flex w-full items-center justify-center gap-1 rounded-full bg-[#f0dfc4] py-1.5 text-[10px] font-extrabold text-[#7a3a1c]">
+                  <MapPin size={11} /> LOCALISER
+                </button>
+              </div>
+            ))}
           </div>
 
           {/* Stats + Paramètres */}
@@ -245,22 +274,26 @@ export default function SupervisionOverview() {
             <RealMap
               pitch={45}
               buildings3d
-              pins={MOCK_FLEET.map<MapPin>((v) => ({ position: { lat: v.lat, lng: v.lng }, emoji: '🚗' }))}
+              pins={fleet
+                .filter((v) => v.last_lat != null && v.last_lng != null)
+                .map<MapPin>((v) => ({ position: { lat: v.last_lat as number, lng: v.last_lng as number }, emoji: '🚗' }))}
             />
-            {MOCK_FLEET.map((v, i) => (
-              <span
-                key={v.id}
-                className="pointer-events-none absolute z-10 rounded-full px-2 py-1 text-[9px] font-extrabold text-white"
-                style={{
-                  background: STATUS_DOT[v.status],
-                  top: `${10 + i * 30}%`,
-                  left: i % 2 === 0 ? '6%' : undefined,
-                  right: i % 2 === 1 ? '6%' : undefined,
-                }}
-              >
-                ● {STATUS_META[v.status].label}
-              </span>
-            ))}
+            {fleet
+              .filter((v) => v.last_lat != null && v.last_lng != null)
+              .map((v, i) => (
+                <span
+                  key={v.id}
+                  className="pointer-events-none absolute z-10 rounded-full px-2 py-1 text-[9px] font-extrabold text-white"
+                  style={{
+                    background: STATUS_DOT[v.status],
+                    top: `${10 + i * 30}%`,
+                    left: i % 2 === 0 ? '6%' : undefined,
+                    right: i % 2 === 1 ? '6%' : undefined,
+                  }}
+                >
+                  ● {STATUS_LABEL[v.status]}
+                </span>
+              ))}
             <span className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-lg border-[1.5px] border-[#1c1108] bg-white px-3.5 py-1.5 text-xs font-extrabold text-[#1c1108]">
               TAHBI
             </span>
