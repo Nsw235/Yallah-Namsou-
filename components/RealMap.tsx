@@ -10,25 +10,11 @@ const DEFAULT_CENTER: LatLng = { lat: 12.1348, lng: 15.0557 };
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
 
-// Style Mapbox "Standard" (v3) en mode nuit ("dusk"), avec bâtiments 3D natifs
-// + calque trafic live officiel superposé par-dessus.
-const MAP_STYLE: any = {
-  version: 8,
-  imports: [
-    {
-      id: 'basemap',
-      url: 'mapbox://styles/mapbox/standard',
-      config: {
-        lightPreset: 'dusk',
-        showPointOfInterestLabels: false,
-        showRoadLabels: true,
-        show3dObjects: true,
-      },
-    },
-  ],
-  sources: {},
-  layers: [],
-};
+// Style Mapbox personnalisé (créé dans Mapbox Studio par l'utilisateur).
+// Si ce style est basé sur "Standard" (v3, avec imports), les fonctionnalités
+// natives (slots, config 3D) restent utilisables — sinon elles sont ignorées
+// proprement (voir `hasBasemapImport` plus bas).
+const MAP_STYLE = 'mapbox://styles/devnos/cms9xitev009301s80im37bm5';
 
 // Modèle 3D par défaut du véhicule (place ton .glb dans /public/models/).
 const DEFAULT_CAR_MODEL_URL = '/models/berline.glb';
@@ -98,12 +84,17 @@ export default function RealMap({
       });
       mapRef.current = map;
 
-      // Avec le style Mapbox Standard (v3, basé sur des "imports"), on attend
-      // 'style.load' plutôt que 'load' pour être sûr que le basemap + sa
-      // config (dusk, bâtiments 3D natifs...) soient bien prêts.
+      // Avec un style Standard (v3, "imports"), on attend 'style.load' plutôt
+      // que 'load' pour être sûr que le basemap + sa config soient prêts.
+      // Ça marche aussi sans problème avec un style classique.
       map.on('style.load', () => {
-        // Calque trafic live officiel Mapbox (congestion en temps réel),
-        // placé au-dessus du basemap Standard via `slot: 'top'`.
+        const styleJson = map.getStyle?.();
+        const hasBasemapImport = Array.isArray(styleJson?.imports) && styleJson.imports.some((i: any) => i.id === 'basemap');
+
+        // Calque trafic live officiel Mapbox (congestion en temps réel).
+        // `slot: 'top'` n'existe que sur les styles Standard (v3) : on ne
+        // l'ajoute que si le style personnalisé en dispose, sinon Mapbox GL
+        // rejetterait la couche.
         map.addSource('mapbox-traffic', {
           type: 'vector',
           url: 'mapbox://mapbox.mapbox-traffic-v1',
@@ -113,7 +104,7 @@ export default function RealMap({
           type: 'line',
           source: 'mapbox-traffic',
           'source-layer': 'traffic',
-          slot: 'top',
+          ...(hasBasemapImport ? { slot: 'top' } : {}),
           paint: {
             'line-width': 2.2,
             'line-color': [
@@ -133,23 +124,30 @@ export default function RealMap({
           id: 'route-line',
           type: 'line',
           source: 'route',
-          slot: 'top',
+          ...(hasBasemapImport ? { slot: 'top' } : {}),
           layout: { 'line-cap': 'round', 'line-join': 'round' },
           paint: { 'line-width': 4, 'line-color': routeColor, 'line-opacity': 0.9 },
         });
 
-        // Les bâtiments 3D sont désormais natifs au style Standard
-        // (activés/désactivés via la config `show3dObjects`, cf. init ci-dessus).
-        map.setConfigProperty('basemap', 'show3dObjects', buildings3d);
+        // Le toggle 3D natif ne s'applique qu'aux styles Standard. Si le style
+        // personnalisé est un style classique, les bâtiments 3D (s'il y en a)
+        // restent tels qu'ils ont été configurés dans Mapbox Studio.
+        if (hasBasemapImport) {
+          map.setConfigProperty('basemap', 'show3dObjects', buildings3d);
+        }
 
-        map.setFog({
-          range: [0.5, 10],
-          color: '#1c1512',
-          'high-color': '#3a2c22',
-          'horizon-blend': 0.15,
-          'space-color': '#0a0b0d',
-          'star-intensity': 0,
-        });
+        try {
+          map.setFog({
+            range: [0.5, 10],
+            color: '#1c1512',
+            'high-color': '#3a2c22',
+            'horizon-blend': 0.15,
+            'space-color': '#0a0b0d',
+            'star-intensity': 0,
+          });
+        } catch {
+          // Certains styles classiques n'ont pas de contexte 3D/ciel : on ignore.
+        }
       });
     })();
 
