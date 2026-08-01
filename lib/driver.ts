@@ -60,7 +60,22 @@ export async function getPendingTrips(): Promise<Trip[]> {
     .eq('status', 'pending')
     .order('requested_at', { ascending: true });
   if (error) throw error;
-  return (data ?? []) as Trip[];
+  const trips = (data ?? []) as Trip[];
+  if (trips.length === 0) return trips;
+
+  // RLS sur `profiles` n'autorise un chauffeur à lire le profil d'un passager
+  // qu'une fois la course acceptée : pour les courses "pending" (avant
+  // acceptation), on passe par cette fonction security definer, qui n'expose
+  // que le nom (jamais le téléphone) et seulement pour des courses réellement pending.
+  const { data: names, error: namesError } = await supabase.rpc('get_passenger_names_for_pending_trips', {
+    trip_ids: trips.map((t) => t.id),
+  });
+  if (namesError) {
+    // Ne bloque pas l'affichage des courses si les noms échouent à charger.
+    return trips.map((t) => ({ ...t, passenger_profile: null }));
+  }
+  const byId = new Map((names ?? []).map((n: any) => [n.passenger_id, { full_name: n.full_name }]));
+  return trips.map((t) => ({ ...t, passenger_profile: byId.get(t.passenger_id) ?? null }));
 }
 
 /** La course en cours du chauffeur (acceptée ou en route). */
