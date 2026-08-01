@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export type LatLng = { lat: number; lng: number };
 export type MapPin = { position: LatLng; emoji?: string; color?: string };
@@ -61,6 +61,14 @@ export default function RealMap({
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Record<string, any>>({});
   const animFrames = useRef<Record<string, number>>({});
+  // Si le fichier .glb demandé (carModelUrl) n'existe pas / échoue à charger,
+  // on retombe automatiquement sur le marqueur emoji plutôt que de n'afficher
+  // aucun véhicule du tout.
+  const [modelFailed, setModelFailed] = useState(false);
+  useEffect(() => {
+    setModelFailed(false);
+  }, [carModelUrl]);
+  const effectiveUse3dCar = use3dCar && !modelFailed;
 
   // Initialisation (une seule fois).
   useEffect(() => {
@@ -172,7 +180,7 @@ export default function RealMap({
       if (dropoff) {
         wanted['dropoff'] = { pos: dropoff, el: () => dropEl('#d97b6a') };
       }
-      if (driverPosition && !use3dCar) {
+      if (driverPosition && !effectiveUse3dCar) {
         wanted['driver'] = { pos: driverPosition, el: () => emojiEl('🚗') };
       }
       pins.forEach((p, i) => {
@@ -230,7 +238,7 @@ export default function RealMap({
     if (map.isStyleLoaded()) render();
     else map.once('load', render);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins)]);
+  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins), effectiveUse3dCar]);
 
   // Modèle 3D réel du véhicule (.glb), positionné/orienté sur `driverPosition`.
   // On (re)crée la source/layer "model" à chaque changement de position : les
@@ -238,7 +246,17 @@ export default function RealMap({
   // simple, contrairement aux sources GeoJSON.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !use3dCar || !driverPosition) return;
+    if (!map || !effectiveUse3dCar || !driverPosition) return;
+
+    // Si le .glb (carModelUrl) est manquant/invalide, Mapbox émet un événement
+    // 'error' plutôt que de planter : on l'écoute pour retomber sur l'emoji
+    // 🚗 au lieu de laisser le véhicule invisible sur la carte.
+    function onMapError(e: any) {
+      if (e?.sourceId === 'car-3d-source' || (typeof e?.error?.message === 'string' && e.error.message.includes(carModelUrl))) {
+        setModelFailed(true);
+      }
+    }
+    map.on('error', onMapError);
 
     function upsertCarModel() {
       if (map.getLayer('car-3d-layer')) map.removeLayer('car-3d-layer');
@@ -276,11 +294,12 @@ export default function RealMap({
     else map.once('style.load', upsertCarModel);
 
     return () => {
+      map.off('error', onMapError);
       if (map.getLayer('car-3d-layer')) map.removeLayer('car-3d-layer');
       if (map.getSource('car-3d-source')) map.removeSource('car-3d-source');
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [use3dCar, carModelUrl, carHeading, driverPosition?.lat, driverPosition?.lng]);
+  }, [effectiveUse3dCar, use3dCar, carModelUrl, carHeading, driverPosition?.lat, driverPosition?.lng]);
 
   // Itinéraire réel tenant compte du trafic (Mapbox Directions, profil driving-traffic).
   // Point de départ : la position live du chauffeur si disponible (suivi temps réel),

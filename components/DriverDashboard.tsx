@@ -28,6 +28,13 @@ import RealMap from '@/components/RealMap';
 
 const VEHICLE_TYPES: VehicleType[] = ['berline', 'van', 'suv'];
 
+/** Modèle 3D (.glb) à afficher pour le véhicule du chauffeur, selon son type. */
+const CAR_MODEL_BY_TYPE: Record<VehicleType, string> = {
+  berline: '/models/berline.glb',
+  van: '/models/van.glb',
+  suv: '/models/suv.glb',
+};
+
 function playNotificationBeep() {
   try {
     const Ctx = window.AudioContext || (window as any).webkitAudioContext;
@@ -350,13 +357,23 @@ export default function DriverDashboard() {
       ? Math.max(1, Math.round((new Date(summaryTrip.completed_at).getTime() - new Date(summaryTrip.started_at).getTime()) / 60000))
       : null;
 
+  // Vue "ciel visible" très inclinée (75°) + voiture 3D uniquement pendant la
+  // course (aller chercher le client ou avec le client à bord). Le reste du
+  // temps (Accueil, résumé de fin de course), une vue plus classique suffit.
+  const onTrip = step === 'accepted' || step === 'in_progress';
+  const mapPitch = onTrip ? 75 : 45;
+  const myVehicleType: VehicleType = myVehicle?.type ?? 'berline';
+  const carModelUrl = CAR_MODEL_BY_TYPE[myVehicleType];
+
   return (
     <div className="relative flex h-dvh flex-col overflow-hidden bg-[#0d0906]">
       <div className="absolute inset-0">
         <RealMap
-          pitch={75}
+          pitch={mapPitch}
           buildings3d
           driverPosition={driverPos}
+          use3dCar={onTrip}
+          carModelUrl={carModelUrl}
           pickup={step === 'accepted' && active ? { lat: active.pickup_lat, lng: active.pickup_lng } : undefined}
           dropoff={
             (step === 'in_progress' || step === 'summary') && displayTrip
@@ -370,45 +387,45 @@ export default function DriverDashboard() {
         />
       </div>
 
-      <div className="relative z-10 mx-3 mt-3 flex items-start justify-between rounded-2xl bg-[#1c1108]/85 px-4 py-3 backdrop-blur">
-        <span
-          className={`rounded-full px-3 py-1.5 text-xs font-extrabold ${
-            step === 'available' && online
-              ? 'bg-[#2fae5c]/20 text-[#5be08a]'
-              : step === 'available' && !online
-                ? 'bg-white/10 text-[#c9bba8]'
-                : 'bg-[#d99a1f]/20 text-[#f0c05a]'
-          }`}
-        >
-          {step === 'available' ? (online ? 'En ligne' : 'Hors ligne') : step === 'summary' ? 'Disponible' : 'Occupé'}
-        </span>
-
-        <div className="flex flex-col items-center">
-          <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border-2 border-[#e8c9a8] bg-[#e8c9a8]/20 text-sm font-extrabold text-[#e8c9a8]">
-            {initials(profile?.full_name ?? null)}
-          </div>
-          <span className="mt-1 text-xs font-bold text-[#e8c9a8]">{profile?.full_name ?? 'Chauffeur'}</span>
+      <div className="relative z-10 mt-3 ml-3 flex w-fit items-center gap-2.5 rounded-2xl bg-[#1c1108]/85 px-3 py-2 backdrop-blur">
+        <div className="flex h-10 w-10 flex-none items-center justify-center overflow-hidden rounded-full border-2 border-[#e8c9a8] bg-[#e8c9a8]/20 text-xs font-extrabold text-[#e8c9a8]">
+          {initials(profile?.full_name ?? null)}
+        </div>
+        <div className="flex flex-col leading-tight">
+          <span className="text-xs font-bold text-[#e8c9a8]">{profile?.full_name ?? 'Chauffeur'}</span>
+          <span
+            className={`text-[10px] font-extrabold ${
+              step === 'available' && online
+                ? 'text-[#5be08a]'
+                : step === 'available' && !online
+                  ? 'text-[#c9bba8]'
+                  : 'text-[#f0c05a]'
+            }`}
+          >
+            ● {step === 'available' ? (online ? 'En ligne' : 'Hors ligne') : step === 'summary' ? 'Disponible' : 'Occupé'}
+          </span>
         </div>
 
-        {showCompass ? (
-          <span className="flex h-9 w-9 items-center justify-center rounded-full text-[#e8c9a8]">
-            <Compass size={20} />
-          </span>
-        ) : (
+        {step === 'available' && (
           <button
             onClick={handleToggleOnline}
-            disabled={busy || step === 'accepted'}
-            className={`relative h-7 w-12 flex-none rounded-full transition-colors ${online ? 'bg-[#2fae5c]' : 'bg-white/15'}`}
+            disabled={busy}
+            className={`relative ml-1 h-6 w-11 flex-none rounded-full transition-colors ${online ? 'bg-[#2fae5c]' : 'bg-white/15'}`}
             aria-pressed={online}
           >
             <span
-              className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-transform ${
-                online ? 'translate-x-6' : 'translate-x-1'
-              }`}
+              className="absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all duration-200"
+              style={{ left: online ? 22 : 2 }}
             />
           </button>
         )}
       </div>
+
+      {showCompass && (
+        <div className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-[#1c1108]/85 text-[#e8c9a8] backdrop-blur">
+          <Compass size={20} />
+        </div>
+      )}
 
       {error && (
         <div className="relative z-10 mx-3 mt-2 rounded-xl bg-red-500/15 px-3 py-2 text-xs text-red-200">{error}</div>
