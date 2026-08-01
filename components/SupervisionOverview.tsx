@@ -25,6 +25,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { checkIsAdmin } from '@/lib/admin';
 import AuthGate from '@/components/AuthGate';
 import { MOCK_FLEET, MOCK_STATS, STATUS_META } from '@/components/legacy/mockData';
+import RealMap, { type MapPin } from '@/components/RealMap';
 
 type NavKey = 'flotte' | 'carte' | 'stats' | 'parametres';
 
@@ -241,10 +242,15 @@ export default function SupervisionOverview() {
         {/* Carte */}
         <div ref={carteRef} className="px-3 pt-2">
           <div className="relative h-64 overflow-hidden rounded-2xl bg-[#e2ddcf]">
+            <RealMap
+              pitch={45}
+              buildings3d
+              pins={MOCK_FLEET.map<MapPin>((v) => ({ position: { lat: v.lat, lng: v.lng }, emoji: '🚗' }))}
+            />
             {MOCK_FLEET.map((v, i) => (
               <span
                 key={v.id}
-                className="absolute rounded-full px-2 py-1 text-[9px] font-extrabold text-white"
+                className="pointer-events-none absolute z-10 rounded-full px-2 py-1 text-[9px] font-extrabold text-white"
                 style={{
                   background: STATUS_DOT[v.status],
                   top: `${10 + i * 30}%`,
@@ -255,22 +261,22 @@ export default function SupervisionOverview() {
                 ● {STATUS_META[v.status].label}
               </span>
             ))}
-            <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-lg border-[1.5px] border-[#1c1108] bg-white px-3.5 py-1.5 text-xs font-extrabold text-[#1c1108]">
+            <span className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-lg border-[1.5px] border-[#1c1108] bg-white px-3.5 py-1.5 text-xs font-extrabold text-[#1c1108]">
               TAHBI
             </span>
             <button
               aria-label="Plein écran"
-              className="absolute bottom-2.5 left-2.5 flex h-8 w-8 items-center justify-center rounded-full border border-[#1c1108] bg-white text-[#1c1108]"
+              className="absolute bottom-2.5 left-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-[#1c1108] bg-white text-[#1c1108]"
             >
               <Maximize2 size={14} />
             </button>
             <button
               aria-label="Géolocaliser"
-              className="absolute bottom-14 right-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#7a3a1c]"
+              className="absolute bottom-14 right-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#7a3a1c]"
             >
               <Crosshair size={16} />
             </button>
-            <button className="absolute bottom-2.5 right-2.5 rounded-full bg-[#7a3a1c] px-4 py-1.5 text-xs font-extrabold text-white">
+            <button className="absolute bottom-2.5 right-2.5 z-10 rounded-full bg-[#7a3a1c] px-4 py-1.5 text-xs font-extrabold text-white">
               Recenter
             </button>
           </div>
