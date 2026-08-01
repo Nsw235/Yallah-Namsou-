@@ -3,7 +3,19 @@
 import { useEffect, useRef, useState } from 'react';
 
 export type LatLng = { lat: number; lng: number };
-export type MapPin = { position: LatLng; emoji?: string; color?: string };
+export type MapPin = {
+  position: LatLng;
+  emoji?: string;
+  color?: string;
+  /** Affiche une étiquette passager (avatar initiales + nom + distance) au lieu d'un simple emoji. */
+  passenger?: {
+    initials: string;
+    name: string;
+    distanceKm: number;
+    /** Course la plus proche : contour vert + étiquette pleine opacité. */
+    highlight?: boolean;
+  };
+};
 /** Prochaine manœuvre du guidage virage par virage (voir onNavigationUpdate). */
 export type NavigationStep = {
   instruction: string;
@@ -194,7 +206,10 @@ export default function RealMap({
         wanted['driver'] = { pos: driverPosition, el: () => emojiEl('🚗') };
       }
       pins.forEach((p, i) => {
-        wanted[`pin-${i}`] = { pos: p.position, el: () => emojiEl(p.emoji ?? '🚗') };
+        wanted[`pin-${i}`] = {
+          pos: p.position,
+          el: () => (p.passenger ? passengerEl(p.passenger) : emojiEl(p.emoji ?? '🚗')),
+        };
       });
 
       // Retire les marqueurs qui ne sont plus utilisés.
@@ -396,6 +411,48 @@ function dropEl(color: string): HTMLElement {
   el.style.boxShadow = `0 0 8px ${color}`;
   el.style.border = '2px solid rgba(0,0,0,0.45)';
   return el;
+}
+
+function passengerEl(p: { initials: string; name: string; distanceKm: number; highlight?: boolean }): HTMLElement {
+  const accent = p.highlight ? '#6fae4a' : '#4a3626';
+  const textColor = p.highlight ? '#e8c9a8' : '#c9bba8';
+
+  const wrap = document.createElement('div');
+  wrap.style.display = 'flex';
+  wrap.style.flexDirection = 'column';
+  wrap.style.alignItems = 'center';
+  wrap.style.gap = '2px';
+  wrap.style.cursor = 'pointer';
+
+  const tag = document.createElement('div');
+  tag.style.background = '#1c1108';
+  tag.style.border = `${p.highlight ? 2 : 1}px solid ${accent}`;
+  tag.style.borderRadius = '10px';
+  tag.style.padding = '3px 7px';
+  tag.style.fontSize = '10px';
+  tag.style.fontWeight = '500';
+  tag.style.color = textColor;
+  tag.style.whiteSpace = 'nowrap';
+  tag.textContent = `${p.name} · ${p.distanceKm.toFixed(1)} km`;
+
+  const avatar = document.createElement('div');
+  const size = p.highlight ? 28 : 24;
+  avatar.style.width = `${size}px`;
+  avatar.style.height = `${size}px`;
+  avatar.style.borderRadius = '50%';
+  avatar.style.background = '#3b2716';
+  avatar.style.border = `${p.highlight ? 2 : 1}px solid ${accent}`;
+  avatar.style.display = 'flex';
+  avatar.style.alignItems = 'center';
+  avatar.style.justifyContent = 'center';
+  avatar.style.color = textColor;
+  avatar.style.fontSize = p.highlight ? '10px' : '9px';
+  avatar.style.fontWeight = '500';
+  avatar.textContent = p.initials;
+
+  wrap.appendChild(tag);
+  wrap.appendChild(avatar);
+  return wrap;
 }
 
 function emojiEl(emoji: string): HTMLElement {

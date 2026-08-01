@@ -113,7 +113,7 @@ export default function DriverDashboard() {
   const [ratingStars, setRatingStars] = useState(4);
   const [ratingTag, setRatingTag] = useState<'client_sympa' | 'aucun'>('aucun');
   const [comment, setComment] = useState('');
-  const [bottomTab, setBottomTab] = useState<'accueil' | 'historique' | 'gains' | 'profil'>('accueil');
+  const [bottomTab, setBottomTab] = useState<'accueil' | 'historique' | 'courses' | 'gains' | 'profil'>('accueil');
   const [history, setHistory] = useState<Trip[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -388,6 +388,28 @@ export default function DriverDashboard() {
         : 'available';
 
   const shownPending = pending.filter((t) => !dismissed.includes(t.id));
+
+  // Course la plus proche en premier : c'est elle qu'on propose en priorité
+  // au chauffeur (carte Accepter/Refuser + tête de liste dans l'onglet Courses).
+  const sortedPending = driverPos
+    ? [...shownPending].sort(
+        (a, b) =>
+          haversineKm(driverPos.lat, driverPos.lng, a.pickup_lat, a.pickup_lng) -
+          haversineKm(driverPos.lat, driverPos.lng, b.pickup_lat, b.pickup_lng)
+      )
+    : shownPending;
+
+  const pendingPins = driverPos
+    ? sortedPending.map((t, i) => ({
+        position: { lat: t.pickup_lat, lng: t.pickup_lng },
+        passenger: {
+          initials: initials(t.passenger_profile?.full_name ?? null),
+          name: t.passenger_profile?.full_name ?? 'Passager',
+          distanceKm: haversineKm(driverPos.lat, driverPos.lng, t.pickup_lat, t.pickup_lng),
+          highlight: i === 0,
+        },
+      }))
+    : [];
   const showCompass = step === 'in_progress' || step === 'summary';
   const displayTrip = summaryTrip ?? active;
   const elapsedMin =
@@ -410,6 +432,7 @@ export default function DriverDashboard() {
           pitch={mapPitch}
           buildings3d
           driverPosition={driverPos}
+          pins={step === 'available' ? pendingPins : []}
           use3dCar={onTrip}
           carModelUrl={carModelUrl}
           pickup={step === 'accepted' && active ? { lat: active.pickup_lat, lng: active.pickup_lng } : undefined}
@@ -490,19 +513,27 @@ export default function DriverDashboard() {
       <div className="relative z-10">
         {step === 'available' && (
           <div className="flex gap-3 overflow-x-auto px-3 pb-3" style={{ scrollSnapType: 'x mandatory' }}>
-            {shownPending.length === 0 && (
+            {sortedPending.length === 0 && (
               <div className="w-full rounded-2xl bg-[#f5efe3] p-4 text-center text-sm text-[#6b6459]">
                 Aucune course en attente pour le moment.
               </div>
             )}
-            {shownPending.map((t) => (
+            {sortedPending.map((t, i) => (
               <div key={t.id} className="w-64 flex-none rounded-2xl bg-[#f5efe3] p-3" style={{ scrollSnapAlign: 'start' }}>
                 <span className="inline-block rounded-full bg-[#dff3e6] px-2.5 py-1 text-[11px] font-extrabold text-[#1c8a4a]">
-                  En Attente
+                  {i === 0 ? 'Course la plus proche' : 'En Attente'}
                 </span>
-                <div className="mt-2 text-sm font-extrabold text-[#1c1108]">{t.pickup_address ?? 'Adresse de prise en charge'}</div>
+                <div className="mt-1 text-xs font-bold text-[#6b6459]">{t.passenger_profile?.full_name ?? 'Passager'}</div>
+                <div className="mt-0.5 text-sm font-extrabold text-[#1c1108]">{t.pickup_address ?? 'Adresse de prise en charge'}</div>
                 <div className="text-xs text-[#6b6459]">→ {t.dropoff_address ?? 'Destination'}</div>
-                <div className="mt-1 text-lg font-extrabold text-[#1c1108]">{formatFCFA(t.estimated_price)}</div>
+                <div className="mt-1 flex items-baseline justify-between">
+                  <span className="text-lg font-extrabold text-[#1c1108]">{formatFCFA(t.estimated_price)}</span>
+                  {driverPos && (
+                    <span className="text-[11px] font-bold text-[#6b6459]">
+                      {haversineKm(driverPos.lat, driverPos.lng, t.pickup_lat, t.pickup_lng).toFixed(1)} km
+                    </span>
+                  )}
+                </div>
                 <div className="mt-1.5 flex gap-1">
                   {VEHICLE_TYPES.map((vt) => (
                     <span
@@ -671,6 +702,7 @@ export default function DriverDashboard() {
           [
             { key: 'accueil', label: 'Accueil', icon: Home },
             { key: 'historique', label: 'Historique', icon: History },
+            { key: 'courses', label: 'Courses', icon: Flag },
             { key: 'gains', label: 'Gains', icon: Wallet },
             { key: 'profil', label: 'Profil', icon: UserIcon },
           ] as { key: typeof bottomTab; label: string; icon: typeof Home }[]
@@ -691,7 +723,13 @@ export default function DriverDashboard() {
         <div className="absolute inset-x-3 bottom-20 top-20 z-20 flex flex-col overflow-hidden rounded-2xl bg-[#1c1108]/95 p-4 text-sm text-[#e8c9a8]">
           <div className="mb-3 flex flex-none items-center justify-between">
             <h2 className="text-base font-extrabold">
-              {bottomTab === 'historique' ? 'Historique des courses' : bottomTab === 'gains' ? 'Mes gains' : 'Mon profil'}
+              {bottomTab === 'historique'
+                ? 'Historique des courses'
+                : bottomTab === 'courses'
+                  ? 'Courses disponibles'
+                  : bottomTab === 'gains'
+                    ? 'Mes gains'
+                    : 'Mon profil'}
             </h2>
             <button onClick={() => setBottomTab('accueil')} className="text-xs text-[#c9bba8] underline">
               Fermer
@@ -726,6 +764,63 @@ export default function DriverDashboard() {
                         <div className="mt-1 flex items-center justify-between">
                           <span className="text-xs text-[#c9bba8]">{t.distance_km ? `${t.distance_km.toFixed(1)} km` : ''}</span>
                           <span className="text-sm font-extrabold text-[#5be08a]">{formatFCFA(t.final_price)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {bottomTab === 'courses' && (
+              <>
+                {sortedPending.length === 0 ? (
+                  <div className="rounded-2xl bg-white/5 p-4 text-center text-xs text-[#c9bba8]">
+                    Aucune course en attente pour le moment.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {sortedPending.map((t, i) => (
+                      <div
+                        key={t.id}
+                        className={`rounded-2xl p-3 ${i === 0 ? 'bg-[#2fae5c]/15 ring-1 ring-[#6fae4a]' : 'bg-white/5'}`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-[#e8c9a8]/15 text-[11px] font-extrabold text-[#e8c9a8]">
+                            {initials(t.passenger_profile?.full_name ?? null)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-extrabold text-white">
+                              {t.passenger_profile?.full_name ?? 'Passager'}
+                            </div>
+                            <div className="truncate text-[11px] text-[#c9bba8]">
+                              {t.pickup_address ?? 'Départ'} → {t.dropoff_address ?? 'Destination'}
+                            </div>
+                          </div>
+                          <div className="flex-none text-right">
+                            <div className="text-sm font-extrabold text-white">{formatFCFA(t.estimated_price)}</div>
+                            {driverPos && (
+                              <div className="text-[10px] font-bold text-[#c9bba8]">
+                                {haversineKm(driverPos.lat, driverPos.lng, t.pickup_lat, t.pickup_lng).toFixed(1)} km
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            disabled={busy}
+                            onClick={() => handleAccept(t)}
+                            className="flex-1 rounded-xl bg-[#2fae5c] py-2 text-xs font-extrabold text-white"
+                          >
+                            Accepter
+                          </button>
+                          <button
+                            disabled={busy}
+                            onClick={() => handleDismiss(t.id)}
+                            className="flex-1 rounded-xl bg-white/10 py-2 text-xs font-extrabold text-[#c9bba8]"
+                          >
+                            Refuser
+                          </button>
                         </div>
                       </div>
                     ))}
