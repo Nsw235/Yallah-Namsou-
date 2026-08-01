@@ -16,13 +16,15 @@ export type FleetVehicle = {
   status: 'offline' | 'available' | 'busy';
   driver_name: string | null;
   driver_id: string;
+  last_lat: number | null;
+  last_lng: number | null;
 };
 
 /** Vue d'ensemble de la flotte : chaque véhicule, son statut, son chauffeur. */
 export async function getFleetOverview(): Promise<FleetVehicle[]> {
   const { data: vehicles, error } = await supabase
     .from('vehicles')
-    .select('id, type, plate, brand, model, status, driver_id');
+    .select('id, type, plate, brand, model, status, driver_id, last_lat, last_lng');
   if (error) throw error;
   if (!vehicles || vehicles.length === 0) return [];
 
@@ -37,6 +39,22 @@ export async function getFleetOverview(): Promise<FleetVehicle[]> {
     ...v,
     driver_name: profiles?.find((p) => p.id === v.driver_id)?.full_name ?? null,
   }));
+}
+
+/**
+ * Écoute en temps réel les changements sur `vehicles` (statut, position GPS)
+ * pour que la supervision admin (liste flotte + carte) se mette à jour sans
+ * recharger la page.
+ */
+export function subscribeToFleetChanges(onChange: () => void): () => void {
+  const channel = supabase
+    .channel('admin-fleet-realtime')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles' }, () => onChange())
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 export type ActiveTripRow = {
