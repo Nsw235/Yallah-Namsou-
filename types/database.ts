@@ -8,6 +8,7 @@ export interface Profile {
   role: 'passenger' | 'driver' | 'admin';
   full_name: string | null;
   phone: string | null;
+  date_of_birth: string | null;
   created_at: string;
 }
 
