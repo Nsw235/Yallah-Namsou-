@@ -74,7 +74,9 @@ export async function getPendingTrips(): Promise<Trip[]> {
     // Ne bloque pas l'affichage des courses si les noms échouent à charger.
     return trips.map((t) => ({ ...t, passenger_profile: null }));
   }
-  const byId = new Map((names ?? []).map((n: any) => [n.passenger_id, { full_name: n.full_name }]));
+  const byId = new Map<string, { full_name: string | null }>(
+    (names ?? []).map((n: any) => [n.passenger_id as string, { full_name: n.full_name as string | null }])
+  );
   return trips.map((t) => ({ ...t, passenger_profile: byId.get(t.passenger_id) ?? null }));
 }
 
