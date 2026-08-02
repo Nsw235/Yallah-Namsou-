@@ -296,6 +296,12 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 /* Thème glassmorphisme cuivré sur fond carte 3D isométrique.           */
 /* ================================================================== */
 
+.sheet-solid{
+  background:#0a0b0d; border:1px solid rgba(169,122,91,0.25);
+  backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+.sheet-compact{ max-height:48dvh; max-height:calc(var(--app-vh, 100dvh) * 0.48); }
+
 .copper-texture{
   background-image:
     radial-gradient(circle at 20% 20%, rgba(169,122,91,0.10), transparent 45%),
