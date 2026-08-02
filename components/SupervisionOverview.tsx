@@ -20,12 +20,21 @@ import {
   Crosshair,
   BarChart3,
   Settings as SettingsIcon,
+  Pencil,
+  X,
+  Check,
+  KeyRound,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { checkIsAdmin } from '@/lib/admin';
 import AuthGate from '@/components/AuthGate';
 import { MOCK_STATS } from '@/components/legacy/mockData';
-import { getFleetOverview, subscribeToFleetChanges, type FleetVehicle } from '@/lib/admin';
+import {
+  getFleetOverview,
+  subscribeToFleetChanges,
+  updateVehicle,
+  type FleetVehicle,
+} from '@/lib/admin';
 import { CAR_MODEL_BY_TYPE } from '@/lib/pricing';
 import type { VehicleType } from '@/types/database';
 import RealMap, { type MapPin as MapPinData } from '@/components/RealMap';
@@ -33,9 +42,9 @@ import RealMap, { type MapPin as MapPinData } from '@/components/RealMap';
 type NavKey = 'flotte' | 'carte' | 'stats' | 'parametres';
 
 const STATUS_DOT: Record<FleetVehicle['status'], string> = {
-  busy: '#2fae5c',
-  available: '#d99a1f',
-  offline: '#d1443f',
+  busy: '#e8c9a8',
+  available: '#c9a06a',
+  offline: '#d85a30',
 };
 const STATUS_LABEL: Record<FleetVehicle['status'], string> = {
   busy: 'En Course',
@@ -50,6 +59,7 @@ export default function SupervisionOverview() {
   const [nav, setNav] = useState<NavKey>('flotte');
   const [fleet, setFleet] = useState<FleetVehicle[]>([]);
   const [fleetError, setFleetError] = useState<string | null>(null);
+  const [editingVehicle, setEditingVehicle] = useState<FleetVehicle | null>(null);
 
   const flotteRef = useRef<HTMLDivElement>(null);
   const carteRef = useRef<HTMLDivElement>(null);
@@ -110,25 +120,25 @@ export default function SupervisionOverview() {
 
   if (session === undefined || (isAdmin === null && session)) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-[#f7f0e4]">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#7a3a1c] border-t-transparent" />
+      <div className="flex min-h-dvh items-center justify-center bg-[#0a0b0d]">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#a97a5b] border-t-transparent" />
       </div>
     );
   }
   if (!session) {
     return (
-      <div className="min-h-dvh bg-[#f7f0e4]">
+      <div className="min-h-dvh bg-[#0a0b0d]">
         <AuthGate onAuthed={() => {}} />
       </div>
     );
   }
   if (isAdmin === false) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-[#f7f0e4] p-6 text-center">
+      <div className="flex min-h-dvh items-center justify-center bg-[#0a0b0d] p-6 text-center">
         <div>
-          <h2 className="text-lg font-extrabold text-[#1c1108]">Accès refusé</h2>
-          <p className="mt-1 text-sm text-[#6b6459]">Ce compte n&apos;a pas le rôle administrateur.</p>
-          <button onClick={handleLogout} className="mt-4 rounded-xl bg-[#7a3a1c] px-4 py-2 text-sm font-bold text-white">
+          <h2 className="text-lg font-extrabold text-[#f2e9dd]">Accès refusé</h2>
+          <p className="mt-1 text-sm text-[#9aa0aa]">Ce compte n&apos;a pas le rôle administrateur.</p>
+          <button onClick={handleLogout} className="mt-4 rounded-xl bg-gradient-to-b from-[#e8c9a8] to-[#a97a5b] px-4 py-2 text-sm font-bold text-[#241a13]">
             Déconnexion
           </button>
         </div>
@@ -137,30 +147,31 @@ export default function SupervisionOverview() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-[#f7f0e4] font-sans">
-      {error && <div className="bg-red-100 p-2 text-center text-xs text-red-700">{error}</div>}
+    <div className="flex min-h-dvh flex-col bg-[#0a0b0d] font-sans text-[#f2f3f5]">
+      {error && <div className="bg-[#d85a30]/15 p-2 text-center text-xs text-[#ffb3b3]">{error}</div>}
 
       <div className="flex-1 overflow-y-auto pb-4">
         {/* Header */}
         <div className="px-3 pt-3">
-          <div className="relative rounded-2xl border border-[#e4d7bf] bg-[#fbf7ef] px-4 py-3.5">
+          <div className="relative rounded-2xl border border-[rgba(176,141,87,0.28)] bg-[rgba(20,22,26,0.75)] px-4 py-3.5 backdrop-blur-xl">
             <button
               onClick={handleLogout}
               aria-label="Déconnexion"
-              className="absolute right-3 top-3 text-[#8a5a2c]"
+              className="absolute right-3 top-3 text-[#e8c9a8]"
             >
               <LogOut size={18} />
             </button>
-            <h1 className="max-w-[85%] text-xl font-extrabold leading-tight text-[#1c1108]">
+            <h1 className="max-w-[85%] text-xl font-extrabold leading-tight text-[#f2f3f5]">
               Yallah Namsou
-              <br />• Supervision Totale
+              <br />
+              <span className="text-[#e8c9a8]">• Supervision Totale</span>
             </h1>
             <div className="mt-2 flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-xs text-[#5a5348]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#2fae5c]" />
+              <span className="flex items-center gap-1.5 text-xs text-[#9aa0aa]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#7ee787]" />
                 {dateStr} {timeStr}
               </span>
-              <span className="flex items-center gap-1 text-xs font-bold text-[#8a5a2c]">
+              <span className="flex items-center gap-1 text-xs font-bold text-[#e8c9a8]">
                 <ArrowUpDown size={13} /> Filtrer/Trier
               </span>
             </div>
@@ -171,68 +182,80 @@ export default function SupervisionOverview() {
         <div className="flex gap-2 px-3 pt-2">
           {/* Flotte */}
           <div ref={flotteRef} className="flex flex-[0.95] flex-col gap-2">
-            <button className="rounded-xl bg-[#7a3a1c] py-2.5 text-xs font-extrabold text-white">
+            <button className="rounded-xl bg-gradient-to-b from-[#e8c9a8] to-[#a97a5b] py-2.5 text-xs font-extrabold text-[#241a13] shadow-[0_0_18px_rgba(169,122,91,0.35)]">
               <span className="inline-flex items-center gap-1">
-                <Plus size={14} /> Add New Vehicle
+                <Plus size={14} /> Ajouter un véhicule
               </span>
             </button>
 
-            {fleetError && <div className="rounded-lg bg-red-100 px-2 py-1 text-[10px] text-red-700">{fleetError}</div>}
+            {fleetError && <div className="rounded-lg bg-[#d85a30]/15 px-2 py-1 text-[10px] text-[#ffb3b3]">{fleetError}</div>}
             {fleet.length === 0 && !fleetError && (
-              <div className="rounded-xl border border-[#e4d7bf] bg-[#fbf7ef] px-3 py-4 text-center text-[10px] text-[#8a8378]">
+              <div className="rounded-xl border border-[rgba(176,141,87,0.28)] bg-[rgba(20,22,26,0.6)] px-3 py-4 text-center text-[10px] text-[#9aa0aa]">
                 Aucun véhicule enregistré.
               </div>
             )}
             {fleet.map((v) => (
-              <div key={v.id} className="rounded-xl border border-[#e4d7bf] bg-[#fbf7ef] px-3 py-2.5">
-                <div className="flex justify-between text-[10px] text-[#8a8378]">
+              <div key={v.id} className="rounded-xl border border-[rgba(176,141,87,0.28)] bg-[rgba(20,22,26,0.6)] px-3 py-2.5">
+                <div className="flex justify-between text-[10px] text-[#9aa0aa]">
                   <span>Plaque: {v.plate}</span>
                   <span>STATUS:</span>
                 </div>
                 <div className="mt-0.5 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-sm font-extrabold text-[#1c1108]">
-                    <Car size={15} className="text-[#8a5a2c]" /> {v.brand ?? ''} {v.model ?? v.type.toUpperCase()}
+                  <span className="flex items-center gap-1.5 text-sm font-extrabold text-[#f2f3f5]">
+                    <Car size={15} className="text-[#e8c9a8]" /> {v.brand ?? ''} {v.model ?? v.type.toUpperCase()}
                   </span>
                   <span className="text-[11px] font-extrabold" style={{ color: STATUS_DOT[v.status] }}>
                     ● {STATUS_LABEL[v.status]}
                   </span>
                 </div>
-                <div className="mt-0.5 flex items-center gap-1 text-[10px] text-[#6b6459]">
+                <div className="mt-0.5 flex items-center gap-1 text-[10px] text-[#9aa0aa]">
                   <User size={10} /> Chauffeur: {(v.driver_name ?? '—').toUpperCase()}
                 </div>
-                <button className="mt-1.5 flex w-full items-center justify-center gap-1 rounded-full bg-[#f0dfc4] py-1.5 text-[10px] font-extrabold text-[#7a3a1c]">
-                  <MapPin size={11} /> LOCALISER
-                </button>
+                <div className="mt-1.5 flex gap-1.5">
+                  <button className="flex flex-1 items-center justify-center gap-1 rounded-full bg-[rgba(169,122,91,0.14)] py-1.5 text-[10px] font-extrabold text-[#e8c9a8]">
+                    <MapPin size={11} /> LOCALISER
+                  </button>
+                  <button
+                    onClick={() => setEditingVehicle(v)}
+                    className="flex flex-1 items-center justify-center gap-1 rounded-full border border-[rgba(176,141,87,0.35)] py-1.5 text-[10px] font-extrabold text-[#e8c9a8]"
+                  >
+                    <Pencil size={11} /> MODIFIER
+                  </button>
+                </div>
               </div>
             ))}
+            <p className="px-1 text-[9.5px] leading-snug text-[#6b7078]">
+              Le mot de passe et les détails du véhicule d&apos;un chauffeur ne sont modifiables
+              que depuis ce BackOffice — pas depuis son propre tableau de bord.
+            </p>
           </div>
 
           {/* Stats + Paramètres */}
-          <div className="flex flex-[1.05] flex-col rounded-2xl border border-[#e4d7bf] bg-[#fbf7ef] p-3">
+          <div className="flex flex-[1.05] flex-col rounded-2xl border border-[rgba(176,141,87,0.28)] bg-[rgba(20,22,26,0.6)] p-3">
             <div ref={statsRef}>
-              <h2 className="text-sm font-extrabold text-[#1c1108]">Stats &amp; Analytics</h2>
-              <p className="mb-2 text-[10px] text-[#8a8378]">Aujourd&apos;hui ({dateStr.slice(0, 5)})</p>
+              <h2 className="text-sm font-extrabold text-[#f2f3f5]">Stats &amp; Analytics</h2>
+              <p className="mb-2 text-[10px] text-[#9aa0aa]">Aujourd&apos;hui ({dateStr.slice(0, 5)})</p>
 
               <div className="flex justify-between text-center">
                 <Kpi label="Total Courses:" value={String(MOCK_STATS.totalCourses)} />
-                <Kpi label="Revenus:" value={`${MOCK_STATS.revenue}€`} />
+                <Kpi label="Revenus:" value={`${MOCK_STATS.revenue} FCFA`} />
                 <Kpi label="Courses/Heure:" value={String(MOCK_STATS.coursesPerHour)} />
               </div>
 
-              <h3 className="mt-3 text-[11px] font-bold text-[#1c1108]">Courses par Type (Derniers 7 Jours)</h3>
+              <h3 className="mt-3 text-[11px] font-bold text-[#f2f3f5]">Courses par Type (Derniers 7 Jours)</h3>
               <div className="mt-1.5 flex gap-1">
-                <div className="flex h-16 flex-col justify-between text-right text-[9px] text-[#a39c8f]">
+                <div className="flex h-16 flex-col justify-between text-right text-[9px] text-[#6b7078]">
                   <span>{maxVal}</span>
                   <span>{Math.round((maxVal * 3) / 4)}</span>
                   <span>{Math.round(maxVal / 2)}</span>
                   <span>{Math.round(maxVal / 4)}</span>
                   <span>0</span>
                 </div>
-                <div className="flex h-16 flex-1 items-end gap-1.5 border-l border-[#e4d7bf] pl-1.5">
+                <div className="flex h-16 flex-1 items-end gap-1.5 border-l border-[rgba(176,141,87,0.28)] pl-1.5">
                   {MOCK_STATS.byType.map((b, i) => (
                     <div
                       key={i}
-                      className="flex-1 rounded-t bg-[#7a3a1c]"
+                      className="flex-1 rounded-t bg-gradient-to-t from-[#a97a5b] to-[#e8c9a8]"
                       style={{ height: `${Math.max(6, (b.value / maxVal) * 100)}%` }}
                     />
                   ))}
@@ -240,31 +263,31 @@ export default function SupervisionOverview() {
               </div>
 
               <div className="mt-2.5 flex gap-1.5">
-                <button className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-[#f0dfc4] py-1.5 text-[10px] font-bold text-[#7a3a1c]">
+                <button className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-[rgba(169,122,91,0.14)] py-1.5 text-[10px] font-bold text-[#e8c9a8]">
                   Aujourd&apos;hui <ChevronDown size={12} />
                 </button>
-                <button className="flex flex-[1.2] items-center justify-center gap-1 rounded-lg bg-[#f0dfc4] py-1.5 text-[10px] font-bold text-[#7a3a1c]">
+                <button className="flex flex-[1.2] items-center justify-center gap-1 rounded-lg bg-[rgba(169,122,91,0.14)] py-1.5 text-[10px] font-bold text-[#e8c9a8]">
                   <Download size={12} /> Exporter CSV/PDF
                 </button>
               </div>
             </div>
 
-            <div ref={paramsRef} className="mt-3 border-t border-[#e4d7bf] pt-2.5">
-              <h2 className="mb-1 text-xs font-extrabold text-[#1c1108]">Section Paramètres &amp; Contrôles</h2>
+            <div ref={paramsRef} className="mt-3 border-t border-[rgba(176,141,87,0.28)] pt-2.5">
+              <h2 className="mb-1 text-xs font-extrabold text-[#f2f3f5]">Section Paramètres &amp; Contrôles</h2>
 
               <SettingsRow icon={<Bell size={13} />} title="Alertes &amp; Notifications" action="Gérer les Alertes" />
               <SettingsRow icon={<MapIcon size={13} />} title="Gestion de la Carte" toggle />
-              <SettingsRow icon={<UserCog size={13} />} title="Profil &amp; Sécurité" action="Changer MDP / Logs" />
+              <SettingsRow icon={<UserCog size={13} />} title="Profil &amp; Sécurité (admin)" action="Changer MDP / Logs" />
               <SettingsRow icon={<LifeBuoy size={13} />} title="Soutien Technique" action="Contacter Support" />
 
               <button
                 onClick={handleLogout}
-                className="mt-1 flex w-full items-center justify-between border-t border-[#e4d7bf] py-1.5 pt-2 text-left"
+                className="mt-1 flex w-full items-center justify-between border-t border-[rgba(176,141,87,0.28)] py-1.5 pt-2 text-left"
               >
-                <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#c0342e]">
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#d85a30]">
                   <LogOut size={13} /> Déconnexion
                 </span>
-                <ChevronRight size={13} className="text-[#c0342e]" />
+                <ChevronRight size={13} className="text-[#d85a30]" />
               </button>
             </div>
           </div>
@@ -272,7 +295,7 @@ export default function SupervisionOverview() {
 
         {/* Carte */}
         <div ref={carteRef} className="px-3 pt-2">
-          <div className="relative h-64 overflow-hidden rounded-2xl bg-[#e2ddcf]">
+          <div className="relative h-64 overflow-hidden rounded-2xl border border-[rgba(176,141,87,0.28)] bg-[#121418]">
             <RealMap
               pitch={75}
               buildings3d
@@ -288,7 +311,7 @@ export default function SupervisionOverview() {
               .map((v, i) => (
                 <span
                   key={v.id}
-                  className="pointer-events-none absolute z-10 rounded-full px-2 py-1 text-[9px] font-extrabold text-white"
+                  className="pointer-events-none absolute z-10 rounded-full px-2 py-1 text-[9px] font-extrabold text-[#241a13]"
                   style={{
                     background: STATUS_DOT[v.status],
                     top: `${10 + i * 30}%`,
@@ -299,30 +322,30 @@ export default function SupervisionOverview() {
                   ● {STATUS_LABEL[v.status]}
                 </span>
               ))}
-            <span className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-lg border-[1.5px] border-[#1c1108] bg-white px-3.5 py-1.5 text-xs font-extrabold text-[#1c1108]">
-              TAHBI
+            <span className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-lg border-[1.5px] border-[rgba(176,141,87,0.5)] bg-[rgba(10,11,13,0.85)] px-3.5 py-1.5 text-xs font-extrabold text-[#e8c9a8]">
+              YALLAH NAMSOU
             </span>
             <button
               aria-label="Plein écran"
-              className="absolute bottom-2.5 left-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-[#1c1108] bg-white text-[#1c1108]"
+              className="absolute bottom-2.5 left-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-[rgba(176,141,87,0.35)] bg-[rgba(10,11,13,0.85)] text-[#e8c9a8]"
             >
               <Maximize2 size={14} />
             </button>
             <button
               aria-label="Géolocaliser"
-              className="absolute bottom-14 right-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#7a3a1c]"
+              className="absolute bottom-14 right-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-[rgba(10,11,13,0.85)] text-[#e8c9a8]"
             >
               <Crosshair size={16} />
             </button>
-            <button className="absolute bottom-2.5 right-2.5 z-10 rounded-full bg-[#7a3a1c] px-4 py-1.5 text-xs font-extrabold text-white">
-              Recenter
+            <button className="absolute bottom-2.5 right-2.5 z-10 rounded-full bg-gradient-to-b from-[#e8c9a8] to-[#a97a5b] px-4 py-1.5 text-xs font-extrabold text-[#241a13]">
+              Recentrer
             </button>
           </div>
         </div>
       </div>
 
       {/* Bottom nav */}
-      <nav className="flex items-stretch justify-around bg-black pb-[env(safe-area-inset-bottom,0px)]">
+      <nav className="flex items-stretch justify-around border-t border-[rgba(176,141,87,0.2)] bg-[#0a0b0d] pb-[env(safe-area-inset-bottom,0px)]">
         {(
           [
             { key: 'flotte', label: 'Flotte', icon: Car },
@@ -334,14 +357,112 @@ export default function SupervisionOverview() {
           const active = nav === key;
           return (
             <button key={key} onClick={() => goTo(key)} className="flex flex-1 flex-col items-center gap-1 py-2.5">
-              <Icon size={18} color={active ? '#a9662f' : '#8a8378'} />
-              <span className="text-[9px] font-bold" style={{ color: active ? '#a9662f' : '#8a8378' }}>
+              <Icon size={18} color={active ? '#e8c9a8' : '#6b7078'} />
+              <span className="text-[9px] font-bold" style={{ color: active ? '#e8c9a8' : '#6b7078' }}>
                 {label}
               </span>
             </button>
           );
         })}
       </nav>
+
+      {editingVehicle && (
+        <VehicleEditModal
+          vehicle={editingVehicle}
+          onClose={() => setEditingVehicle(null)}
+          onSaved={() => setEditingVehicle(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function VehicleEditModal({
+  vehicle,
+  onClose,
+  onSaved,
+}: {
+  vehicle: FleetVehicle;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [plate, setPlate] = useState(vehicle.plate ?? '');
+  const [brand, setBrand] = useState(vehicle.brand ?? '');
+  const [model, setModel] = useState(vehicle.model ?? '');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setErr(null);
+    try {
+      await updateVehicle(vehicle.id, { plate, brand: brand || null, model: model || null });
+      onSaved();
+    } catch (e: any) {
+      setErr(e?.message ?? 'Erreur lors de la sauvegarde.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60" onClick={onClose}>
+      <div
+        className="w-full max-w-[520px] rounded-t-3xl border border-[rgba(176,141,87,0.28)] bg-[#0f1114] p-5 pb-[calc(24px+env(safe-area-inset-bottom,0px))]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-extrabold text-[#f2f3f5]">
+            Véhicule de {vehicle.driver_name ?? 'chauffeur'}
+          </h3>
+          <button onClick={onClose} className="text-[#9aa0aa]">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <Field label="Plaque d'immatriculation" value={plate} onChange={setPlate} />
+          <Field label="Marque" value={brand} onChange={setBrand} />
+          <Field label="Modèle" value={model} onChange={setModel} />
+        </div>
+
+        {err && <div className="mt-3 text-xs text-[#ffb3b3]">{err}</div>}
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-[#e8c9a8] to-[#a97a5b] py-3 text-sm font-extrabold text-[#241a13] disabled:opacity-50"
+        >
+          <Check size={15} /> {saving ? 'Enregistrement…' : 'Enregistrer les modifications'}
+        </button>
+
+        <div className="mt-4 border-t border-[rgba(176,141,87,0.2)] pt-4">
+          <p className="mb-2 text-[10.5px] leading-snug text-[#9aa0aa]">
+            Réinitialisation du mot de passe chauffeur : nécessite l&apos;email associé au compte
+            (à connecter à un flux d&apos;administration Supabase côté serveur, avec la clé service role).
+          </p>
+          <button
+            disabled
+            title="Nécessite l'email du chauffeur et un appel côté serveur (service role Supabase)"
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-[rgba(176,141,87,0.3)] py-2.5 text-xs font-bold text-[#e8c9a8] opacity-50"
+          >
+            <KeyRound size={13} /> Réinitialiser le mot de passe
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-[10.5px] font-bold uppercase tracking-wide text-[#9aa0aa]">{label}</label>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-xl border border-[rgba(176,141,87,0.35)] bg-[rgba(169,122,91,0.06)] px-3.5 py-2.5 text-sm text-[#f2f3f5] outline-none focus:border-[#a97a5b]"
+      />
     </div>
   );
 }
@@ -349,8 +470,8 @@ export default function SupervisionOverview() {
 function Kpi({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[8.5px] text-[#8a8378]">{label}</div>
-      <div className="text-[15px] font-extrabold text-[#1c1108]">{value}</div>
+      <div className="text-[8.5px] text-[#9aa0aa]">{label}</div>
+      <div className="text-[15px] font-extrabold text-[#f2f3f5]">{value}</div>
     </div>
   );
 }
@@ -369,14 +490,14 @@ function SettingsRow({
   const [checked, setChecked] = useState(true);
   return (
     <div className="flex items-center justify-between py-1.5">
-      <span className="flex flex-1 items-center gap-1.5 text-[10px] text-[#1c1108]">
-        <span className="text-[#8a5a2c]">{icon}</span>
+      <span className="flex flex-1 items-center gap-1.5 text-[10px] text-[#f2f3f5]">
+        <span className="text-[#e8c9a8]">{icon}</span>
         <span dangerouslySetInnerHTML={{ __html: title }} />
       </span>
       {toggle ? (
         <button
           onClick={() => setChecked((c) => !c)}
-          className={`relative h-3.5 w-6 flex-none rounded-full transition-colors ${checked ? 'bg-[#7a3a1c]' : 'bg-[#e4d7bf]'}`}
+          className={`relative h-3.5 w-6 flex-none rounded-full transition-colors ${checked ? 'bg-[#a97a5b]' : 'bg-[rgba(255,255,255,0.12)]'}`}
           aria-pressed={checked}
         >
           <span
@@ -384,7 +505,7 @@ function SettingsRow({
           />
         </button>
       ) : (
-        <span className="flex items-center gap-0.5 text-[9px] text-[#a67a45]">
+        <span className="flex items-center gap-0.5 text-[9px] text-[#e8c9a8]">
           {action} <ChevronRight size={11} />
         </span>
       )}
