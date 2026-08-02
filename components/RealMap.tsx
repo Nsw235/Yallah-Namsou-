@@ -15,6 +15,8 @@ export type MapPin = {
     /** Course la plus proche : contour vert + étiquette pleine opacité. */
     highlight?: boolean;
   };
+  /** Affiche un vrai modèle 3D (.glb) à la place de l'emoji — ex: un autre chauffeur disponible. */
+  car3d?: { modelUrl?: string; heading?: number };
 };
 /** Prochaine manœuvre du guidage virage par virage (voir onNavigationUpdate). */
 export type NavigationStep = {
@@ -206,6 +208,7 @@ export default function RealMap({
         wanted['driver'] = { pos: driverPosition, el: () => emojiEl('🚗') };
       }
       pins.forEach((p, i) => {
+        if (p.car3d) return; // rendu en modèle 3D réel, pas en marqueur DOM plat
         wanted[`pin-${i}`] = {
           pos: p.position,
           el: () => (p.passenger ? passengerEl(p.passenger) : emojiEl(p.emoji ?? '🚗')),
@@ -268,66 +271,92 @@ export default function RealMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins), effectiveUse3dCar]);
 
-  // Modèle 3D réel du véhicule (.glb), positionné/orienté sur `driverPosition`.
-  // On (re)crée la source/layer "model" à chaque changement de position : les
-  // sources de type "model" n'exposent pas d'API de mise à jour incrémentale
-  // simple, contrairement aux sources GeoJSON.
+  // Modèles 3D réels (.glb) : le véhicule du chauffeur connecté (driverPosition,
+  // si use3dCar) + tout pin déclarant `car3d` (ex: autres chauffeurs disponibles
+  // autour). Chacun a sa propre source/layer Mapbox — on les recrée à chaque
+  // changement de position, les sources "model" n'ayant pas d'update incrémental.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !effectiveUse3dCar || !driverPosition) return;
+    if (!map) return;
 
-    // Si le .glb (carModelUrl) est manquant/invalide, Mapbox émet un événement
-    // 'error' plutôt que de planter : on l'écoute pour retomber sur l'emoji
-    // 🚗 au lieu de laisser le véhicule invisible sur la carte.
-    function onMapError(e: any) {
-      if (e?.sourceId === 'car-3d-source' || (typeof e?.error?.message === 'string' && e.error.message.includes(carModelUrl))) {
-        setModelFailed(true);
+    type CarModel = { id: string; modelUrl: string; position: LatLng; heading: number };
+    const cars: CarModel[] = [];
+    if (effectiveUse3dCar && driverPosition) {
+      cars.push({ id: 'car-3d-ego', modelUrl: carModelUrl, position: driverPosition, heading: carHeading });
+    }
+    pins.forEach((p, i) => {
+      if (p.car3d) {
+        cars.push({
+          id: `car-3d-pin-${i}`,
+          modelUrl: p.car3d.modelUrl ?? DEFAULT_CAR_MODEL_URL,
+          position: p.position,
+          heading: p.car3d.heading ?? 90,
+        });
       }
+    });
+
+    const activeIds = new Set(cars.map((c) => c.id));
+
+    // Si un .glb est manquant/invalide, Mapbox émet un événement 'error'
+    // plutôt que de planter : on l'écoute pour retomber sur l'emoji 🚗 du
+    // véhicule du chauffeur connecté au lieu de le laisser invisible.
+    // (Les pins car3d en échec restent simplement invisibles, plus rares.)
+    function onMapError(e: any) {
+      const msg = e?.error?.message;
+      if (typeof msg === 'string' && msg.includes(carModelUrl)) setModelFailed(true);
     }
     map.on('error', onMapError);
 
-    function upsertCarModel() {
-      if (map.getLayer('car-3d-layer')) map.removeLayer('car-3d-layer');
-      if (map.getSource('car-3d-source')) map.removeSource('car-3d-source');
+    function upsertCarModels() {
+      cars.forEach((car) => {
+        const sourceId = `${car.id}-source`;
+        const layerId = `${car.id}-layer`;
+        if (map.getLayer(layerId)) map.removeLayer(layerId);
+        if (map.getSource(sourceId)) map.removeSource(sourceId);
 
-      map.addSource('car-3d-source', {
-        type: 'model',
-        models: {
-          car: {
-            uri: carModelUrl,
-            position: [driverPosition!.lng, driverPosition!.lat],
-            orientation: [0, 0, carHeading],
+        map.addSource(sourceId, {
+          type: 'model',
+          models: {
+            car: {
+              uri: car.modelUrl,
+              position: [car.position.lng, car.position.lat],
+              orientation: [0, 0, car.heading],
+            },
           },
-        },
-      } as any);
+        } as any);
 
-      map.addLayer({
-        id: 'car-3d-layer',
-        type: 'model',
-        source: 'car-3d-source',
-        slot: 'top',
-        paint: {
-          'model-scale': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            12, ['literal', [0.5, 0.5, 0.5]],
-            18, ['literal', [2.5, 2.5, 2.5]],
-          ],
-        },
-      } as any);
+        map.addLayer({
+          id: layerId,
+          type: 'model',
+          source: sourceId,
+          slot: 'top',
+          paint: {
+            'model-scale': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              12, ['literal', [0.5, 0.5, 0.5]],
+              18, ['literal', [2.5, 2.5, 2.5]],
+            ],
+          },
+        } as any);
+      });
     }
 
-    if (map.isStyleLoaded()) upsertCarModel();
-    else map.once('style.load', upsertCarModel);
+    if (map.isStyleLoaded()) upsertCarModels();
+    else map.once('style.load', upsertCarModels);
 
     return () => {
       map.off('error', onMapError);
-      if (map.getLayer('car-3d-layer')) map.removeLayer('car-3d-layer');
-      if (map.getSource('car-3d-source')) map.removeSource('car-3d-source');
+      // Nettoie uniquement les modèles gérés par ce rendu (via activeIds),
+      // pour ne pas toucher aux sources/layers d'un autre appel en cours.
+      activeIds.forEach((id) => {
+        if (map.getLayer(`${id}-layer`)) map.removeLayer(`${id}-layer`);
+        if (map.getSource(`${id}-source`)) map.removeSource(`${id}-source`);
+      });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveUse3dCar, use3dCar, carModelUrl, carHeading, driverPosition?.lat, driverPosition?.lng]);
+  }, [effectiveUse3dCar, carModelUrl, carHeading, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins)]);
 
   // Itinéraire réel tenant compte du trafic (Mapbox Directions, profil driving-traffic).
   // Point de départ : la position live du chauffeur si disponible (suivi temps réel),
