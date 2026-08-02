@@ -172,3 +172,27 @@ export async function setDriverValidation(driverId: string, status: 'approved' |
   const { error } = await supabase.from('drivers').update({ validation_status: status }).eq('id', driverId);
   if (error) throw error;
 }
+
+/**
+ * Met à jour les informations d'un véhicule (plaque, marque, modèle).
+ * Réservé au BackOffice admin : les chauffeurs n'ont pas accès à cette
+ * mutation depuis leur propre interface (lecture seule côté DriverDashboard).
+ */
+export async function updateVehicle(
+  vehicleId: string,
+  patch: { plate?: string; brand?: string | null; model?: string | null }
+) {
+  const { error } = await supabase.from('vehicles').update(patch).eq('id', vehicleId);
+  if (error) throw error;
+}
+
+/**
+ * Déclenche l'envoi d'un email de réinitialisation de mot de passe à un
+ * chauffeur. Réservé au BackOffice admin : seul l'admin peut initier ce flux
+ * pour un chauffeur (le chauffeur ne peut pas changer son mot de passe
+ * lui-même depuis son propre tableau de bord).
+ */
+export async function resetDriverPassword(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email);
+  if (error) throw error;
+}
