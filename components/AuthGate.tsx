@@ -6,25 +6,47 @@ import { supabase } from '@/lib/supabaseClient';
 export default function AuthGate({ onAuthed }: { onAuthed: () => void }) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [fullName, setFullName] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Âge minimum requis pour réserver une course, comme chez Uber : on
+  // vérifie côté client (confort immédiat) puis côté serveur (voir
+  // migration 0006, la vraie barrière ne peut pas reposer sur le client).
+  const MIN_AGE = 18;
+  function hasMinimumAge(isoDate: string): boolean {
+    const dob = new Date(isoDate);
+    if (Number.isNaN(dob.getTime())) return false;
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const hasHadBirthdayThisYear =
+      today.getMonth() > dob.getMonth() || (today.getMonth() === dob.getMonth() && today.getDate() >= dob.getDate());
+    if (!hasHadBirthdayThisYear) age -= 1;
+    return age >= MIN_AGE;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setError(null);
+    if (mode === 'signup' && !hasMinimumAge(dateOfBirth)) {
+      setError(`Vous devez avoir au moins ${MIN_AGE} ans pour créer un compte passager.`);
+      return;
+    }
+    setLoading(true);
     try {
       if (mode === 'signup') {
         const { error: signUpError } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: fullName } },
+          options: { data: { full_name: fullName, date_of_birth: dateOfBirth } },
         });
         if (signUpError) throw signUpError;
         // Le trigger `handle_new_user` crée automatiquement la ligne `profiles`
-        // (role: passenger) à partir de raw_user_meta_data.full_name.
+        // (role: passenger) à partir de raw_user_meta_data.full_name /
+        // date_of_birth. Une contrainte serveur (migration 0006) rejette en
+        // plus toute date de naissance de moins de 18 ans.
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) throw signInError;
@@ -56,6 +78,18 @@ export default function AuthGate({ onAuthed }: { onAuthed: () => void }) {
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="Ex : Awa Djimet"
+              required
+            />
+          </div>
+        )}
+        {mode === 'signup' && (
+          <div className="field">
+            <label>DATE DE NAISSANCE</label>
+            <input
+              type="date"
+              value={dateOfBirth}
+              onChange={(e) => setDateOfBirth(e.target.value)}
+              max={new Date().toISOString().slice(0, 10)}
               required
             />
           </div>

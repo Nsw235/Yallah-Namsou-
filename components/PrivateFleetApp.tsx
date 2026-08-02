@@ -456,49 +456,74 @@ function Screen1({
       />
       <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
 
+      {/* Barre d'adresse compacte : la carte reste le sujet principal de
+          l'écran, un tap ouvre le laissez-passer pour saisir/modifier. */}
+      {!sheetExpanded && (
+        <div className="yn-map-bar" onClick={onExpandSheet}>
+          <span className={`addr ${!pickup ? 'placeholder' : ''}`}>{pickup ? pickup.label : "D'où partez-vous ?"}</span>
+          <span className="sep">→</span>
+          <span className={`addr ${!dropoff ? 'placeholder' : ''}`}>{dropoff ? dropoff.label : 'Où allez-vous ?'}</span>
+        </div>
+      )}
+
+      {!sheetExpanded && (
+        <div className="yn-flightpath">
+          <div className="yn-fp-row">
+            <div className="yn-fp-line" />
+            <div className="yn-fp-stage active"><div className="yn-fp-dot" /><span>DÉP</span></div>
+            <div className="yn-fp-stage"><div className="yn-fp-dot" /><span>RECH</span></div>
+            <div className="yn-fp-stage"><div className="yn-fp-dot" /><span>ATT</span></div>
+            <div className="yn-fp-stage"><div className="yn-fp-dot" /><span>ROUTE</span></div>
+            <div className="yn-fp-stage"><div className="yn-fp-dot" /><span>ARR</span></div>
+          </div>
+        </div>
+      )}
+
       {!sheetExpanded ? (
-        <div className="sheet glass copper-texture sheet-solid" style={{ paddingTop: 14, paddingBottom: 18 }} onClick={onExpandSheet}>
-          <div className="route-sub" style={{ marginBottom: 8 }}>
-            {availableVehicles.length > 0
-              ? `${availableVehicles.length} véhicule${availableVehicles.length > 1 ? 's' : ''} disponible${availableVehicles.length > 1 ? 's' : ''} près de vous`
-              : 'Recherche des véhicules à proximité…'}
+        <div className="yn-ticket">
+          <div className="yn-ticket-stub" style={{ borderTop: 'none' }} onClick={onExpandSheet}>
+            <div className="yn-stub-row">
+              <div>
+                <div className="yn-stub-label">
+                  {availableVehicles.length > 0
+                    ? `${availableVehicles.length} véhicule${availableVehicles.length > 1 ? 's' : ''} à proximité`
+                    : 'Recherche des véhicules…'}
+                </div>
+                <div className="yn-stub-price" style={{ fontSize: 15 }}>Où allez-vous ?</div>
+              </div>
+              <div style={{ fontSize: 20 }}>›</div>
+            </div>
           </div>
-          <div className="field" style={{ cursor: 'pointer' }}>
-            <input type="text" placeholder="Où allez-vous ?" readOnly value="" style={{ pointerEvents: 'none' }} />
-          </div>
-          <div className="home-indicator" />
         </div>
       ) : (
-        <div className="sheet glass copper-texture sheet-solid sheet-compact" style={{ paddingTop: 16 }}>
-          <div className="step-indicator">
-            <div className={`step ${!ready ? 'active' : ''}`}>
-              <div className="num">1</div>
-              <div className="label">Confirmer le<br />ramassage</div>
-            </div>
-            <div className="arrow">→</div>
-            <div className={`step ${ready ? 'active' : ''}`}>
-              <div className="num">2</div>
-              <div className="label">Sélectionner le<br />service</div>
+        <div className="yn-ticket">
+          <div className="yn-ticket-body">
+            <AddressField label="DÉPART" placeholder="D'où partez-vous ?" value={pickup} onChange={onPickupChange} />
+            <div style={{ height: 8 }} />
+            <AddressField label="DESTINATION" placeholder="Où allez-vous ?" value={dropoff} onChange={onDropoffChange} />
+            <div className="yn-classes">
+              {types.map((t) => (
+                <div key={t.key} className={`yn-cclass ${vehicle === t.key ? 'selected' : ''}`} onClick={() => onSelect(t.key)}>
+                  <img src={t.icon} alt={VEHICLE_LABELS[t.key]} />
+                  <div className="cname">{VEHICLE_LABELS[t.key]}</div>
+                  <div className="cprice">{ready ? formatFCFA(priceFor(t.key)) : '—'}</div>
+                </div>
+              ))}
             </div>
           </div>
-          <AddressField label="DÉPART" placeholder="D'où partez-vous ?" value={pickup} onChange={onPickupChange} />
-          <div style={{ height: 10 }} />
-          <AddressField label="DESTINATION" placeholder="Où allez-vous ?" value={dropoff} onChange={onDropoffChange} />
-          <div style={{ height: 14 }} />
-          <div className="vehicles">
-            {types.map((t) => (
-              <div key={t.key} className={`vcard ${vehicle === t.key ? 'selected' : ''}`} onClick={() => onSelect(t.key)}>
-                <img src={t.icon} alt={VEHICLE_LABELS[t.key]} className="vimg" />
-                <div className="driver-name" style={{ fontSize: 12 }}>{VEHICLE_LABELS[t.key]}</div>
-                <div className="vprice">{ready ? formatFCFA(priceFor(t.key)) : '—'}</div>
+          <div className="yn-ticket-stub">
+            <div className="yn-stub-row">
+              <div>
+                <div className="yn-stub-label">Tarif estimé</div>
+                <div className="yn-stub-price">{ready ? formatFCFA(priceFor(vehicle)) : '—'}</div>
               </div>
-            ))}
+              <div className="yn-stub-code">TCHAD<br />N&apos;Djamena</div>
+            </div>
+            <div className="yn-stub-dash" />
+            <button className="yn-stub-btn" onClick={onSearch} disabled={!ready}>
+              {ready ? 'CONFIRMER LA COURSE' : 'CHOISISSEZ VOS ADRESSES'}
+            </button>
           </div>
-          {!ready && <div className="confirm-title" style={{ marginBottom: 10 }}>CHOISISSEZ VOS ADRESSES</div>}
-          <button className="btn amber" onClick={onSearch} disabled={!ready}>
-            {ready ? 'CONFIRMER' : 'CHOISISSEZ VOS ADRESSES'}
-          </button>
-          <div className="home-indicator" />
         </div>
       )}
     </div>
@@ -632,22 +657,33 @@ function Screen2({
       <RealMap pickup={{ lat: pickup.lat, lng: pickup.lng }} dropoff={{ lat: dropoff.lat, lng: dropoff.lng }} showRoute routeColor="#e8c9a8" />
       <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
       <RouteCard pickup={pickup} dropoff={dropoff} />
-      <div className="sheet glass">
-        <div className="veh-hero"><img src={VEHICLE_ICON[vehicle]} alt={VEHICLE_LABELS[vehicle]} className="veh-hero-img" /></div>
-        <div className="confirm-title">{VEHICLE_LABELS[vehicle]} SÉLECTIONNÉE</div>
-        <div className="confirm-sub">Standard, 4 places — {formatFCFA(price)}</div>
-        <div className="pay-box" onClick={onChangePayment} style={{ cursor: 'pointer' }}>
-          <span>{paymentMethod === 'cash' ? '💵' : paymentMethod === 'airtel_money' ? '📱' : '📲'}</span>
-          <div>
-            <div className="lbl">{PAYMENT_METHOD_LABELS[paymentMethod].toUpperCase()}</div>
-            <div className="sub">Paiement à la fin de la course.</div>
+      <div className="yn-ticket">
+        <div className="yn-ticket-body">
+          <div className="veh-hero"><img src={VEHICLE_ICON[vehicle]} alt={VEHICLE_LABELS[vehicle]} className="veh-hero-img" /></div>
+          <div className="confirm-title">{VEHICLE_LABELS[vehicle]} SÉLECTIONNÉE</div>
+          <div className="confirm-sub">Standard, 4 places — {formatFCFA(price)}</div>
+          <div className="pay-box" onClick={onChangePayment} style={{ cursor: 'pointer' }}>
+            <span>{paymentMethod === 'cash' ? '💵' : paymentMethod === 'airtel_money' ? '📱' : '📲'}</span>
+            <div>
+              <div className="lbl">{PAYMENT_METHOD_LABELS[paymentMethod].toUpperCase()}</div>
+              <div className="sub">Paiement à la fin de la course.</div>
+            </div>
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--copper-light)', fontWeight: 700 }}>MODIFIER</span>
           </div>
-          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--copper-light)', fontWeight: 700 }}>MODIFIER</span>
         </div>
-        <button className="btn cyan" onClick={onConfirm} disabled={busy}>
-          {busy ? 'CONFIRMATION…' : `CONFIRMER LA COURSE (${PAYMENT_METHOD_LABELS[paymentMethod].toUpperCase()})`}
-        </button>
-        <div className="home-indicator" />
+        <div className="yn-ticket-stub">
+          <div className="yn-stub-row">
+            <div>
+              <div className="yn-stub-label">Total à payer</div>
+              <div className="yn-stub-price">{formatFCFA(price)}</div>
+            </div>
+            <div className="yn-stub-code">TCHAD<br />N&apos;Djamena</div>
+          </div>
+          <div className="yn-stub-dash" />
+          <button className="yn-stub-btn" onClick={onConfirm} disabled={busy}>
+            {busy ? 'CONFIRMATION…' : 'ÉMETTRE LE LAISSEZ-PASSER'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -673,23 +709,29 @@ function Screen3({
     <div className="screen fade">
       <RealMap pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }} />
       <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
-      <div className="title-banner glass" style={{ top: 100 }}>
-        <div className="route-label">RECHERCHE D&apos;UN CHAUFFEUR</div>
-        <div className="route-sub">Votre demande a été envoyée à tous les {VEHICLE_LABELS[trip.vehicle_type]} disponibles.</div>
+      <div className="yn-compass-wrap">
+        <div className="yn-compass-ring" />
+        <div className="yn-compass-ring r2" />
+        <div className="yn-needle" />
+        <div className="yn-compass-core" />
       </div>
-      <div className="sheet glass" style={{ paddingTop: 16 }}>
-        <div className="search-sheet">
-          <div className="spinner" />
-          <div className="search-text">
-            EN ATTENTE D&apos;UN CHAUFFEUR…
-            <br />
-            {formatFCFA(trip.estimated_price)}
+      <div className="yn-compass-label">
+        RECHERCHE D&apos;UN CHAUFFEUR
+        <span>Diffusion aux {VEHICLE_LABELS[trip.vehicle_type]} disponibles</span>
+      </div>
+      <div className="yn-ticket">
+        <div className="yn-ticket-stub">
+          <div className="yn-stub-row">
+            <div>
+              <div className="yn-stub-label">Montant réservé</div>
+              <div className="yn-stub-price">{formatFCFA(trip.estimated_price)}</div>
+            </div>
           </div>
+          <div className="yn-stub-dash" />
+          <button className="yn-stub-btn" style={{ background: 'transparent', border: '1px solid rgba(28,21,18,0.3)', color: 'var(--copper-deep)' }} onClick={onCancel} disabled={busy}>
+            ANNULER LA COURSE
+          </button>
         </div>
-        <button className="btn ghost" onClick={onCancel} disabled={busy}>
-          ANNULER LA COURSE
-        </button>
-        <div className="home-indicator" />
       </div>
     </div>
   );
@@ -733,34 +775,25 @@ function Screen4({
         <h2>CHAUFFEUR EN ROUTE</h2>
         <div className="sub-route">📍 {trip.pickup_address} → {trip.dropoff_address}</div>
       </div>
-      <div className="sheet glass">
-        <div className="driver-row">
-          <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
-          <div className="driver-info">
-            <div className="driver-name">{driver.full_name ?? 'Chauffeur'}</div>
-            <div className="driver-eta">Le chauffeur arrive vers votre position de départ</div>
-            <div className="driver-meta">
-              <span className="star-badge">{Number(driver.rating_avg).toFixed(1)} ★</span>
+      <div className="yn-ticket">
+        <div className="yn-ticket-body">
+          <div className="driver-row">
+            <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
+            <div className="driver-info">
+              <div className="driver-name">{driver.full_name ?? 'Chauffeur'}</div>
+              <div className="driver-eta">Le chauffeur arrive vers votre position de départ</div>
+              <div className="driver-meta">
+                <span className="star-badge">{Number(driver.rating_avg).toFixed(1)} ★</span>
+              </div>
+            </div>
+            <div>
+              <div className="plate">
+                <div className="plate-top">TCHAD</div>
+                <div className="plate-body">{vehicleInfo.plate}</div>
+              </div>
+              <div className="car-model">{vehicleInfo.model ?? vehicleInfo.brand}</div>
             </div>
           </div>
-          <div>
-            <div className="plate">
-              <div className="plate-top">TCHAD</div>
-              <div className="plate-body">{vehicleInfo.plate}</div>
-            </div>
-            <div className="car-model">{vehicleInfo.model ?? vehicleInfo.brand}</div>
-          </div>
-        </div>
-        <div className="pay-confirmed">
-          <div>
-            <div style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 700 }}>
-              PAIEMENT — {PAYMENT_METHOD_LABELS[paymentMethod].toUpperCase()}
-            </div>
-            <div className="amt">{formatFCFA(trip.estimated_price)}</div>
-          </div>
-          <div className="check-circle">✓</div>
-        </div>
-        <div className="btn-row">
           <button
             className="btn ghost"
             onClick={() => alert(`Appel vers ${driver.full_name ?? 'le chauffeur'} (${driver.phone ?? 'numéro indisponible'})`)}
@@ -768,10 +801,19 @@ function Screen4({
             📞 APPELER
           </button>
         </div>
-        <div className="route-sub" style={{ textAlign: 'center', marginTop: 8 }}>
-          Le trajet démarre automatiquement quand le chauffeur vous prend en charge.
+        <div className="yn-ticket-stub">
+          <div className="yn-stub-row">
+            <div>
+              <div className="yn-stub-label">Paiement — {PAYMENT_METHOD_LABELS[paymentMethod]}</div>
+              <div className="yn-stub-price">{formatFCFA(trip.estimated_price)}</div>
+            </div>
+            <div style={{ fontSize: 20 }}>✓</div>
+          </div>
+          <div className="yn-stub-dash" />
+          <div style={{ fontSize: 11, textAlign: 'center', color: 'var(--copper-dark)' }}>
+            Le trajet démarre automatiquement quand le chauffeur vous prend en charge.
+          </div>
         </div>
-        <div className="home-indicator" />
       </div>
     </div>
   );
@@ -805,35 +847,35 @@ function Screen5({
         <h2>EN ROUTE VERS DESTINATION</h2>
         <div className="sub-route">Le chauffeur vous conduit directement, aucune action requise</div>
       </div>
-      <div className="sheet glass">
-        <div className="driver-row">
-          <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
-          <div className="driver-info">
-            <div className="driver-name">{driver.full_name ?? 'Chauffeur'}</div>
-            <div className="driver-meta">
-              <span className="star-badge">{Number(driver.rating_avg).toFixed(1)} ★</span>
+      <div className="yn-ticket">
+        <div className="yn-ticket-body">
+          <div className="driver-row">
+            <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
+            <div className="driver-info">
+              <div className="driver-name">{driver.full_name ?? 'Chauffeur'}</div>
+              <div className="driver-meta">
+                <span className="star-badge">{Number(driver.rating_avg).toFixed(1)} ★</span>
+              </div>
             </div>
+            <div className="driver-name">{formatFCFA(trip.estimated_price)}</div>
           </div>
-          <div className="pay-confirmed" style={{ marginLeft: 'auto', background: 'none', border: 'none', padding: 0 }}>
-            <div className="amt">{formatFCFA(trip.estimated_price)}</div>
-          </div>
-        </div>
-        <div className="trip-timeline">
-          <div className="route-line">
-            <div className="route-dot start done" />
-            <div className="route-dash" />
-            <div className="route-dot end active" />
-          </div>
-          <div className="trip-timeline-labels">
-            <div>
-              <div className="route-sub" style={{ margin: 0 }}>{trip.pickup_address}</div>
+          <div className="trip-timeline">
+            <div className="route-line">
+              <div className="route-dot start done" />
+              <div className="route-dash" />
+              <div className="route-dot end active" />
             </div>
-            <div>
-              <div className="route-addr" style={{ fontSize: 13 }}>{trip.dropoff_address}</div>
+            <div className="trip-timeline-labels">
+              <div><div className="route-sub" style={{ margin: 0 }}>{trip.pickup_address}</div></div>
+              <div><div className="route-addr" style={{ fontSize: 13 }}>{trip.dropoff_address}</div></div>
             </div>
           </div>
         </div>
-        <div className="home-indicator" />
+        <div className="yn-ticket-stub">
+          <div style={{ fontSize: 11, textAlign: 'center', color: 'var(--copper-dark)', fontWeight: 700 }}>
+            TRAJET EN COURS — AUCUNE ACTION REQUISE
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -877,45 +919,47 @@ function Screen6({
       />
       <Header onMenuClick={onMenu} />
       <div className="title-banner glass"><h2>COURSE TERMINÉE</h2></div>
-      <div className="sheet glass">
-        <div className="driver-row">
-          <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
-          <div className="driver-info">
-            <div className="driver-name">{driver.full_name ?? 'Chauffeur'}</div>
-            <div className="driver-eta" style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
-              Paiement : {PAYMENT_METHOD_LABELS[paymentMethod]}
+      <div className="yn-ticket">
+        <div className="yn-ticket-body">
+          <div className="driver-row">
+            <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
+            <div className="driver-info">
+              <div className="driver-name">{driver.full_name ?? 'Chauffeur'}</div>
+              <div className="driver-eta" style={{ color: 'var(--text-dim)', fontWeight: 600 }}>
+                Paiement : {PAYMENT_METHOD_LABELS[paymentMethod]}
+              </div>
             </div>
           </div>
-          <div className="check-circle">✓</div>
-        </div>
-        <div className="pay-confirmed" style={{ marginTop: 0 }}>
-          <div className="amt">{formatFCFA(trip.final_price ?? trip.estimated_price)}</div>
-          <div className="check-circle">✓</div>
-        </div>
 
-        {isMobileMoney && !mobilePaymentConfirmed && (
-          <button className="btn cyan" style={{ marginTop: 10 }} onClick={onConfirmMobilePayment} disabled={busy}>
-            {busy ? 'CONFIRMATION…' : `J'AI ENVOYÉ LE PAIEMENT ${PAYMENT_METHOD_LABELS[paymentMethod].toUpperCase()}`}
-          </button>
-        )}
-        {isMobileMoney && mobilePaymentConfirmed && (
-          <div className="route-sub" style={{ marginTop: 10, color: 'var(--copper-light)', fontWeight: 700 }}>
-            ✓ Paiement {PAYMENT_METHOD_LABELS[paymentMethod]} confirmé
+          {isMobileMoney && !mobilePaymentConfirmed && (
+            <button className="btn cyan" style={{ marginBottom: 10 }} onClick={onConfirmMobilePayment} disabled={busy}>
+              {busy ? 'CONFIRMATION…' : `J'AI ENVOYÉ LE PAIEMENT ${PAYMENT_METHOD_LABELS[paymentMethod].toUpperCase()}`}
+            </button>
+          )}
+          {isMobileMoney && mobilePaymentConfirmed && (
+            <div className="route-sub" style={{ marginBottom: 10, color: 'var(--copper-light)', fontWeight: 700 }}>
+              ✓ Paiement {PAYMENT_METHOD_LABELS[paymentMethod]} confirmé
+            </div>
+          )}
+
+          <div className="stars">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <button key={i} className={`star ${rating >= i ? 'active' : ''}`} onClick={() => onRate(i)}>★</button>
+            ))}
           </div>
-        )}
-
-        <div className="stars">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <button key={i} className={`star ${rating >= i ? 'active' : ''}`} onClick={() => onRate(i)}>★</button>
-          ))}
         </div>
-        <div className="btn-row">
-          <button className="btn ghost" onClick={() => onRate(rating || 5)}>
-            ⭐ NOTER {driver.full_name?.split(' ')[0]?.toUpperCase() ?? ''}
-          </button>
-          <button className="btn emerald" onClick={onDone}>TERMINER</button>
+        <div className="yn-ticket-stub" style={{ position: 'relative' }}>
+          <span className="yn-used">UTILISÉ</span>
+          <div className="yn-stub-row">
+            <div>
+              <div className="yn-stub-label">Montant final</div>
+              <div className="yn-stub-price">{formatFCFA(trip.final_price ?? trip.estimated_price)}</div>
+            </div>
+            <div className="yn-stub-code">Nº YN-{trip.id.slice(0, 8).toUpperCase()}</div>
+          </div>
+          <div className="yn-stub-dash" />
+          <button className="yn-stub-btn" onClick={() => { if (!rating) onRate(5); onDone(); }}>TERMINER</button>
         </div>
-        <div className="home-indicator" />
       </div>
     </div>
   );
