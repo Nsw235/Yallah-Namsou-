@@ -1,5 +1,14 @@
 import { PaymentMethod, PricingRule, VehicleType } from '@/types/database';
 
+/** Modèle 3D (.glb) à afficher pour un véhicule, selon son type — partagé entre
+ *  la carte du chauffeur (son propre véhicule) et celle du passager (véhicules
+ *  disponibles autour de lui, puis le chauffeur qui vient le chercher). */
+export const CAR_MODEL_BY_TYPE: Record<VehicleType, string> = {
+  berline: '/models/berline.glb',
+  van: '/models/van.glb',
+  suv: '/models/suv.glb',
+};
+
 // Coordonnées démo pour le trajet affiché dans l'app (N'Djamena).
 // À remplacer plus tard par une vraie saisie d'adresse / géocodage.
 export const DEMO_ROUTE = {
