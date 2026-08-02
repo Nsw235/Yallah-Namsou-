@@ -1,100 +1,138 @@
-import Link from 'next/link';
-import { User, Car, ShieldCheck, ChevronRight } from 'lucide-react';
+'use client';
 
-const SPACES = [
-  {
-    href: '/client',
-    title: 'Passager',
-    description: 'Réservez votre course : sélection du véhicule, adresses et suivi en temps réel.',
-    icon: User,
-  },
-  {
-    href: '/chauffeur',
-    title: 'Chauffeur',
-    description: 'Acceptez des courses, naviguez et suivez vos gains.',
-    icon: Car,
-  },
-  {
-    href: '/admin',
-    title: 'Administration',
-    description: 'Supervisez la flotte, les chauffeurs et les statistiques.',
-    icon: ShieldCheck,
-  },
-];
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import type { Session } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
+import AuthGate from '@/components/AuthGate';
 
+const ROUTE_BY_ROLE: Record<string, string> = {
+  admin: '/admin',
+  driver: '/chauffeur',
+  passenger: '/client',
+};
+
+/**
+ * Page racine "intelligente" : plus d'écran de choix d'espace.
+ * On identifie le rôle du compte connecté (profiles.role) et on redirige
+ * automatiquement vers /admin, /chauffeur ou /client. Chaque espace garde
+ * en plus son propre contrôle de rôle (défense en profondeur) : un chauffeur
+ * qui irait taper /admin directement resterait bloqué sur "Accès refusé".
+ */
 export default function HomePage() {
+  const router = useRouter();
+  const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+  const [redirecting, setRedirecting] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    let cancelled = false;
+    setRedirecting(true);
+    supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', session.user.id)
+      .single()
+      .then(({ data, error: err }) => {
+        if (cancelled) return;
+        if (err || !data?.role) {
+          setError("Impossible de déterminer votre espace. Contactez l'administrateur.");
+          setRedirecting(false);
+          return;
+        }
+        const dest = ROUTE_BY_ROLE[data.role] ?? '/client';
+        router.replace(dest);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id, router]);
+
+  // Session en cours de résolution, ou redirection en cours : écran de chargement discret.
+  if (session === undefined || redirecting) {
+    return (
+      <div
+        style={{
+          minHeight: '100dvh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 14,
+          background: '#0a0b0d',
+        }}
+      >
+        <img src="/logo.png" alt="Yalla Nimshi" style={{ width: 84, height: 'auto', opacity: 0.9 }} />
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            border: '2px solid rgba(176,141,87,0.3)',
+            borderTopColor: '#a97a5b',
+            animation: 'spin 0.9s linear infinite',
+          }}
+        />
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      </div>
+    );
+  }
+
+  // Pas connecté : un seul écran de connexion pour tout le monde. Le rôle
+  // (passager / chauffeur / admin) est déterminé après connexion à partir du
+  // compte — un chauffeur ou un admin se connecte avec les identifiants qui
+  // lui ont été fournis, la création de compte libre ne crée que des comptes
+  // passager (voir AuthGate / trigger `handle_new_user`).
+  if (!session) {
+    return (
+      <div style={{ minHeight: '100dvh', background: '#0a0b0d' }}>
+        <AuthGate onAuthed={() => {}} />
+      </div>
+    );
+  }
+
+  // Connecté mais le rôle n'a pas pu être résolu (profil manquant, etc.).
   return (
-    <main
+    <div
       style={{
         minHeight: '100dvh',
         display: 'flex',
-        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 28,
         padding: 24,
         textAlign: 'center',
-        background:
-          'radial-gradient(ellipse at 50% 0%, rgba(169,122,91,0.16), transparent 55%), radial-gradient(ellipse at 50% 100%, rgba(107,74,53,0.14), transparent 60%), #0a0b0d',
+        background: '#0a0b0d',
+        color: '#f2f3f5',
       }}
     >
-      <img
-        src="/logo.png"
-        alt="Yallah Namsou"
-        style={{ width: 110, height: 'auto', filter: 'drop-shadow(0 4px 14px rgba(169,122,91,0.35))' }}
-      />
       <div>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: '#f2f3f5', margin: 0 }}>Choisissez votre espace</h1>
-        <p style={{ fontSize: 13, color: '#9aa0aa', marginTop: 6 }}>Yallah Namsou — N&apos;Djamena</p>
+        <p style={{ fontSize: 14, color: '#ffb3b3', marginBottom: 14 }}>{error}</p>
+        <button
+          onClick={async () => {
+            await supabase.auth.signOut();
+            window.location.reload();
+          }}
+          style={{
+            padding: '10px 20px',
+            borderRadius: 12,
+            border: 'none',
+            background: 'linear-gradient(180deg,#e8c9a8,#a97a5b)',
+            color: '#241a13',
+            fontWeight: 800,
+            fontSize: 13,
+            cursor: 'pointer',
+          }}
+        >
+          Se déconnecter
+        </button>
       </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 380 }}>
-        {SPACES.map((space) => {
-          const Icon = space.icon;
-          return (
-            <Link
-              key={space.href}
-              href={space.href}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 14,
-                padding: '16px 18px',
-                borderRadius: 18,
-                border: '1px solid rgba(176,141,87,0.28)',
-                background: 'rgba(20,22,26,0.6)',
-                backdropFilter: 'blur(16px)',
-                textAlign: 'left',
-                textDecoration: 'none',
-                color: 'inherit',
-              }}
-            >
-              <div
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: '50%',
-                  flex: '0 0 auto',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'linear-gradient(180deg,#e8c9a8,#a97a5b)',
-                  color: '#241a13',
-                }}
-              >
-                <Icon size={20} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 800, fontSize: 15, color: '#f2f3f5' }}>{space.title}</div>
-                <div style={{ fontSize: 12, color: '#9aa0aa', marginTop: 3, lineHeight: 1.35 }}>
-                  {space.description}
-                </div>
-              </div>
-              <ChevronRight size={18} color="#e8c9a8" style={{ flex: '0 0 auto' }} />
-            </Link>
-          );
-        })}
-      </div>
-    </main>
+    </div>
   );
 }
