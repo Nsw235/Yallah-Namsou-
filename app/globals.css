@@ -29,11 +29,11 @@ img, svg{ max-width:100%; }
 /* Conteneur plein écran, responsive : occupe tout l'appareil (mobile),
    se recentre en colonne sur desktop/tablette sans "coque de téléphone". */
 .wrap-outer{
-  position:relative; width:100%; height:100dvh;
+  position:relative; width:100%; height:100dvh; height:var(--app-vh, 100dvh);
   display:flex; justify-content:center; background:#000;
 }
 .device{
-  width:100%; max-width:520px; height:100dvh; height:100svh;
+  width:100%; max-width:520px; height:100dvh; height:100svh; height:var(--app-vh, 100svh);
   background:var(--bg); position:relative; overflow:hidden;
 }
 .screen{ position:absolute; inset:0; overflow:hidden; }
@@ -117,6 +117,18 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 .veh-hero{display:flex; justify-content:center; margin-bottom:10px;}
 .veh-hero-img{width:100px; height:auto; filter:drop-shadow(0 8px 18px rgba(0,0,0,0.6)); border-radius:16px;}
 .confirm-title{text-align:center; font-size:18px; font-weight:800; letter-spacing:.5px; margin-bottom:2px;}
+
+.step-indicator{ display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+.step-indicator .step{ display:flex; align-items:center; gap:10px; }
+.step-indicator .num{
+  width:26px; height:26px; border-radius:50%; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  font-size:12px; font-weight:800; background:rgba(255,255,255,0.08); color:var(--text-dim);
+}
+.step-indicator .step.active .num{ background:var(--copper); color:#06070a; }
+.step-indicator .label{ font-size:13px; font-weight:700; color:var(--text-dim); line-height:1.15; }
+.step-indicator .step.active .label{ color:var(--text); }
+.step-indicator .arrow{ color:var(--text-dim); font-size:14px; margin:0 2px; }
 .confirm-sub{text-align:center; font-size:13px; color:var(--text-dim); margin-bottom:16px;}
 .pay-box{ background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:14px; padding:12px 14px; margin-bottom:16px; display:flex; align-items:center; gap:10px; }
 .pay-box .lbl{font-size:12px; font-weight:800; letter-spacing:.5px;}
@@ -156,20 +168,18 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 .pay-confirmed .amt{font-size:16px; font-weight:800;}
 .check-circle{ width:22px; height:22px; border-radius:50%; background:var(--copper); display:flex; align-items:center; justify-content:center; color:#241a13; font-size:13px; font-weight:900; }
 
-.split{position:absolute; inset:0; display:flex;}
-.split-left, .split-right{flex:1; position:relative; display:flex; flex-direction:column; justify-content:flex-end;}
-.split-left{background:linear-gradient(180deg, #101318, #0b0d10);}
-.split-right{background:linear-gradient(180deg, #12100c, #0c0b09);}
-.split-divider{width:1px; background:rgba(255,255,255,0.12);}
-.split-header{ position:absolute; top:150px; left:0; right:0; text-align:center; font-size:12px; letter-spacing:1.4px; font-weight:800; color:var(--text-dim); }
-.split-content{padding:16px 14px calc(30px + env(safe-area-inset-bottom,0px));}
-.mini-map{ position:absolute; top:140px; left:10px; right:10px; height:280px; border-radius:16px; overflow:hidden; background:#141519; border:1px solid var(--border); }
+.trip-timeline{ display:flex; gap:12px; align-items:stretch; margin:16px 0 14px; }
+.trip-timeline-labels{ flex:1; display:flex; flex-direction:column; justify-content:space-between; min-width:0; }
+.route-dot.end.active{
+  background:var(--copper-light); box-shadow:0 0 6px var(--copper-light);
+  animation:pulse-dot 1.6s ease-in-out infinite;
+}
+@keyframes pulse-dot{
+  0%, 100%{ box-shadow:0 0 6px var(--copper-light); }
+  50%{ box-shadow:0 0 14px 4px var(--copper-light); }
+}
+
 .brand-tag{position:absolute; bottom:100px; left:14px; font-size:10px; color:var(--text-dim); display:flex; align-items:center; gap:5px; font-weight:700;}
-.fare-box{background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:12px; padding:10px 12px; margin-top:8px;}
-.fare-row{display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px;}
-.fare-row:last-child{margin-bottom:0;}
-.fare-row .k{color:var(--text-dim);}
-.fare-row .v{font-weight:700;}
 
 .stars{display:flex; gap:8px; justify-content:center; margin:14px 0;}
 .stars .star{font-size:26px; color:#3a3d42; cursor:pointer; transition:color .15s ease, transform .15s ease; background:none; border:none;}

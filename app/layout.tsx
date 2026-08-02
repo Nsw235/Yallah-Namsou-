@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import './tailwind.css';
+import ViewportHeightFix from '@/components/ViewportHeightFix';
 
 export const metadata: Metadata = {
   title: 'Yalla Nimshi — Service de transport d’exception, N’Djamena',
@@ -25,7 +26,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" />
       </head>
-      <body>{children}</body>
+      <body>
+        <ViewportHeightFix />
+        {children}
+      </body>
     </html>
   );
 }
