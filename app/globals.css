@@ -263,6 +263,85 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
   color:#ffb3b3; padding:12px 14px; border-radius:14px; font-size:12px; text-align:center;
 }
 
+/* ================================================================== */
+/* REFONTE ÉCRAN PASSAGER — "Laissez-Passer"                            */
+/* Talon billet + carte plein écran + chemin de progression type vol.   */
+/* ================================================================== */
+
+/* Barre d'adresse compacte flottant sur la carte (remplace la grande
+   sheet qui masquait la moitié de l'écran). Un tap l'ouvre en plein. */
+.yn-map-bar{
+  position:absolute; top:58px; left:14px; right:14px; z-index:20;
+  background:rgba(10,11,13,0.82); border:1px solid rgba(232,201,168,0.22);
+  backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+  border-radius:16px; padding:11px 14px; display:flex; align-items:center; gap:8px;
+  cursor:pointer;
+}
+.yn-map-bar .addr{ font-size:12.5px; color:var(--text); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.yn-map-bar .addr.placeholder{ color:var(--text-dim); }
+.yn-map-bar .sep{ color:var(--text-dim); font-size:12px; }
+
+/* Chemin de progression façon suivi de vol : DÉP · RECH · ATT · ROUTE · ARR */
+.yn-flightpath{
+  position:absolute; top:110px; left:14px; right:14px; z-index:20;
+  background:rgba(10,11,13,0.78); border:1px solid var(--border);
+  backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+  border-radius:14px; padding:10px 14px;
+}
+.yn-fp-row{ display:flex; justify-content:space-between; position:relative; }
+.yn-fp-line{ position:absolute; top:3px; left:6%; right:6%; height:1px; background:var(--border); }
+.yn-fp-stage{ flex:1; text-align:center; font-size:9px; letter-spacing:.5px; font-weight:700; color:var(--text-dim); position:relative; }
+.yn-fp-dot{ width:6px; height:6px; border-radius:50%; background:var(--border); margin:0 auto 5px; position:relative; z-index:1; }
+.yn-fp-stage.active{ color:var(--copper-light); }
+.yn-fp-stage.active .yn-fp-dot{ background:var(--copper-light); box-shadow:0 0 6px var(--copper-light); }
+.yn-fp-stage.done .yn-fp-dot{ background:var(--copper); }
+
+/* Le "billet" : talon cuivré sombre + talon kraft détachable, séparés
+   par une ligne perforée. Élément signature de l'écran passager. */
+.yn-ticket{ position:absolute; left:0; right:0; bottom:0; z-index:30; }
+.yn-ticket-body{
+  background:var(--copper-deep); border:1px solid rgba(169,122,91,0.28); border-bottom:none;
+  border-radius:26px 26px 0 0; padding:16px 16px 0;
+}
+.yn-ticket-stub{
+  background:var(--copper-cream); color:var(--copper-deep); position:relative;
+  padding:14px 16px calc(20px + env(safe-area-inset-bottom,0px));
+  border-top:2px dashed rgba(169,122,91,0.55);
+}
+.yn-ticket-stub::before, .yn-ticket-stub::after{
+  content:''; position:absolute; top:-11px; width:22px; height:22px; border-radius:50%; background:#000;
+}
+.yn-ticket-stub::before{ left:-11px; } .yn-ticket-stub::after{ right:-11px; }
+.yn-stub-row{ display:flex; justify-content:space-between; align-items:flex-end; }
+.yn-stub-label{ font-size:9.5px; letter-spacing:1px; font-weight:700; color:var(--copper-dark); text-transform:uppercase; }
+.yn-stub-price{ font-size:22px; font-weight:800; line-height:1.1; }
+.yn-stub-code{ font-size:10px; color:var(--copper-dark); text-align:right; }
+.yn-stub-dash{ border-top:1px dashed rgba(28,21,18,0.25); margin:10px 0; }
+.yn-stub-btn{ width:100%; border:none; border-radius:13px; padding:14px; font-size:13px; font-weight:800; letter-spacing:.3px; background:var(--copper-deep); color:var(--copper-cream); cursor:pointer; }
+.yn-stub-btn:disabled{ opacity:.5; }
+.yn-used{
+  position:absolute; top:6px; right:12px; border:1.5px solid rgba(255,95,95,0.55); color:rgba(200,60,60,0.75);
+  font-size:9.5px; font-weight:800; padding:2px 8px; transform:rotate(-9deg); letter-spacing:1px;
+}
+
+/* Sélecteur de classe (remplace .vehicles/.vcard dans ce nouvel écran) */
+.yn-classes{ display:flex; gap:8px; margin:12px 0; }
+.yn-cclass{ flex:1; text-align:center; border-radius:14px; padding:9px 6px 10px; background:rgba(255,255,255,0.03); border:1.5px solid rgba(255,255,255,0.08); cursor:pointer; }
+.yn-cclass img{ width:100%; max-width:52px; margin-bottom:4px; display:block; margin-left:auto; margin-right:auto; }
+.yn-cclass .cname{ font-size:12px; font-weight:700; color:var(--copper-cream); }
+.yn-cclass .cprice{ font-size:10.5px; color:var(--text-dim); margin-top:1px; }
+.yn-cclass.selected{ border-color:var(--copper); background:rgba(169,122,91,0.12); box-shadow:0 0 14px rgba(169,122,91,0.4); }
+
+/* Recherche de chauffeur : rose des vents tournante (remplace le sonar). */
+.yn-compass-wrap{ position:absolute; top:38%; left:50%; transform:translate(-50%,-50%); width:170px; height:170px; }
+.yn-compass-ring{ position:absolute; inset:0; border-radius:50%; border:1px solid rgba(232,201,168,0.4); }
+.yn-compass-ring.r2{ inset:24px; border-color:rgba(232,201,168,0.25); }
+.yn-needle{ position:absolute; top:50%; left:50%; width:2px; height:64px; background:linear-gradient(var(--copper-light), transparent); transform-origin:50% 100%; animation:yn-spin 3.2s cubic-bezier(.4,0,.2,1) infinite; }
+@keyframes yn-spin{ 0%{ transform:translate(-50%,-100%) rotate(0deg); } 50%{ transform:translate(-50%,-100%) rotate(190deg); } 100%{ transform:translate(-50%,-100%) rotate(360deg); } }
+.yn-compass-core{ position:absolute; top:50%; left:50%; width:14px; height:14px; border-radius:50%; transform:translate(-50%,-50%); background:radial-gradient(circle at 35% 30%, var(--copper-cream), var(--copper)); box-shadow:0 0 16px 4px rgba(169,122,91,0.55); }
+.yn-compass-label{ position:absolute; top:calc(38% + 100px); left:0; right:0; text-align:center; font-size:12px; color:var(--text-dim); font-weight:700; letter-spacing:.3px; }
+.yn-compass-label span{ color:var(--copper-light); font-weight:700; display:block; font-size:11px; margin-top:4px; }
+
 /* ------------------------------------------------------------------ */
 /* Espace chauffeur (/chauffeur) et backoffice admin (/admin)          */
 /* Mise en page desktop, distincte de l'écran mobile passager.         */
