@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { Trip, VehicleType } from '@/types/database';
-import { formatFCFA, haversineKm, VEHICLE_LABELS } from '@/lib/pricing';
+import { CAR_MODEL_BY_TYPE, formatFCFA, haversineKm, VEHICLE_LABELS } from '@/lib/pricing';
 import {
   MyDriverProfile,
   MyVehicle,
@@ -43,13 +43,6 @@ import AuthGate from '@/components/AuthGate';
 import RealMap, { type NavigationStep } from '@/components/RealMap';
 
 const VEHICLE_TYPES: VehicleType[] = ['berline', 'van', 'suv'];
-
-/** Modèle 3D (.glb) à afficher pour le véhicule du chauffeur, selon son type. */
-const CAR_MODEL_BY_TYPE: Record<VehicleType, string> = {
-  berline: '/models/berline.glb',
-  van: '/models/van.glb',
-  suv: '/models/suv.glb',
-};
 
 function playNotificationBeep() {
   try {

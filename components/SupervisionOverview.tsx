@@ -26,6 +26,8 @@ import { checkIsAdmin } from '@/lib/admin';
 import AuthGate from '@/components/AuthGate';
 import { MOCK_STATS } from '@/components/legacy/mockData';
 import { getFleetOverview, subscribeToFleetChanges, type FleetVehicle } from '@/lib/admin';
+import { CAR_MODEL_BY_TYPE } from '@/lib/pricing';
+import type { VehicleType } from '@/types/database';
 import RealMap, { type MapPin as MapPinData } from '@/components/RealMap';
 
 type NavKey = 'flotte' | 'carte' | 'stats' | 'parametres';
@@ -276,7 +278,10 @@ export default function SupervisionOverview() {
               buildings3d
               pins={fleet
                 .filter((v) => v.last_lat != null && v.last_lng != null)
-                .map<MapPinData>((v) => ({ position: { lat: v.last_lat as number, lng: v.last_lng as number }, emoji: '🚗' }))}
+                .map<MapPinData>((v) => ({
+                  position: { lat: v.last_lat as number, lng: v.last_lng as number },
+                  car3d: { modelUrl: CAR_MODEL_BY_TYPE[v.type as VehicleType] },
+                }))}
             />
             {fleet
               .filter((v) => v.last_lat != null && v.last_lng != null)

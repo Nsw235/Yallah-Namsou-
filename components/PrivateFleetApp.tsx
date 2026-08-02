@@ -5,6 +5,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
 import { PaymentMethod, PricingRule, Trip, VehicleType } from '@/types/database';
 import {
+  CAR_MODEL_BY_TYPE,
   PAYMENT_METHOD_LABELS,
   VEHICLE_ICON,
   VEHICLE_LABELS,
@@ -413,7 +414,10 @@ function Screen1({
   const ready = !!pickup && !!dropoff;
   const carPins = availableVehicles
     .filter((v) => v.last_lat != null && v.last_lng != null)
-    .map((v) => ({ position: { lat: v.last_lat as number, lng: v.last_lng as number }, emoji: '🚗' }));
+    .map((v) => ({
+      position: { lat: v.last_lat as number, lng: v.last_lng as number },
+      car3d: { modelUrl: CAR_MODEL_BY_TYPE[v.type] },
+    }));
 
   return (
     <div className="screen fade">
@@ -682,7 +686,12 @@ function Screen4({
     <div className="screen fade">
       <RealMap
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
-        pins={[{ position: driverPos ?? { lat: trip.pickup_lat, lng: trip.pickup_lng }, emoji: '🚗' }]}
+        pins={[
+          {
+            position: driverPos ?? { lat: trip.pickup_lat, lng: trip.pickup_lng },
+            car3d: { modelUrl: CAR_MODEL_BY_TYPE[trip.vehicle_type] },
+          },
+        ]}
       />
       <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
       <div className="title-banner glass">
@@ -773,7 +782,7 @@ function Screen5({
               dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
               showRoute
               routeColor="#e8c9a8"
-              pins={driverPos ? [{ position: driverPos, emoji: '🚗' }] : []}
+              pins={driverPos ? [{ position: driverPos, car3d: { modelUrl: CAR_MODEL_BY_TYPE[trip.vehicle_type] } }] : []}
             />
           </div>
           <div className="split-content" style={{ paddingTop: 300 }}>
