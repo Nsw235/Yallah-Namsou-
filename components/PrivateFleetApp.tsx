@@ -457,7 +457,7 @@ function Screen1({
       <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
 
       {!sheetExpanded ? (
-        <div className="sheet glass copper-texture" style={{ paddingTop: 14, paddingBottom: 18 }} onClick={onExpandSheet}>
+        <div className="sheet glass copper-texture sheet-solid" style={{ paddingTop: 14, paddingBottom: 18 }} onClick={onExpandSheet}>
           <div className="route-sub" style={{ marginBottom: 8 }}>
             {availableVehicles.length > 0
               ? `${availableVehicles.length} véhicule${availableVehicles.length > 1 ? 's' : ''} disponible${availableVehicles.length > 1 ? 's' : ''} près de vous`
@@ -469,7 +469,7 @@ function Screen1({
           <div className="home-indicator" />
         </div>
       ) : (
-        <div className="sheet glass copper-texture" style={{ paddingTop: 16 }}>
+        <div className="sheet glass copper-texture sheet-solid sheet-compact" style={{ paddingTop: 16 }}>
           <div className="step-indicator">
             <div className={`step ${!ready ? 'active' : ''}`}>
               <div className="num">1</div>
