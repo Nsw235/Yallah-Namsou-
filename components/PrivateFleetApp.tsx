@@ -90,7 +90,31 @@ export default function PrivateFleetApp() {
   // sinon la RLS Supabase renvoie 0 ligne silencieusement avant que le token soit prêt)
   useEffect(() => {
     if (!session) return;
-    getPricingRules().then(setPricingRules).catch((e) => setError(e.message));
+    getPricingRules()
+      .then(setPricingRules)
+      .catch(async (e: any) => {
+        const msg = String(e?.message ?? '');
+        if (msg.toLowerCase().includes('jwt issued at future') || msg.toLowerCase().includes('clock')) {
+          // Cause quasi certaine : l'heure du téléphone est décalée par rapport
+          // au serveur, donc le jeton d'authentification semble "émis dans le
+          // futur" et Supabase le rejette. On retente une fois avec un jeton
+          // frais (parfois suffisant si l'écart est faible) avant d'afficher
+          // un message clair, actionnable, plutôt que l'erreur technique brute.
+          try {
+            const { data } = await supabase.auth.refreshSession();
+            if (data.session) {
+              const rules = await getPricingRules();
+              setPricingRules(rules);
+              return;
+            }
+          } catch {
+            /* on retombe sur le message ci-dessous */
+          }
+          setError("L'heure de votre téléphone semble incorrecte. Vérifiez la date et l'heure dans les réglages, puis relancez l'application.");
+          return;
+        }
+        setError(e.message);
+      });
   }, [session]);
 
   // Voitures dispos affichées sur la carte avant même le choix d'une adresse.
@@ -446,6 +470,17 @@ function Screen1({
         </div>
       ) : (
         <div className="sheet glass copper-texture" style={{ paddingTop: 16 }}>
+          <div className="step-indicator">
+            <div className={`step ${!ready ? 'active' : ''}`}>
+              <div className="num">1</div>
+              <div className="label">Confirmer le<br />ramassage</div>
+            </div>
+            <div className="arrow">→</div>
+            <div className={`step ${ready ? 'active' : ''}`}>
+              <div className="num">2</div>
+              <div className="label">Sélectionner le<br />service</div>
+            </div>
+          </div>
           <AddressField label="DÉPART" placeholder="D'où partez-vous ?" value={pickup} onChange={onPickupChange} />
           <div style={{ height: 10 }} />
           <AddressField label="DESTINATION" placeholder="Où allez-vous ?" value={dropoff} onChange={onDropoffChange} />
@@ -758,44 +793,47 @@ function Screen5({
 }) {
   return (
     <div className="screen fade">
-      <div className="split">
-        <div className="split-left">
-          <div className="split-header" style={{ left: 0, right: '50%' }}>EN COURSE</div>
-          <div className="split-content">
-            <div className="driver-row" style={{ marginBottom: 6 }}>
-              <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
-              <div className="driver-info">
-                <div className="driver-name">{driver.full_name ?? 'Chauffeur'}</div>
-                <div className="driver-meta">
-                  <span className="star-badge">{Number(driver.rating_avg).toFixed(1)} ★</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="split-divider" />
-        <div className="split-right">
-          <div className="split-header" style={{ left: '50%', right: 0 }}>SUIVI DU TRAJET</div>
-          <div className="mini-map">
-            <RealMap
-              pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
-              dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
-              showRoute
-              routeColor="#e8c9a8"
-              pins={driverPos ? [{ position: driverPos, car3d: { modelUrl: CAR_MODEL_BY_TYPE[trip.vehicle_type] } }] : []}
-            />
-          </div>
-          <div className="split-content" style={{ paddingTop: 300 }}>
-            <div className="fare-box">
-              <div className="fare-row"><span className="k">DESTINATION</span><span className="v">{trip.dropoff_address}</span></div>
-              <div className="fare-row"><span className="k">Prix</span><span className="v">{formatFCFA(trip.estimated_price)}</span></div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <RealMap
+        pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
+        dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
+        showRoute
+        routeColor="#e8c9a8"
+        pins={driverPos ? [{ position: driverPos, car3d: { modelUrl: CAR_MODEL_BY_TYPE[trip.vehicle_type] } }] : []}
+      />
       <Header onMenuClick={onMenu} />
-      <div className="route-sub" style={{ position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 40 }}>
-        Le chauffeur termine la course depuis son tableau de bord.
+      <div className="title-banner glass">
+        <h2>EN ROUTE VERS DESTINATION</h2>
+        <div className="sub-route">Le chauffeur vous conduit directement, aucune action requise</div>
+      </div>
+      <div className="sheet glass">
+        <div className="driver-row">
+          <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
+          <div className="driver-info">
+            <div className="driver-name">{driver.full_name ?? 'Chauffeur'}</div>
+            <div className="driver-meta">
+              <span className="star-badge">{Number(driver.rating_avg).toFixed(1)} ★</span>
+            </div>
+          </div>
+          <div className="pay-confirmed" style={{ marginLeft: 'auto', background: 'none', border: 'none', padding: 0 }}>
+            <div className="amt">{formatFCFA(trip.estimated_price)}</div>
+          </div>
+        </div>
+        <div className="trip-timeline">
+          <div className="route-line">
+            <div className="route-dot start done" />
+            <div className="route-dash" />
+            <div className="route-dot end active" />
+          </div>
+          <div className="trip-timeline-labels">
+            <div>
+              <div className="route-sub" style={{ margin: 0 }}>{trip.pickup_address}</div>
+            </div>
+            <div>
+              <div className="route-addr" style={{ fontSize: 13 }}>{trip.dropoff_address}</div>
+            </div>
+          </div>
+        </div>
+        <div className="home-indicator" />
       </div>
     </div>
   );
