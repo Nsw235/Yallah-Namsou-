@@ -363,8 +363,8 @@ export default function DriverDashboard() {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-[#1c1108] p-6 text-center text-[#f2e9dd]">
         <div>
-          <h2 className="text-lg font-extrabold">Compte en attente de validation</h2>
-          <p className="mt-1 text-sm text-[#c9bba8]">
+          <h2 className="text-[15px] font-medium">Compte en attente de validation</h2>
+          <p className="mt-1.5 text-[12.5px] text-[#a89680]">
             Votre compte chauffeur doit être approuvé par un administrateur avant de recevoir des courses.
           </p>
         </div>
@@ -442,22 +442,24 @@ export default function DriverDashboard() {
         />
       </div>
 
-      <div className="relative z-10 mt-3 ml-3 flex w-fit items-center gap-2.5 rounded-2xl bg-[#1c1108]/85 px-3 py-2 backdrop-blur">
-        <div className="flex h-10 w-10 flex-none items-center justify-center overflow-hidden rounded-full border-2 border-[#e8c9a8] bg-[#e8c9a8]/20 text-xs font-extrabold text-[#e8c9a8]">
+      <div className="relative z-10 mt-4 ml-3.5 flex w-fit items-center gap-2">
+        <div className="flex h-8 w-8 flex-none items-center justify-center rounded-full border-[1.5px] border-[#6b4a35] text-[10px] font-medium text-[#e8c9a8]">
           {initials(profile?.full_name ?? null)}
         </div>
         <div className="flex flex-col leading-tight">
-          <span className="text-xs font-bold text-[#e8c9a8]">{profile?.full_name ?? 'Chauffeur'}</span>
+          <span className="text-[11px] font-medium text-[#f7e6d4]">{profile?.full_name ?? 'Chauffeur'}</span>
           <span
-            className={`text-[10px] font-extrabold ${
-              step === 'available' && online
-                ? 'text-[#5be08a]'
-                : step === 'available' && !online
-                  ? 'text-[#c9bba8]'
-                  : 'text-[#f0c05a]'
-            }`}
+            className="font-mono text-[9px] tracking-wide"
+            style={{
+              color:
+                step === 'available' && online
+                  ? '#5be08a'
+                  : step === 'available' && !online
+                    ? '#7a6a58'
+                    : '#e8c9a8',
+            }}
           >
-            ● {step === 'available' ? (online ? 'En ligne' : 'Hors ligne') : step === 'summary' ? 'Disponible' : 'Occupé'}
+            {Number(profile?.rating_avg ?? 0).toFixed(1)} · {step === 'available' ? (online ? 'EN LIGNE' : 'HORS LIGNE') : step === 'summary' ? 'DISPONIBLE' : 'OCCUPÉ'}
           </span>
         </div>
 
@@ -465,12 +467,13 @@ export default function DriverDashboard() {
           <button
             onClick={handleToggleOnline}
             disabled={busy}
-            className={`relative ml-1 h-6 w-11 flex-none rounded-full transition-colors ${online ? 'bg-[#2fae5c]' : 'bg-white/15'}`}
+            className="relative ml-1 h-[15px] w-[28px] flex-none rounded-full border-[0.5px] border-[#6b4a35] bg-[#2a2118]"
             aria-pressed={online}
+            aria-label="Basculer en ligne / hors ligne"
           >
             <span
-              className="absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all duration-200"
-              style={{ left: online ? 22 : 2 }}
+              className="absolute top-[1.5px] h-3 w-3 rounded-full bg-[#e8c9a8] transition-all duration-200"
+              style={{ left: online ? 13 : 1.5 }}
             />
           </button>
         )}
@@ -483,11 +486,11 @@ export default function DriverDashboard() {
       )}
 
       {error && (
-        <div className="relative z-10 mx-3 mt-2 rounded-xl bg-red-500/15 px-3 py-2 text-xs text-red-200">{error}</div>
+        <div className="relative z-10 mx-3 mt-2 border-[0.5px] border-[rgba(226,75,74,0.3)] px-3 py-2 text-[11px] text-[#e2807f]">{error}</div>
       )}
       {newRequestAlert && (
-        <div className="relative z-10 mx-3 mt-2 rounded-xl bg-[#e8c9a8]/15 px-3 py-2 text-xs font-bold text-[#e8c9a8]">
-          🔔 Nouvelle course disponible !
+        <div className="relative z-10 mx-3 mt-2 border-[0.5px] border-[rgba(169,122,91,0.3)] px-3 py-2 text-[11px] text-[#e8c9a8]">
+          Nouvelle course disponible
         </div>
       )}
 
@@ -505,47 +508,54 @@ export default function DriverDashboard() {
 
       <div className="relative z-10">
         {step === 'available' && (
-          <div className="flex gap-3 overflow-x-auto px-3 pb-3" style={{ scrollSnapType: 'x mandatory' }}>
+          <div className="flex gap-2.5 overflow-x-auto px-3 pb-3" style={{ scrollSnapType: 'x mandatory' }}>
             {sortedPending.length === 0 && (
-              <div className="w-full rounded-2xl bg-[#f5efe3] p-4 text-center text-sm text-[#6b6459]">
+              <div className="w-full border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c]/90 p-4 text-center text-xs text-[#8a7358]">
                 Aucune course en attente pour le moment.
               </div>
             )}
             {sortedPending.map((t, i) => (
-              <div key={t.id} className="w-64 flex-none rounded-2xl bg-[#f5efe3] p-3" style={{ scrollSnapAlign: 'start' }}>
-                <span className="inline-block rounded-full bg-[#dff3e6] px-2.5 py-1 text-[11px] font-extrabold text-[#1c8a4a]">
-                  {i === 0 ? 'Course la plus proche' : 'En Attente'}
-                </span>
-                <div className="mt-1 text-xs font-bold text-[#6b6459]">{t.passenger_profile?.full_name ?? 'Passager'}</div>
-                <div className="mt-0.5 text-sm font-extrabold text-[#1c1108]">{t.pickup_address ?? 'Adresse de prise en charge'}</div>
-                <div className="text-xs text-[#6b6459]">→ {t.dropoff_address ?? 'Destination'}</div>
-                <div className="mt-1 flex items-baseline justify-between">
-                  <span className="text-lg font-extrabold text-[#1c1108]">{formatFCFA(t.estimated_price)}</span>
-                  {driverPos && (
-                    <span className="text-[11px] font-bold text-[#6b6459]">
-                      {haversineKm(driverPos.lat, driverPos.lng, t.pickup_lat, t.pickup_lng).toFixed(1)} km
+              <div key={t.id} className="flex w-64 flex-none" style={{ scrollSnapAlign: 'start' }}>
+                <div
+                  className="w-[3px] flex-none"
+                  style={{ background: 'repeating-linear-gradient(180deg,#6b4a35 0 4px,transparent 4px 8px)' }}
+                />
+                <div className={`flex-1 border-[0.5px] border-l-0 p-3 ${i === 0 ? 'border-[#a97a5b] bg-[#a97a5b]/10' : 'border-[rgba(169,122,91,0.28)] bg-[#14100c]/90'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[8px] font-medium tracking-wide text-[#8a7358]">
+                      MANIFESTE {i === 0 ? '· PLUS PROCHE' : ''}
                     </span>
-                  )}
-                </div>
-                <div className="mt-1.5 flex gap-1">
-                  {VEHICLE_TYPES.map((vt) => (
-                    <span
-                      key={vt}
-                      className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
-                        vt === t.vehicle_type ? 'bg-[#e8c9a8] text-[#5a3a1c]' : 'bg-[#e4dccb] text-[#8a8378]'
-                      }`}
-                    >
-                      {VEHICLE_LABELS[vt]}
-                    </span>
-                  ))}
-                </div>
-                <div className="mt-2 flex gap-2">
-                  <button disabled={busy} onClick={() => handleAccept(t)} className="flex-1 rounded-xl bg-[#2fae5c] py-2.5 text-sm font-extrabold text-white">
-                    Accepter
-                  </button>
-                  <button disabled={busy} onClick={() => handleDismiss(t.id)} className="flex-1 rounded-xl bg-[#cfc7b8] py-2.5 text-sm font-extrabold text-[#6b6459]">
-                    Refuser
-                  </button>
+                    {driverPos && (
+                      <span className="font-mono text-[8px] text-[#8a7358]">
+                        {haversineKm(driverPos.lat, driverPos.lng, t.pickup_lat, t.pickup_lng).toFixed(1)} KM
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 truncate text-[11.5px] text-[#f7e6d4]">
+                    {t.pickup_address ?? 'Départ'} → {t.dropoff_address ?? 'Destination'}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-[#8a7358]">{t.passenger_profile?.full_name ?? 'Passager'} · {VEHICLE_LABELS[t.vehicle_type]}</div>
+                  <div className="mt-1.5 flex items-center justify-between">
+                    <span className="font-mono text-sm text-[#f7e6d4]">{formatFCFA(t.estimated_price)}</span>
+                    <div className="flex gap-1.5">
+                      <button
+                        disabled={busy}
+                        onClick={() => handleDismiss(t.id)}
+                        aria-label="Refuser"
+                        className="flex h-6 w-6 items-center justify-center rounded-full border-[0.5px] border-[rgba(226,75,74,0.4)] text-[#e2807f]"
+                      >
+                        <span className="text-xs leading-none">✕</span>
+                      </button>
+                      <button
+                        disabled={busy}
+                        onClick={() => handleAccept(t)}
+                        aria-label="Accepter"
+                        className="flex h-6 w-6 items-center justify-center rounded-full bg-[#a97a5b] text-[#241a13]"
+                      >
+                        <span className="text-xs leading-none">✓</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -553,144 +563,134 @@ export default function DriverDashboard() {
         )}
 
         {step === 'accepted' && active && (
-          <div className="mx-3 mb-3 rounded-2xl bg-[#f5efe3] p-3">
+          <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c]/92">
             <button
               onClick={() => setTripCardExpanded((v) => !v)}
-              className="flex w-full items-center justify-between gap-2 text-left"
+              className="flex w-full items-center justify-between gap-2 border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] px-3 py-2.5 text-left"
             >
-              <span className="inline-block rounded-full bg-[#dff3e6] px-2.5 py-1 text-[11px] font-extrabold text-[#1c8a4a]">
-                En route pour pickup
-              </span>
-              <ChevronUp size={16} className={`flex-none text-[#8a8378] transition-transform ${tripCardExpanded ? '' : 'rotate-180'}`} />
+              <span className="text-[9px] font-medium tracking-wide text-[#e8c9a8]">EN ROUTE VERS LE PASSAGER</span>
+              <ChevronUp size={13} className={`flex-none text-[#8a7358] transition-transform ${tripCardExpanded ? '' : 'rotate-180'}`} />
             </button>
             {!tripCardExpanded && (
-              <div className="mt-1.5 flex items-center justify-between">
-                <span className="truncate text-sm font-extrabold text-[#1c1108]">{active.pickup_address ?? 'Adresse de prise en charge'}</span>
-                <span className="ml-2 flex-none text-sm font-extrabold text-[#1c1108]">{formatFCFA(active.estimated_price)}</span>
+              <div className="flex items-center justify-between px-3 py-2.5">
+                <span className="truncate text-[11.5px] text-[#f7e6d4]">{active.pickup_address ?? 'Adresse de prise en charge'}</span>
+                <span className="ml-2 flex-none font-mono text-[13px] text-[#f7e6d4]">{formatFCFA(active.estimated_price)}</span>
               </div>
             )}
             {tripCardExpanded && (
-              <>
+              <div className="px-3 py-2.5">
                 <TripCardBody trip={active} passengerName={passengerContact?.full_name ?? null} showDestinationLabel="Destination" />
                 {passengerContact?.phone && (
                   <a
                     href={`tel:${passengerContact.phone}`}
-                    className="mt-2 flex items-center justify-center gap-1.5 rounded-xl bg-[#2d6fe0] py-2 text-xs font-extrabold text-white"
+                    className="mt-2 flex items-center justify-center gap-1.5 border-[0.5px] border-[rgba(169,122,91,0.28)] py-2 text-[10.5px] text-[#e8c9a8]"
                   >
-                    Contacter le client · {passengerContact.phone}
+                    Contacter · {passengerContact.phone}
                   </a>
                 )}
-              </>
+              </div>
             )}
-            <div className="mt-2 flex gap-2">
-              <button disabled={busy} onClick={handleCancel} className="flex-1 rounded-xl bg-[#e0453f] py-2.5 text-sm font-extrabold text-white">
-                Annuler la course
+            <div className="flex border-t-[0.5px] border-[rgba(169,122,91,0.2)]">
+              <button
+                disabled={busy}
+                onClick={handleCancel}
+                className="flex flex-1 items-center justify-center gap-1.5 border-r-[0.5px] border-[rgba(169,122,91,0.2)] py-2.5 text-[10.5px] text-[#e2807f]"
+              >
+                ✕ Annuler
               </button>
-              <button disabled={busy} onClick={handleArrive} className="flex-1 rounded-xl bg-[#2fae5c] py-2.5 text-sm font-extrabold text-white">
-                J&apos;arrive
+              <button disabled={busy} onClick={handleArrive} className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[10.5px] text-[#e8c9a8]">
+                ✓ J&apos;arrive
               </button>
             </div>
           </div>
         )}
 
         {step === 'in_progress' && active && (
-          <div className="mx-3 mb-3 rounded-2xl bg-[#f5efe3] p-3">
-            <button
-              onClick={() => setTripCardExpanded((v) => !v)}
-              className="flex w-full items-center justify-between gap-2 text-left"
-            >
-              <span className="inline-block rounded-full bg-[#2fae5c] px-2.5 py-1 text-[11px] font-extrabold text-white">
-                Avec {passengerContact?.full_name ?? 'la cliente'}
-              </span>
-              <ChevronUp size={16} className={`flex-none text-[#8a8378] transition-transform ${tripCardExpanded ? '' : 'rotate-180'}`} />
-            </button>
-            {!tripCardExpanded && (
-              <div className="mt-1.5 flex items-center justify-between">
-                <span className="truncate text-sm font-extrabold text-[#1c1108]">→ {active.dropoff_address ?? 'Destination'}</span>
-                <span className="ml-2 flex-none text-sm font-extrabold text-[#1c1108]">{formatFCFA(active.estimated_price)}</span>
-              </div>
-            )}
-            {tripCardExpanded && (
-              <>
-                <TripCardBody trip={active} passengerName={passengerContact?.full_name ?? null} showDestinationLabel="Destination" />
-                {passengerContact?.phone && (
-                  <a
-                    href={`tel:${passengerContact.phone}`}
-                    className="mt-2 flex items-center justify-center gap-1.5 rounded-xl bg-[#2d6fe0] py-2 text-xs font-extrabold text-white"
-                  >
-                    Contacter le client · {passengerContact.phone}
-                  </a>
-                )}
-                <button onClick={openExternalNavigation} className="mt-2 w-full text-center text-[11px] font-bold text-[#6b6459] underline">
-                  Ouvrir dans Maps (secours hors-ligne)
-                </button>
-              </>
-            )}
-            <button disabled={busy} onClick={handleFinish} className="mt-2 w-full rounded-xl bg-[#2fae5c] py-3 text-sm font-extrabold text-white">
+          <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)]">
+            <div className="bg-[#14100c]/92">
+              <button
+                onClick={() => setTripCardExpanded((v) => !v)}
+                className="flex w-full items-center justify-between gap-2 border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] px-3 py-2.5 text-left"
+              >
+                <span className="text-[9px] font-medium tracking-wide text-[#e8c9a8]">
+                  AVEC {(passengerContact?.full_name ?? 'LA CLIENTE').toUpperCase()}
+                </span>
+                <ChevronUp size={13} className={`flex-none text-[#8a7358] transition-transform ${tripCardExpanded ? '' : 'rotate-180'}`} />
+              </button>
+              {!tripCardExpanded && (
+                <div className="flex items-center justify-between px-3 py-2.5">
+                  <span className="truncate text-[11.5px] text-[#f7e6d4]">→ {active.dropoff_address ?? 'Destination'}</span>
+                  <span className="ml-2 flex-none font-mono text-[13px] text-[#f7e6d4]">{formatFCFA(active.estimated_price)}</span>
+                </div>
+              )}
+              {tripCardExpanded && (
+                <div className="px-3 py-2.5">
+                  <TripCardBody trip={active} passengerName={passengerContact?.full_name ?? null} showDestinationLabel="Destination" />
+                  {passengerContact?.phone && (
+                    <a
+                      href={`tel:${passengerContact.phone}`}
+                      className="mt-2 flex items-center justify-center gap-1.5 border-[0.5px] border-[rgba(169,122,91,0.28)] py-2 text-[10.5px] text-[#e8c9a8]"
+                    >
+                      Contacter · {passengerContact.phone}
+                    </a>
+                  )}
+                  <button onClick={openExternalNavigation} className="mt-2 w-full text-center text-[10px] text-[#8a7358] underline">
+                    Ouvrir dans Maps (secours hors-ligne)
+                  </button>
+                </div>
+              )}
+            </div>
+            <button disabled={busy} onClick={handleFinish} className="w-full bg-[#efd9b8] py-3 text-[12.5px] font-medium text-[#3c2a1a]">
               Terminer la course
             </button>
-            <div className="mt-1 text-center text-[11px] text-[#8a8378]">Glisser pour terminer</div>
           </div>
         )}
 
         {step === 'summary' && summaryTrip && (
-          <div className="mx-3 mb-3 rounded-2xl bg-[#f5efe3] p-3">
-            <div className="rounded-xl bg-[#2fae5c] py-2 text-center text-sm font-extrabold text-white">Résumé de Course</div>
-            <span className="mt-1.5 inline-block rounded-full bg-[#2fae5c] px-2.5 py-1 text-[11px] font-extrabold text-white">
-              En Course - Avec la cliente: {passengerContact?.full_name ?? '—'}
-            </span>
+          <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)]">
+            <div className="border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] bg-[#14100c]/92 px-3 py-2.5">
+              <span className="text-[9px] font-medium tracking-wide text-[#e8c9a8]">MANIFESTE DE VOL · TERMINÉ</span>
+              <div className="mt-1 text-[10.5px] text-[#a89680]">
+                Avec {passengerContact?.full_name ?? '—'} · {elapsedMin ?? '—'} min · {summaryTrip.distance_km?.toFixed(1) ?? '—'} km
+              </div>
+            </div>
 
-            <div className="mt-2 flex items-start gap-3">
-              <div className="flex h-14 w-14 flex-none items-center justify-center rounded-full bg-[#e8c9a8]/40 text-sm font-extrabold text-[#5a3a1c]">
-                {initials(passengerContact?.full_name ?? null)}
-              </div>
-              <div className="flex-1">
-                <div className="text-sm font-extrabold text-[#1c1108]">Course de {elapsedMin ?? '—'} min</div>
-                <div className="text-sm text-[#1c1108]">Distance: {summaryTrip.distance_km?.toFixed(1) ?? '—'} km</div>
-                <div className="text-sm font-extrabold text-[#1c1108]">Total: {formatFCFA(summaryTrip.final_price)}</div>
-              </div>
-              <div className="flex gap-0.5">
+            <div className="bg-[#14100c]/92 px-3 py-2.5">
+              <div className="flex items-center gap-0.5">
                 {[1, 2, 3, 4, 5].map((n) => (
                   <button key={n} onClick={() => setRatingStars(n)} aria-label={`${n} étoiles`}>
-                    <Star size={16} fill={n <= ratingStars ? '#e8b53a' : 'none'} color="#e8b53a" />
+                    <Star size={16} color="#e8c9a8" fill={n <= ratingStars ? '#e8c9a8' : 'none'} />
                   </button>
                 ))}
               </div>
-            </div>
-
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Commentaires facultatifs..."
-              className="mt-2 w-full rounded-lg border border-[#e4d7bf] bg-white px-2.5 py-2 text-xs text-[#1c1108] outline-none"
-              rows={2}
-            />
-
-            <div className="mt-2 flex gap-2">
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Commentaire facultatif…"
+                className="mt-2 w-full border-[0.5px] border-[rgba(169,122,91,0.28)] bg-transparent px-2.5 py-2 text-[11.5px] text-[#f7e6d4] outline-none placeholder:text-[#6b5c48]"
+                rows={2}
+              />
               <button
                 onClick={() => setRatingTag((t) => (t === 'client_sympa' ? 'aucun' : 'client_sympa'))}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-extrabold ${
-                  ratingTag === 'client_sympa' ? 'bg-[#e8c9a8] text-[#5a3a1c]' : 'bg-[#e4dccb] text-[#6b6459]'
+                className={`mt-2 flex w-full items-center justify-center gap-1.5 border-[0.5px] py-2 text-[10.5px] ${
+                  ratingTag === 'client_sympa' ? 'border-[#a97a5b] text-[#e8c9a8]' : 'border-[rgba(169,122,91,0.2)] text-[#8a7358]'
                 }`}
               >
-                <ThumbsUp size={13} /> Client Sympa (+bonus)
-              </button>
-              <button disabled={busy} onClick={handleValidateSummary} className="flex-1 rounded-xl bg-[#2fae5c] py-2.5 text-xs font-extrabold text-white">
-                {autoValidateCountdown !== null
-                  ? `Valider maintenant (${autoValidateCountdown}s)`
-                  : "Valider et revenir à l'accueil"}
+                <ThumbsUp size={12} /> Client sympa (bonus)
               </button>
             </div>
-            {autoValidateCountdown !== null && (
-              <div className="mt-1.5 text-center text-[11px] text-[#8a8378]">
-                Retour automatique en ligne dans {autoValidateCountdown}s…
-              </div>
-            )}
+
+            <div className="flex items-center justify-between bg-[#efd9b8] px-3 py-2.5">
+              <span className="font-mono text-base text-[#3c2a1a]">{formatFCFA(summaryTrip.final_price)}</span>
+              <button disabled={busy} onClick={handleValidateSummary} className="bg-[#3c2a1a] px-3.5 py-2 text-[10.5px] font-medium text-[#efd9b8]">
+                {autoValidateCountdown !== null ? `Valider (${autoValidateCountdown}s)` : 'Valider et repartir'}
+              </button>
+            </div>
           </div>
         )}
       </div>
 
-      <nav className="relative z-10 flex items-stretch justify-around bg-[#1c1108] pb-[env(safe-area-inset-bottom,0px)]">
+      <nav className="relative z-10 flex items-stretch justify-around border-t-[0.5px] border-[rgba(169,122,91,0.2)] bg-[#1c1108] py-1 pb-[calc(env(safe-area-inset-bottom,0px)+4px)]">
         {(
           [
             { key: 'accueil', label: 'Accueil', icon: Home },
@@ -702,20 +702,18 @@ export default function DriverDashboard() {
         ).map(({ key, label, icon: Icon }) => {
           const activeTab = bottomTab === key;
           return (
-            <button key={key} onClick={() => setBottomTab(key)} className="flex flex-1 flex-col items-center gap-1 py-2.5">
-              <Icon size={18} color={activeTab ? '#e8c9a8' : '#8a7d6c'} />
-              <span className="text-[9px] font-bold" style={{ color: activeTab ? '#e8c9a8' : '#8a7d6c' }}>
-                {label}
-              </span>
+            <button key={key} onClick={() => setBottomTab(key)} aria-label={label} className="flex flex-1 flex-col items-center gap-1 py-1.5">
+              <Icon size={15} color={activeTab ? '#e8c9a8' : '#6b5c48'} />
+              <span className="h-[3px] w-[3px] rounded-full" style={{ background: activeTab ? '#e8c9a8' : 'transparent' }} />
             </button>
           );
         })}
       </nav>
 
       {bottomTab !== 'accueil' && (
-        <div className="absolute inset-x-3 bottom-20 top-20 z-20 flex flex-col overflow-hidden rounded-2xl bg-[#1c1108]/95 p-4 text-sm text-[#e8c9a8]">
-          <div className="mb-3 flex flex-none items-center justify-between">
-            <h2 className="text-base font-extrabold">
+        <div className="absolute inset-x-3 bottom-16 top-20 z-20 flex flex-col overflow-hidden border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c]/97 p-3.5 text-sm text-[#e8c9a8]">
+          <div className="mb-3 flex flex-none items-center justify-between border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] pb-2.5">
+            <h2 className="text-[13px] font-medium tracking-wide">
               {bottomTab === 'historique'
                 ? 'Historique des courses'
                 : bottomTab === 'courses'
@@ -724,39 +722,36 @@ export default function DriverDashboard() {
                     ? 'Mes gains'
                     : 'Mon profil'}
             </h2>
-            <button onClick={() => setBottomTab('accueil')} className="text-xs text-[#c9bba8] underline">
-              Fermer
+            <button onClick={() => setBottomTab('accueil')} aria-label="Fermer" className="text-[#8a7358]">
+              <span className="text-sm leading-none">✕</span>
             </button>
           </div>
 
           <div className="flex-1 overflow-y-auto">
             {(bottomTab === 'historique' || bottomTab === 'gains') && historyLoading && (
-              <div className="py-8 text-center text-xs text-[#c9bba8]">Chargement…</div>
+              <div className="py-8 text-center text-xs text-[#8a7358]">Chargement…</div>
             )}
 
             {bottomTab === 'historique' && !historyLoading && (
               <>
                 {history.length === 0 ? (
-                  <div className="rounded-2xl bg-white/5 p-4 text-center text-xs text-[#c9bba8]">
+                  <div className="border-[0.5px] border-[rgba(169,122,91,0.2)] p-4 text-center text-xs text-[#8a7358]">
                     Aucune course terminée pour le moment.
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col">
                     {history.map((t) => (
-                      <div key={t.id} className="rounded-2xl bg-white/5 p-3">
+                      <div key={t.id} className="border-b-[0.5px] border-[rgba(169,122,91,0.15)] py-2.5">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-[#c9bba8]">
+                          <span className="font-mono text-[10px] text-[#8a7358]">
                             {t.completed_at ? new Date(t.completed_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
                           </span>
-                          <span className="rounded-md bg-[#e8c9a8]/15 px-2 py-0.5 text-[10px] font-bold text-[#e8c9a8]">
-                            {VEHICLE_LABELS[t.vehicle_type]}
-                          </span>
+                          <span className="text-[9.5px] text-[#8a7358]">{VEHICLE_LABELS[t.vehicle_type]}</span>
                         </div>
-                        <div className="mt-1 text-sm font-extrabold text-white">{t.pickup_address ?? 'Départ'}</div>
-                        <div className="text-xs text-[#c9bba8]">→ {t.dropoff_address ?? 'Destination'}</div>
+                        <div className="mt-1 text-[12px] text-[#f7e6d4]">{t.pickup_address ?? 'Départ'} → {t.dropoff_address ?? 'Destination'}</div>
                         <div className="mt-1 flex items-center justify-between">
-                          <span className="text-xs text-[#c9bba8]">{t.distance_km ? `${t.distance_km.toFixed(1)} km` : ''}</span>
-                          <span className="text-sm font-extrabold text-[#5be08a]">{formatFCFA(t.final_price)}</span>
+                          <span className="text-[10.5px] text-[#8a7358]">{t.distance_km ? `${t.distance_km.toFixed(1)} km` : ''}</span>
+                          <span className="font-mono text-[12.5px] text-[#e8c9a8]">{formatFCFA(t.final_price)}</span>
                         </div>
                       </div>
                     ))}
@@ -768,32 +763,30 @@ export default function DriverDashboard() {
             {bottomTab === 'courses' && (
               <>
                 {sortedPending.length === 0 ? (
-                  <div className="rounded-2xl bg-white/5 p-4 text-center text-xs text-[#c9bba8]">
+                  <div className="border-[0.5px] border-[rgba(169,122,91,0.2)] p-4 text-center text-xs text-[#8a7358]">
                     Aucune course en attente pour le moment.
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col">
                     {sortedPending.map((t, i) => (
                       <div
                         key={t.id}
-                        className={`rounded-2xl p-3 ${i === 0 ? 'bg-[#2fae5c]/15 ring-1 ring-[#6fae4a]' : 'bg-white/5'}`}
+                        className={`border-b-[0.5px] py-2.5 ${i === 0 ? 'border-[#a97a5b]/30' : 'border-[rgba(169,122,91,0.15)]'}`}
                       >
                         <div className="flex items-center gap-2.5">
-                          <div className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-[#e8c9a8]/15 text-[11px] font-extrabold text-[#e8c9a8]">
+                          <div className="flex h-7 w-7 flex-none items-center justify-center rounded-full border-[1.5px] border-[#6b4a35] text-[9.5px] text-[#e8c9a8]">
                             {initials(t.passenger_profile?.full_name ?? null)}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-extrabold text-white">
-                              {t.passenger_profile?.full_name ?? 'Passager'}
-                            </div>
-                            <div className="truncate text-[11px] text-[#c9bba8]">
+                            <div className="truncate text-[12px] text-[#f7e6d4]">{t.passenger_profile?.full_name ?? 'Passager'}</div>
+                            <div className="truncate text-[10px] text-[#8a7358]">
                               {t.pickup_address ?? 'Départ'} → {t.dropoff_address ?? 'Destination'}
                             </div>
                           </div>
                           <div className="flex-none text-right">
-                            <div className="text-sm font-extrabold text-white">{formatFCFA(t.estimated_price)}</div>
+                            <div className="font-mono text-[12px] text-[#f7e6d4]">{formatFCFA(t.estimated_price)}</div>
                             {driverPos && (
-                              <div className="text-[10px] font-bold text-[#c9bba8]">
+                              <div className="font-mono text-[9px] text-[#8a7358]">
                                 {haversineKm(driverPos.lat, driverPos.lng, t.pickup_lat, t.pickup_lng).toFixed(1)} km
                               </div>
                             )}
@@ -803,14 +796,14 @@ export default function DriverDashboard() {
                           <button
                             disabled={busy}
                             onClick={() => handleAccept(t)}
-                            className="flex-1 rounded-xl bg-[#2fae5c] py-2 text-xs font-extrabold text-white"
+                            className="flex-1 border-[0.5px] border-[#a97a5b] py-1.5 text-[10.5px] text-[#e8c9a8]"
                           >
                             Accepter
                           </button>
                           <button
                             disabled={busy}
                             onClick={() => handleDismiss(t.id)}
-                            className="flex-1 rounded-xl bg-white/10 py-2 text-xs font-extrabold text-[#c9bba8]"
+                            className="flex-1 border-[0.5px] border-[rgba(169,122,91,0.2)] py-1.5 text-[10.5px] text-[#8a7358]"
                           >
                             Refuser
                           </button>
@@ -842,12 +835,14 @@ export default function DriverDashboard() {
                   ];
 
                   return (
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col">
                       {cards.map((c) => (
-                        <div key={c.label} className="rounded-2xl bg-white/5 p-3">
-                          <div className="text-xs font-bold text-[#c9bba8]">{c.label}</div>
-                          <div className="mt-1 text-xl font-extrabold text-[#5be08a]">{formatFCFA(c.value)}</div>
-                          <div className="text-[11px] text-[#c9bba8]">{c.count} course{c.count > 1 ? 's' : ''}</div>
+                        <div key={c.label} className="flex items-center justify-between border-b-[0.5px] border-[rgba(169,122,91,0.15)] py-2.5">
+                          <div>
+                            <div className="text-[11px] text-[#a89680]">{c.label}</div>
+                            <div className="text-[9.5px] text-[#6b5c48]">{c.count} course{c.count > 1 ? 's' : ''}</div>
+                          </div>
+                          <div className="font-mono text-base text-[#e8c9a8]">{formatFCFA(c.value)}</div>
                         </div>
                       ))}
                     </div>
@@ -858,40 +853,40 @@ export default function DriverDashboard() {
 
             {bottomTab === 'profil' && (
               <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-3 rounded-2xl bg-white/5 p-3">
-                  <div className="flex h-12 w-12 flex-none items-center justify-center rounded-full border-2 border-[#e8c9a8] bg-[#e8c9a8]/20 text-sm font-extrabold text-[#e8c9a8]">
+                <div className="flex items-center gap-3 border-b-[0.5px] border-[rgba(169,122,91,0.15)] pb-3">
+                  <div className="flex h-11 w-11 flex-none items-center justify-center rounded-full border-[1.5px] border-[#6b4a35] text-[11px] text-[#e8c9a8]">
                     {initials(profile?.full_name ?? null)}
                   </div>
                   <div>
-                    <div className="text-sm font-extrabold text-white">{profile?.full_name ?? 'Chauffeur'}</div>
-                    <div className="text-xs text-[#c9bba8]">{profile?.phone ?? '—'}</div>
+                    <div className="text-[12.5px] text-[#f7e6d4]">{profile?.full_name ?? 'Chauffeur'}</div>
+                    <div className="text-[10.5px] text-[#8a7358]">{profile?.phone ?? '—'}</div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl bg-white/5 p-3">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-[#c9bba8]">Note moyenne</span>
-                    <span className="flex items-center gap-1 font-extrabold text-[#e8b53a]">
-                      <Star size={13} fill="#e8b53a" color="#e8b53a" /> {profile?.rating_avg?.toFixed(1) ?? '—'}
+                <div className="border-b-[0.5px] border-[rgba(169,122,91,0.15)] pb-3">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-[#8a7358]">Note moyenne</span>
+                    <span className="flex items-center gap-1 font-mono text-[#e8c9a8]">
+                      <Star size={12} fill="#e8c9a8" color="#e8c9a8" /> {profile?.rating_avg?.toFixed(1) ?? '—'}
                     </span>
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-xs">
-                    <span className="text-[#c9bba8]">Statut du compte</span>
-                    <span className="font-extrabold text-[#5be08a]">
+                  <div className="mt-2 flex items-center justify-between text-[11px]">
+                    <span className="text-[#8a7358]">Statut du compte</span>
+                    <span className="text-[#e8c9a8]">
                       {profile?.validation_status === 'approved' ? 'Validé' : profile?.validation_status ?? '—'}
                     </span>
                   </div>
                 </div>
 
                 {vehicles.length > 0 && (
-                  <div className="rounded-2xl bg-white/5 p-3">
-                    <div className="mb-1.5 text-xs font-bold text-[#c9bba8]">Mon véhicule</div>
+                  <div className="border-b-[0.5px] border-[rgba(169,122,91,0.15)] pb-3">
+                    <div className="mb-1.5 text-[10.5px] text-[#8a7358]">Mon véhicule</div>
                     {vehicles.map((v) => (
-                      <div key={v.id} className="flex items-center justify-between py-1 text-xs">
-                        <span className="text-white">
+                      <div key={v.id} className="flex items-center justify-between py-1 text-[11px]">
+                        <span className="text-[#f7e6d4]">
                           {v.brand ?? ''} {v.model ?? ''} · {VEHICLE_LABELS[v.type]}
                         </span>
-                        <span className="text-[#c9bba8]">{v.plate}</span>
+                        <span className="font-mono text-[#8a7358]">{v.plate}</span>
                       </div>
                     ))}
                   </div>
@@ -900,7 +895,7 @@ export default function DriverDashboard() {
                 <button
                   onClick={handleSignOut}
                   disabled={signingOut}
-                  className="mt-1 w-full rounded-xl bg-[#e0453f]/90 py-2.5 text-sm font-extrabold text-white"
+                  className="mt-1 w-full border-[0.5px] border-[rgba(226,75,74,0.4)] py-2.5 text-[11.5px] text-[#e2807f]"
                 >
                   {signingOut ? 'Déconnexion…' : 'Se déconnecter'}
                 </button>
@@ -923,17 +918,17 @@ function TripCardBody({
   showDestinationLabel: string;
 }) {
   return (
-    <div className="mt-2 flex items-start gap-3">
+    <div className="flex items-start gap-3">
       <div className="flex-1">
-        <div className="text-sm font-extrabold text-[#1c1108]">{trip.pickup_address ?? 'Adresse de prise en charge'}</div>
-        <div className="text-xs text-[#6b6459]">({VEHICLE_LABELS[trip.vehicle_type]})</div>
-        <div className="mt-0.5 text-base font-extrabold text-[#1c1108]">{formatFCFA(trip.estimated_price)}</div>
+        <div className="text-[12px] text-[#f7e6d4]">{trip.pickup_address ?? 'Adresse de prise en charge'}</div>
+        <div className="text-[10px] text-[#8a7358]">({VEHICLE_LABELS[trip.vehicle_type]})</div>
+        <div className="mt-0.5 font-mono text-[13px] text-[#f7e6d4]">{formatFCFA(trip.estimated_price)}</div>
         <div className="mt-1 flex gap-1">
           {VEHICLE_TYPES.map((vt) => (
             <span
               key={vt}
-              className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
-                vt === trip.vehicle_type ? 'bg-[#e8c9a8] text-[#5a3a1c]' : 'bg-[#e4dccb] text-[#8a8378]'
+              className={`px-1.5 py-0.5 text-[9px] ${
+                vt === trip.vehicle_type ? 'bg-[#a97a5b]/25 text-[#e8c9a8]' : 'text-[#6b5c48]'
               }`}
             >
               {VEHICLE_LABELS[vt]}
@@ -943,13 +938,13 @@ function TripCardBody({
       </div>
       <div className="flex-1">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-[#e8c9a8]/40 text-xs font-extrabold text-[#5a3a1c]">
+          <div className="flex h-7 w-7 flex-none items-center justify-center rounded-full border-[1.5px] border-[#6b4a35] text-[9.5px] text-[#e8c9a8]">
             {initials(passengerName)}
           </div>
-          <span className="text-sm font-extrabold text-[#1c1108]">{passengerName ?? '—'}</span>
+          <span className="text-[12px] text-[#f7e6d4]">{passengerName ?? '—'}</span>
         </div>
-        <div className="mt-1 text-[11px] font-bold text-[#1c1108]">{showDestinationLabel}</div>
-        <div className="text-[11px] text-[#6b6459]">{trip.dropoff_address ?? '—'}</div>
+        <div className="mt-1 text-[10px] text-[#8a7358]">{showDestinationLabel}</div>
+        <div className="text-[10px] text-[#a89680]">{trip.dropoff_address ?? '—'}</div>
       </div>
     </div>
   );
