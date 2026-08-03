@@ -18,6 +18,8 @@ import {
   RotateCcw,
   Flag,
   ChevronUp,
+  Camera,
+  Bell,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { Trip, VehicleType } from '@/types/database';
@@ -34,6 +36,7 @@ import {
   getPassengerContact,
   getPendingTrips,
   setVehicleStatus,
+  updateMyAvatar,
   startSharingLocation,
   startTrip,
   submitRating,
@@ -113,6 +116,9 @@ export default function DriverDashboard() {
   const [signingOut, setSigningOut] = useState(false);
   const [navInfo, setNavInfo] = useState<NavigationStep | null>(null);
   const [tripCardExpanded, setTripCardExpanded] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setTripCardExpanded(false);
@@ -206,6 +212,30 @@ export default function DriverDashboard() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bottomTab, session?.user?.id]);
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !session?.user) return;
+    if (!file.type.startsWith('image/')) {
+      setAvatarError('Choisis une image (jpg, png…).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError('Image trop lourde (5 Mo max).');
+      return;
+    }
+    setAvatarUploading(true);
+    setAvatarError(null);
+    try {
+      const url = await updateMyAvatar(session.user.id, file);
+      setProfile((p) => (p ? { ...p, avatar_url: url } : p));
+    } catch (err: any) {
+      setAvatarError(err?.message ?? "Impossible d'envoyer la photo.");
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -442,14 +472,20 @@ export default function DriverDashboard() {
         />
       </div>
 
-      <div className="relative z-10 mt-4 ml-3.5 flex w-fit items-center gap-2">
-        <div className="flex h-8 w-8 flex-none items-center justify-center rounded-full border-[1.5px] border-[#6b4a35] text-[10px] font-medium text-[#e8c9a8]">
-          {initials(profile?.full_name ?? null)}
+      <div className="relative z-10 mt-4 ml-3.5 flex w-fit items-center gap-2 rounded-full border-[0.5px] border-[rgba(169,122,91,0.4)] bg-[rgba(13,9,6,0.72)] py-1.5 pl-1.5 pr-3 backdrop-blur-sm">
+        <div
+          className="flex h-8 w-8 flex-none items-center justify-center rounded-full border-2 bg-[#3a2a1c] bg-cover bg-center text-[10px] font-medium text-[#e8c9a8]"
+          style={{
+            borderColor: step === 'available' && online ? '#5be08a' : '#6b4a35',
+            backgroundImage: profile?.avatar_url ? `url(${profile.avatar_url})` : undefined,
+          }}
+        >
+          {!profile?.avatar_url && initials(profile?.full_name ?? null)}
         </div>
         <div className="flex flex-col leading-tight">
           <span className="text-[11px] font-medium text-[#f7e6d4]">{profile?.full_name ?? 'Chauffeur'}</span>
           <span
-            className="font-mono text-[9px] tracking-wide"
+            className="font-mono text-[9px] font-medium tracking-wide"
             style={{
               color:
                 step === 'available' && online
@@ -467,13 +503,17 @@ export default function DriverDashboard() {
           <button
             onClick={handleToggleOnline}
             disabled={busy}
-            className="relative ml-1 h-[15px] w-[28px] flex-none rounded-full border-[0.5px] border-[#6b4a35] bg-[#2a2118]"
+            className="relative ml-1 h-[17px] w-[30px] flex-none rounded-full border-[0.5px] transition-colors duration-200"
+            style={{
+              borderColor: online ? '#5be08a' : '#6b4a35',
+              background: online ? '#1f4d33' : '#2a2118',
+            }}
             aria-pressed={online}
             aria-label="Basculer en ligne / hors ligne"
           >
             <span
-              className="absolute top-[1.5px] h-3 w-3 rounded-full bg-[#e8c9a8] transition-all duration-200"
-              style={{ left: online ? 13 : 1.5 }}
+              className="absolute top-[2px] h-3 w-3 rounded-full transition-all duration-200"
+              style={{ left: online ? 14 : 2, background: online ? '#5be08a' : '#e8c9a8' }}
             />
           </button>
         )}
@@ -489,8 +529,14 @@ export default function DriverDashboard() {
         <div className="relative z-10 mx-3 mt-2 border-[0.5px] border-[rgba(226,75,74,0.3)] px-3 py-2 text-[11px] text-[#e2807f]">{error}</div>
       )}
       {newRequestAlert && (
-        <div className="relative z-10 mx-3 mt-2 border-[0.5px] border-[rgba(169,122,91,0.3)] px-3 py-2 text-[11px] text-[#e8c9a8]">
-          Nouvelle course disponible
+        <div className="relative z-10 mx-3 mt-2 flex items-center gap-2 rounded-xl border-[0.5px] border-[#5be08a] bg-[rgba(13,9,6,0.88)] px-3 py-2 text-[11px] text-[#f7e6d4]">
+          <Bell size={14} className="flex-none text-[#5be08a]" />
+          Course la plus proche disponible
+          {sortedPending[0] && driverPos && (
+            <span className="ml-auto flex-none font-mono text-[10px] text-[#5be08a]">
+              {haversineKm(driverPos.lat, driverPos.lng, sortedPending[0].pickup_lat, sortedPending[0].pickup_lng).toFixed(1)} km
+            </span>
+          )}
         </div>
       )}
 
@@ -537,22 +583,22 @@ export default function DriverDashboard() {
                   <div className="mt-0.5 text-[10px] text-[#8a7358]">{t.passenger_profile?.full_name ?? 'Passager'} · {VEHICLE_LABELS[t.vehicle_type]}</div>
                   <div className="mt-1.5 flex items-center justify-between">
                     <span className="font-mono text-sm text-[#f7e6d4]">{formatFCFA(t.estimated_price)}</span>
-                    <div className="flex gap-1.5">
+                    <div className="flex gap-2">
                       <button
                         disabled={busy}
                         onClick={() => handleDismiss(t.id)}
                         aria-label="Refuser"
-                        className="flex h-6 w-6 items-center justify-center rounded-full border-[0.5px] border-[rgba(226,75,74,0.4)] text-[#e2807f]"
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E24B4A] bg-[#4a1414] text-[#F09595] disabled:opacity-50"
                       >
-                        <span className="text-xs leading-none">✕</span>
+                        <span className="text-sm leading-none">✕</span>
                       </button>
                       <button
                         disabled={busy}
                         onClick={() => handleAccept(t)}
                         aria-label="Accepter"
-                        className="flex h-6 w-6 items-center justify-center rounded-full bg-[#a97a5b] text-[#241a13]"
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[#639922] bg-[#173404] text-[#C0DD97] disabled:opacity-50"
                       >
-                        <span className="text-xs leading-none">✓</span>
+                        <span className="text-sm leading-none">✓</span>
                       </button>
                     </div>
                   </div>
@@ -795,17 +841,17 @@ export default function DriverDashboard() {
                         <div className="mt-2 flex gap-2">
                           <button
                             disabled={busy}
-                            onClick={() => handleAccept(t)}
-                            className="flex-1 border-[0.5px] border-[#a97a5b] py-1.5 text-[10.5px] text-[#e8c9a8]"
+                            onClick={() => handleDismiss(t.id)}
+                            className="flex-1 rounded-lg bg-[#F09595] py-2 text-[11px] font-medium text-[#501313] disabled:opacity-50"
                           >
-                            Accepter
+                            Refuser
                           </button>
                           <button
                             disabled={busy}
-                            onClick={() => handleDismiss(t.id)}
-                            className="flex-1 border-[0.5px] border-[rgba(169,122,91,0.2)] py-1.5 text-[10.5px] text-[#8a7358]"
+                            onClick={() => handleAccept(t)}
+                            className="flex-1 rounded-lg bg-[#639922] py-2 text-[11px] font-medium text-[#173404] disabled:opacity-50"
                           >
-                            Refuser
+                            Accepter
                           </button>
                         </div>
                       </div>
@@ -854,14 +900,43 @@ export default function DriverDashboard() {
             {bottomTab === 'profil' && (
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3 border-b-[0.5px] border-[rgba(169,122,91,0.15)] pb-3">
-                  <div className="flex h-11 w-11 flex-none items-center justify-center rounded-full border-[1.5px] border-[#6b4a35] text-[11px] text-[#e8c9a8]">
-                    {initials(profile?.full_name ?? null)}
-                  </div>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarChange}
+                  />
+                  <button
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={avatarUploading}
+                    aria-label="Changer la photo de profil"
+                    className="relative h-14 w-14 flex-none"
+                  >
+                    <div
+                      className="h-14 w-14 rounded-full border-[1.5px] border-[#6b4a35] bg-[#3a2a1c] bg-cover bg-center text-[13px] text-[#e8c9a8]"
+                      style={{ backgroundImage: profile?.avatar_url ? `url(${profile.avatar_url})` : undefined }}
+                    >
+                      {!profile?.avatar_url && (
+                        <div className="flex h-full w-full items-center justify-center">{initials(profile?.full_name ?? null)}</div>
+                      )}
+                    </div>
+                    <div className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#14100c] bg-[#a97a5b]">
+                      <Camera size={11} className="text-[#241a13]" />
+                    </div>
+                    {avatarUploading && (
+                      <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#e8c9a8] border-t-transparent" />
+                      </div>
+                    )}
+                  </button>
                   <div>
                     <div className="text-[12.5px] text-[#f7e6d4]">{profile?.full_name ?? 'Chauffeur'}</div>
                     <div className="text-[10.5px] text-[#8a7358]">{profile?.phone ?? '—'}</div>
+                    <div className="mt-0.5 text-[9.5px] text-[#6b5c48]">Touche la photo pour la changer</div>
                   </div>
                 </div>
+                {avatarError && <div className="text-[10.5px] text-[#e2807f]">{avatarError}</div>}
 
                 <div className="border-b-[0.5px] border-[rgba(169,122,91,0.15)] pb-3">
                   <div className="flex items-center justify-between text-[11px]">

@@ -464,8 +464,22 @@ function passengerEl(p: { initials: string; name: string; distanceKm: number; hi
   tag.style.whiteSpace = 'nowrap';
   tag.textContent = `${p.name} · ${p.distanceKm.toFixed(1)} km`;
 
-  const avatar = document.createElement('div');
+  const avatarBox = document.createElement('div');
+  avatarBox.style.position = 'relative';
   const size = p.highlight ? 28 : 24;
+  avatarBox.style.width = `${size}px`;
+  avatarBox.style.height = `${size}px`;
+
+  if (p.highlight) {
+    const pulse = document.createElement('div');
+    pulse.className = 'nearest-pin-pulse';
+    pulse.style.width = `${size}px`;
+    pulse.style.height = `${size}px`;
+    avatarBox.appendChild(pulse);
+  }
+
+  const avatar = document.createElement('div');
+  avatar.style.position = 'relative';
   avatar.style.width = `${size}px`;
   avatar.style.height = `${size}px`;
   avatar.style.borderRadius = '50%';
@@ -478,9 +492,10 @@ function passengerEl(p: { initials: string; name: string; distanceKm: number; hi
   avatar.style.fontSize = p.highlight ? '10px' : '9px';
   avatar.style.fontWeight = '500';
   avatar.textContent = p.initials;
+  avatarBox.appendChild(avatar);
 
   wrap.appendChild(tag);
-  wrap.appendChild(avatar);
+  wrap.appendChild(avatarBox);
   return wrap;
 }
 
