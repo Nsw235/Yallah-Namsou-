@@ -326,7 +326,7 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 }
 .yn-ticket-stub{
   background:var(--copper-cream); color:var(--copper-deep); position:relative;
-  padding:14px 16px calc(20px + env(safe-area-inset-bottom,0px));
+  padding:8px 16px calc(12px + env(safe-area-inset-bottom,0px));
   border-top:2px dashed rgba(169,122,91,0.55);
 }
 .yn-ticket-stub::before, .yn-ticket-stub::after{
@@ -334,11 +334,11 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 }
 .yn-ticket-stub::before{ left:-11px; } .yn-ticket-stub::after{ right:-11px; }
 .yn-stub-row{ display:flex; justify-content:space-between; align-items:flex-end; }
-.yn-stub-label{ font-size:9.5px; letter-spacing:1px; font-weight:700; color:var(--copper-dark); text-transform:uppercase; }
-.yn-stub-price{ font-size:22px; font-weight:800; line-height:1.1; }
-.yn-stub-code{ font-size:10px; color:var(--copper-dark); text-align:right; }
-.yn-stub-dash{ border-top:1px dashed rgba(28,21,18,0.25); margin:10px 0; }
-.yn-stub-btn{ width:100%; border:none; border-radius:13px; padding:14px; font-size:13px; font-weight:800; letter-spacing:.3px; background:var(--copper-deep); color:var(--copper-cream); cursor:pointer; }
+.yn-stub-label{ font-size:9px; letter-spacing:1px; font-weight:700; color:var(--copper-dark); text-transform:uppercase; }
+.yn-stub-price{ font-size:17px; font-weight:800; line-height:1.1; }
+.yn-stub-code{ font-size:9.5px; color:var(--copper-dark); text-align:right; }
+.yn-stub-dash{ border-top:1px dashed rgba(28,21,18,0.25); margin:6px 0; }
+.yn-stub-btn{ width:100%; border:none; border-radius:12px; padding:10px; font-size:12px; font-weight:800; letter-spacing:.3px; background:var(--copper-deep); color:var(--copper-cream); cursor:pointer; }
 .yn-stub-btn:disabled{ opacity:.5; }
 .yn-used{
   position:absolute; top:6px; right:12px; border:1.5px solid rgba(255,95,95,0.55); color:rgba(200,60,60,0.75);
@@ -369,7 +369,7 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 .yn-classes-label{ font-size:10.5px; letter-spacing:.5px; color:var(--text-dim); font-weight:700; margin:12px 0 6px 2px; text-transform:uppercase; }
 .yn-classes{ display:flex; gap:6px; margin:0 0 10px; }
 .yn-cclass{ flex:1; text-align:center; border-radius:12px; padding:4px 2px 6px; background:rgba(255,255,255,0.03); border:1.5px solid rgba(255,255,255,0.08); cursor:pointer; }
-.yn-cclass img{ width:100%; max-width:52px; margin-bottom:2px; display:block; margin-left:auto; margin-right:auto; }
+.yn-cclass img{ width:100%; max-width:60px; margin-bottom:2px; display:block; margin-left:auto; margin-right:auto; }
 .yn-cclass .cname{ font-size:11px; font-weight:700; color:var(--copper-cream); }
 .yn-cclass .cprice{ font-size:10px; color:var(--text-dim); margin-top:1px; }
 .yn-cclass.selected{ border-color:var(--copper); background:rgba(169,122,91,0.12); box-shadow:0 0 14px rgba(169,122,91,0.4); }
