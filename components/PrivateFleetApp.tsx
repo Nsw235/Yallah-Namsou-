@@ -463,6 +463,7 @@ function Screen1({
           <span className={`addr ${!pickup ? 'placeholder' : ''}`}>{pickup ? pickup.label : "D'où partez-vous ?"}</span>
           <span className="sep">→</span>
           <span className={`addr ${!dropoff ? 'placeholder' : ''}`}>{dropoff ? dropoff.label : 'Où allez-vous ?'}</span>
+          <span className="city-tag">N&apos;Djamena</span>
         </div>
       )}
 
@@ -553,19 +554,41 @@ function AddressField({
       setResults([]);
       return;
     }
+    let cancelled = false;
     setSearching(true);
     const t = setTimeout(() => {
       searchAddress(query)
         .then((r) => {
+          // Une adresse a pu être sélectionnée pendant que cette requête
+          // était en vol (le debounce de 400ms n'annule pas le fetch déjà
+          // parti) : sans ce garde, la réponse tardive rouvrait la liste
+          // de suggestions juste après que l'utilisateur l'ait fermée.
+          if (cancelled) return;
           setResults(r);
           setOpen(true);
         })
-        .catch(() => setResults([]))
-        .finally(() => setSearching(false));
+        .catch(() => {
+          if (!cancelled) setResults([]);
+        })
+        .finally(() => {
+          if (!cancelled) setSearching(false);
+        });
     }, 400);
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
+
+  // Filet de sécurité : dès qu'une adresse est retenue (value non nul),
+  // on force la fermeture de la liste, quel que soit l'état en cours.
+  useEffect(() => {
+    if (value) {
+      setOpen(false);
+      setResults([]);
+    }
+  }, [value]);
 
   return (
     <div className="field" style={{ position: 'relative' }}>

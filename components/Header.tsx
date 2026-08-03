@@ -24,9 +24,6 @@ export default function Header({
           </svg>
         </div>
       </div>
-      <div className="pill">
-        <span className="dot" /> N&apos;Djamena
-      </div>
     </div>
   );
 }
