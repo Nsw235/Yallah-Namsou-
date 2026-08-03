@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { fetchOsrmRoute } from '@/lib/osrm';
+import { haversineKm } from '@/lib/pricing';
 
 export type LatLng = { lat: number; lng: number };
 export type MapPin = {
@@ -85,14 +87,19 @@ export default function RealMap({
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Record<string, any>>({});
   const animFrames = useRef<Record<string, number>>({});
-  // Si le fichier .glb demandé (carModelUrl) n'existe pas / échoue à charger,
-  // on retombe automatiquement sur le marqueur emoji plutôt que de n'afficher
-  // aucun véhicule du tout.
-  const [modelFailed, setModelFailed] = useState(false);
-  useEffect(() => {
-    setModelFailed(false);
-  }, [carModelUrl]);
-  const effectiveUse3dCar = use3dCar && !modelFailed;
+  // Vrai seulement si le style Mapbox chargé est basé sur "Standard" (v3, avec
+  // un import "basemap") — condition nécessaire pour que les layers de type
+  // 'model' (véhicules 3D) et les slots ('top'/'middle'/'bottom') soient
+  // supportés. Alimenté depuis le handler 'style.load' plus bas.
+  const hasBasemapImportRef = useRef(false);
+  // URLs de modèles .glb dont on sait, pour cette session, qu'elles échouent
+  // à s'afficher en 3D (fichier manquant, layer 'model' non supporté par le
+  // style courant, etc.) — on bascule alors ces véhicules sur le marqueur
+  // emoji plutôt que de les laisser invisibles. Indexé par URL (et non par
+  // id de véhicule) car la cause est presque toujours liée au style/modèle
+  // lui-même, donc commune à tous les véhicules qui l'utilisent.
+  const [failedModelUrls, setFailedModelUrls] = useState<Set<string>>(new Set());
+  const effectiveUse3dCar = use3dCar && !failedModelUrls.has(carModelUrl);
 
   // Initialisation (une seule fois).
   useEffect(() => {
@@ -123,6 +130,7 @@ export default function RealMap({
       map.on('style.load', () => {
         const styleJson = map.getStyle?.();
         const hasBasemapImport = Array.isArray(styleJson?.imports) && styleJson.imports.some((i: any) => i.id === 'basemap');
+        hasBasemapImportRef.current = hasBasemapImport;
 
         // Calque trafic live officiel Mapbox (congestion en temps réel).
         // `slot: 'top'` n'existe que sur les styles Standard (v3) : on ne
@@ -208,7 +216,7 @@ export default function RealMap({
         wanted['driver'] = { pos: driverPosition, el: () => emojiEl('🚗') };
       }
       pins.forEach((p, i) => {
-        if (p.car3d) return; // rendu en modèle 3D réel, pas en marqueur DOM plat
+        if (p.car3d && !failedModelUrls.has(p.car3d.modelUrl ?? DEFAULT_CAR_MODEL_URL)) return; // rendu en modèle 3D réel, pas en marqueur DOM plat
         wanted[`pin-${i}`] = {
           pos: p.position,
           el: () => (p.passenger ? passengerEl(p.passenger) : emojiEl(p.emoji ?? '🚗')),
@@ -269,7 +277,7 @@ export default function RealMap({
     if (map.isStyleLoaded()) render();
     else map.once('load', render);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins), effectiveUse3dCar]);
+  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins), effectiveUse3dCar, failedModelUrls]);
 
   // Modèles 3D réels (.glb) : le véhicule du chauffeur connecté (driverPosition,
   // si use3dCar) + tout pin déclarant `car3d` (ex: autres chauffeurs disponibles
@@ -279,31 +287,50 @@ export default function RealMap({
     const map = mapRef.current;
     if (!map) return;
 
+    // Résout un chemin relatif (ex: "/models/berline.glb") en URL absolue.
+    // Les sources 'model' sont chargées par un worker Mapbox GL qui n'a pas
+    // toujours le même contexte d'URL de base que le document — passer une
+    // URL absolue évite toute résolution ambiguë (voir diagnostic).
+    const absoluteUrl = (u: string) => {
+      try {
+        return new URL(u, window.location.origin).href;
+      } catch {
+        return u;
+      }
+    };
+
     type CarModel = { id: string; modelUrl: string; position: LatLng; heading: number };
     const cars: CarModel[] = [];
-    if (effectiveUse3dCar && driverPosition) {
+    if (use3dCar && driverPosition && !failedModelUrls.has(carModelUrl)) {
       cars.push({ id: 'car-3d-ego', modelUrl: carModelUrl, position: driverPosition, heading: carHeading });
     }
     pins.forEach((p, i) => {
       if (p.car3d) {
-        cars.push({
-          id: `car-3d-pin-${i}`,
-          modelUrl: p.car3d.modelUrl ?? DEFAULT_CAR_MODEL_URL,
-          position: p.position,
-          heading: p.car3d.heading ?? 90,
-        });
+        const url = p.car3d.modelUrl ?? DEFAULT_CAR_MODEL_URL;
+        if (failedModelUrls.has(url)) return; // déjà en échec : le marqueur DOM (emoji) prend le relais, voir l'effet ci-dessus
+        cars.push({ id: `car-3d-pin-${i}`, modelUrl: url, position: p.position, heading: p.car3d.heading ?? 90 });
       }
     });
 
     const activeIds = new Set(cars.map((c) => c.id));
 
-    // Si un .glb est manquant/invalide, Mapbox émet un événement 'error'
-    // plutôt que de planter : on l'écoute pour retomber sur l'emoji 🚗 du
-    // véhicule du chauffeur connecté au lieu de le laisser invisible.
-    // (Les pins car3d en échec restent simplement invisibles, plus rares.)
+    function markUrlFailed(url: string) {
+      setFailedModelUrls((prev) => {
+        if (prev.has(url)) return prev;
+        const next = new Set(prev);
+        next.add(url);
+        return next;
+      });
+    }
+
+    // Filet de sécurité asynchrone : un .glb manquant / une réponse HTTP en
+    // erreur remonte via l'événement 'error' du style plutôt qu'une
+    // exception JS. On mappe le message vers l'URL du modèle concerné.
     function onMapError(e: any) {
       const msg = e?.error?.message;
-      if (typeof msg === 'string' && msg.includes(carModelUrl)) setModelFailed(true);
+      if (typeof msg !== 'string') return;
+      const matched = cars.find((c) => msg.includes(c.modelUrl) || msg.includes(absoluteUrl(c.modelUrl)));
+      if (matched) markUrlFailed(matched.modelUrl);
     }
     map.on('error', onMapError);
 
@@ -311,35 +338,49 @@ export default function RealMap({
       cars.forEach((car) => {
         const sourceId = `${car.id}-source`;
         const layerId = `${car.id}-layer`;
-        if (map.getLayer(layerId)) map.removeLayer(layerId);
-        if (map.getSource(sourceId)) map.removeSource(sourceId);
+        try {
+          if (map.getLayer(layerId)) map.removeLayer(layerId);
+          if (map.getSource(sourceId)) map.removeSource(sourceId);
 
-        map.addSource(sourceId, {
-          type: 'model',
-          models: {
-            car: {
-              uri: car.modelUrl,
-              position: [car.position.lng, car.position.lat],
-              orientation: [0, 0, car.heading],
+          map.addSource(sourceId, {
+            type: 'model',
+            models: {
+              car: {
+                uri: absoluteUrl(car.modelUrl),
+                position: [car.position.lng, car.position.lat],
+                orientation: [0, 0, car.heading],
+              },
             },
-          },
-        } as any);
+          } as any);
 
-        map.addLayer({
-          id: layerId,
-          type: 'model',
-          source: sourceId,
-          slot: 'top',
-          paint: {
-            'model-scale': [
-              'interpolate',
-              ['linear'],
-              ['zoom'],
-              12, ['literal', [0.5, 0.5, 0.5]],
-              18, ['literal', [2.5, 2.5, 2.5]],
-            ],
-          },
-        } as any);
+          map.addLayer({
+            id: layerId,
+            type: 'model',
+            source: sourceId,
+            // 'slot' n'existe que sur les styles Standard (v3, avec import
+            // "basemap") : sur un style classique, le fournir ferait échouer
+            // l'ajout du layer silencieusement (ou lever une exception selon
+            // la version). On ne l'ajoute donc que si le style le supporte —
+            // même garde que pour les layers 'traffic'/'route-line' plus haut.
+            ...(hasBasemapImportRef.current ? { slot: 'top' } : {}),
+            paint: {
+              'model-scale': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                12, ['literal', [0.5, 0.5, 0.5]],
+                18, ['literal', [2.5, 2.5, 2.5]],
+              ],
+            },
+          } as any);
+        } catch (err) {
+          // Layer 'model' non supporté par ce style (le cas le plus probable
+          // si le style Mapbox Studio n'est pas basé sur "Standard") : Mapbox
+          // GL lève ici une exception synchrone plutôt qu'un événement
+          // 'error' asynchrone. On bascule ce véhicule sur l'emoji 🚗.
+          console.error(`[RealMap] Échec de l'ajout du modèle 3D "${car.modelUrl}" :`, err);
+          markUrlFailed(car.modelUrl);
+        }
       });
     }
 
@@ -356,54 +397,60 @@ export default function RealMap({
       });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveUse3dCar, carModelUrl, carHeading, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins)]);
+  }, [use3dCar, carModelUrl, carHeading, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins), failedModelUrls]);
 
-  // Itinéraire réel tenant compte du trafic (Mapbox Directions, profil driving-traffic).
+  // En dessous de cette distance parcourue par le point de départ ET avant ce
+  // délai écoulé depuis le dernier calcul, on ne redemande pas d'itinéraire :
+  // le tracé affiché reste valable, seule l'ETA/le guidage se rafraîchissent
+  // un peu moins souvent. `startSharingLocation` (lib/driver.ts) pousse une
+  // position GPS parfois plusieurs fois par seconde — sans ce garde-fou,
+  // chaque micro-déplacement déclenchait un appel réseau complet.
+  const ROUTE_REFRESH_MIN_DISTANCE_M = 25;
+  const ROUTE_REFRESH_MIN_INTERVAL_MS = 8000;
+  const routeThrottleRef = useRef<{ endpointsKey: string; lastStart: LatLng; lastFetchAt: number } | null>(null);
+
+  // Itinéraire routier via OSRM (voir lib/osrm.ts) — remplace les appels à
+  // l'API payante Mapbox Directions, qui étaient le principal poste de
+  // consommation de quota (un appel à CHAQUE mise à jour GPS du chauffeur).
   // Point de départ : la position live du chauffeur si disponible (suivi temps réel),
   // sinon le point de prise en charge (comportement historique, ex. écrans passager).
-  // `steps=true&language=fr` permet aussi de calculer la prochaine manœuvre
-  // (guidage virage par virage) via `onNavigationUpdate`.
   useEffect(() => {
     const map = mapRef.current;
     const routeStart = driverPosition ?? pickup;
     if (!map || !showRoute || !routeStart || !dropoff) {
       onNavigationUpdate?.(null);
+      routeThrottleRef.current = null;
       return;
     }
 
     async function drawRoute() {
-      const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${routeStart!.lng},${routeStart!.lat};${dropoff!.lng},${dropoff!.lat}?geometries=geojson&overview=full&steps=true&language=fr&access_token=${MAPBOX_TOKEN}`;
       try {
-        const res = await fetch(url);
-        const data = await res.json();
-        const geometry = data?.routes?.[0]?.geometry;
-        if (!geometry) {
+        const result = await fetchOsrmRoute(routeStart!, dropoff!);
+        if (!result) {
           onNavigationUpdate?.(null);
           return;
         }
         const src = map.getSource('route');
-        if (src) src.setData({ type: 'Feature', properties: {}, geometry });
+        if (src) src.setData({ type: 'Feature', properties: {}, geometry: result.geometry as any });
 
-        // Étapes de l'itinéraire recalculé depuis la position actuelle :
         // steps[0] = segment en cours (jusqu'à la prochaine manœuvre),
         // steps[1] = la manœuvre à venir elle-même (instruction à afficher).
-        const routeSteps = data?.routes?.[0]?.legs?.[0]?.steps as
-          | { distance: number; maneuver: { instruction: string; type: string; modifier?: string } }[]
-          | undefined;
-        if (routeSteps && routeSteps.length >= 2) {
+        const steps = result.steps;
+        if (steps.length >= 2) {
           onNavigationUpdate?.({
-            instruction: routeSteps[1].maneuver.instruction,
-            type: routeSteps[1].maneuver.type,
-            modifier: routeSteps[1].maneuver.modifier,
-            distanceMeters: routeSteps[0].distance,
+            instruction: steps[1].instruction,
+            type: steps[1].type,
+            modifier: steps[1].modifier,
+            distanceMeters: steps[0].distanceMeters,
           });
-        } else if (routeSteps && routeSteps.length === 1) {
+        } else if (steps.length === 1) {
           onNavigationUpdate?.({ instruction: 'Vous êtes arrivé à destination', type: 'arrive', distanceMeters: 0 });
         } else {
           onNavigationUpdate?.(null);
         }
       } catch {
-        // Hors-ligne : trait direct départ → arrivée en secours.
+        // OSRM indisponible (hors-ligne, serveur de démo public surchargé...) :
+        // trait direct départ → arrivée en secours, comme avant.
         onNavigationUpdate?.(null);
         const src = map.getSource('route');
         if (src) {
@@ -422,8 +469,26 @@ export default function RealMap({
       }
     }
 
-    if (map.isStyleLoaded()) drawRoute();
-    else map.once('load', drawRoute);
+    function maybeDrawRoute() {
+      const endpointsKey = `${dropoff!.lat},${dropoff!.lng}`;
+      const prev = routeThrottleRef.current;
+      const isNewTrip = !prev || prev.endpointsKey !== endpointsKey;
+      const now = Date.now();
+
+      if (!isNewTrip) {
+        const movedM = haversineKm(prev!.lastStart.lat, prev!.lastStart.lng, routeStart!.lat, routeStart!.lng) * 1000;
+        const elapsedMs = now - prev!.lastFetchAt;
+        if (movedM < ROUTE_REFRESH_MIN_DISTANCE_M && elapsedMs < ROUTE_REFRESH_MIN_INTERVAL_MS) {
+          return; // déplacement/délai négligeables depuis le dernier calcul : on garde le tracé actuel
+        }
+      }
+
+      routeThrottleRef.current = { endpointsKey, lastStart: routeStart!, lastFetchAt: now };
+      drawRoute();
+    }
+
+    if (map.isStyleLoaded()) maybeDrawRoute();
+    else map.once('load', maybeDrawRoute);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, showRoute]);
 
