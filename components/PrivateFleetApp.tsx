@@ -571,9 +571,11 @@ function Screen1({
       ) : (
         <div className="yn-ticket">
           <div className="yn-ticket-body">
-            <AddressField label="DÉPART" placeholder="D'où partez-vous ?" value={pickup} onChange={onPickupChange} />
-            <div style={{ height: 8 }} />
-            <AddressField label="DESTINATION" placeholder="Où allez-vous ?" value={dropoff} onChange={onDropoffChange} />
+            <div className="yn-addr-group">
+              <AddressField label="DÉPART" icon="dot" placeholder="D'où partez-vous ?" value={pickup} onChange={onPickupChange} />
+              <AddressField label="DESTINATION" icon="pin" placeholder="Où allez-vous ?" value={dropoff} onChange={onDropoffChange} last />
+            </div>
+            <div className="yn-classes-label">Véhicule</div>
             <div className="yn-classes">
               {types.map((t) => (
                 <div key={t.key} className={`yn-cclass ${vehicle === t.key ? 'selected' : ''}`} onClick={() => onSelect(t.key)}>
@@ -606,14 +608,18 @@ function Screen1({
 /* Champ de saisie d'adresse avec suggestions réelles (OpenStreetMap Nominatim). */
 function AddressField({
   label,
+  icon,
   placeholder,
   value,
   onChange,
+  last,
 }: {
   label: string;
+  icon: 'dot' | 'pin';
   placeholder: string;
   value: GeoResult | null;
   onChange: (g: GeoResult) => void;
+  last?: boolean;
 }) {
   const [query, setQuery] = useState(value?.label ?? '');
   const [results, setResults] = useState<GeoResult[]>([]);
@@ -663,16 +669,17 @@ function AddressField({
   }, [value]);
 
   return (
-    <div className="field" style={{ position: 'relative' }}>
-      <label>{label}</label>
+    <div className={`yn-addr-row ${last ? '' : 'yn-addr-row-b'}`} style={{ position: 'relative' }}>
+      <span className={`yn-addr-icon yn-addr-icon-${icon}`} aria-hidden="true" />
       <input
         type="text"
+        aria-label={label}
         placeholder={placeholder}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => results.length > 0 && setOpen(true)}
       />
-      {searching && <div className="route-sub">Recherche…</div>}
+      {searching && <div className="route-sub" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)' }}>…</div>}
       {open && results.length > 0 && (
         <div
           className="glass"
