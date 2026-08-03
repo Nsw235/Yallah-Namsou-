@@ -1,5 +1,10 @@
 import DriverDashboard from '@/components/DriverDashboard';
+import RoleGate from '@/components/RoleGate';
 
 export default function ChauffeurPage() {
-  return <DriverDashboard />;
+  return (
+    <RoleGate allow="driver">
+      <DriverDashboard />
+    </RoleGate>
+  );
 }
