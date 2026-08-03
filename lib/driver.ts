@@ -178,11 +178,17 @@ export async function getPassengerName(passengerId: string): Promise<string | nu
   return data?.full_name ?? null;
 }
 
-/** Le chauffeur annule une course qu'il a acceptée (avant le départ). */
-export async function cancelTripAsDriver(tripId: string, vehicleId: string) {
-  const { error } = await supabase.from('trips').update({ status: 'cancelled' }).eq('id', tripId);
+/**
+ * Le chauffeur annule une course qu'il a acceptée (avant le départ).
+ * Comme dans une vraie appli VTC, la course n'est pas simplement close :
+ * elle repart en recherche ("pending") pour un autre chauffeur, avec un
+ * nouveau délai de quelques minutes. Le véhicule redevient disponible.
+ * Si personne ne l'accepte à temps, elle sera annulée automatiquement
+ * côté serveur (voir expire_stale_trips).
+ */
+export async function cancelTripAsDriver(tripId: string) {
+  const { error } = await supabase.rpc('driver_cancel_trip', { p_trip_id: tripId });
   if (error) throw error;
-  await setVehicleStatus(vehicleId, 'available');
 }
 
 /** Termine la course, fixe le prix final, la distance parcourue et libère le véhicule. */

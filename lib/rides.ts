@@ -101,6 +101,19 @@ export async function cancelTrip(tripId: string) {
   if (error) throw error;
 }
 
+/**
+ * Force une vérification immédiate des courses "pending" dont le délai de
+ * recherche est dépassé (elles sont alors annulées automatiquement côté
+ * serveur). Un job planifié (pg_cron) le fait déjà toutes les 20 secondes ;
+ * cet appel est un filet de sécurité côté client, déclenché quand le
+ * compte à rebours affiché à l'écran arrive à zéro, pour ne pas dépendre
+ * uniquement du timing du job.
+ */
+export async function expireStaleTrips() {
+  const { error } = await supabase.rpc('expire_stale_trips');
+  if (error) throw error;
+}
+
 /** Charge une course par son id (pour rafraîchir l'état après un événement realtime). */
 export async function getTrip(tripId: string): Promise<Trip> {
   const { data, error } = await supabase.from('trips').select('*').eq('id', tripId).single();
