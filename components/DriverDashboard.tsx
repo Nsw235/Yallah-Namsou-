@@ -480,7 +480,7 @@ export default function DriverDashboard() {
       </div>
 
       {showCompass && (
-        <div className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-[#1c1108]/85 text-[#e8c9a8] backdrop-blur">
+        <div className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-[#1c1108] text-[#e8c9a8] backdrop-blur">
           <Compass size={20} />
         </div>
       )}
@@ -510,7 +510,7 @@ export default function DriverDashboard() {
         {step === 'available' && (
           <div className="flex gap-2.5 overflow-x-auto px-3 pb-3" style={{ scrollSnapType: 'x mandatory' }}>
             {sortedPending.length === 0 && (
-              <div className="w-full border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c]/90 p-4 text-center text-xs text-[#8a7358]">
+              <div className="w-full border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c] p-4 text-center text-xs text-[#8a7358]">
                 Aucune course en attente pour le moment.
               </div>
             )}
@@ -520,7 +520,7 @@ export default function DriverDashboard() {
                   className="w-[3px] flex-none"
                   style={{ background: 'repeating-linear-gradient(180deg,#6b4a35 0 4px,transparent 4px 8px)' }}
                 />
-                <div className={`flex-1 border-[0.5px] border-l-0 p-3 ${i === 0 ? 'border-[#a97a5b] bg-[#a97a5b]/10' : 'border-[rgba(169,122,91,0.28)] bg-[#14100c]/90'}`}>
+                <div className={`flex-1 border-[0.5px] border-l-0 p-3 ${i === 0 ? 'border-[#a97a5b] bg-[#241a13]' : 'border-[rgba(169,122,91,0.28)] bg-[#14100c]'}`}>
                   <div className="flex items-center justify-between">
                     <span className="text-[8px] font-medium tracking-wide text-[#8a7358]">
                       MANIFESTE {i === 0 ? '· PLUS PROCHE' : ''}
@@ -563,7 +563,7 @@ export default function DriverDashboard() {
         )}
 
         {step === 'accepted' && active && (
-          <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c]/92">
+          <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c]">
             <button
               onClick={() => setTripCardExpanded((v) => !v)}
               className="flex w-full items-center justify-between gap-2 border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] px-3 py-2.5 text-left"
@@ -607,7 +607,7 @@ export default function DriverDashboard() {
 
         {step === 'in_progress' && active && (
           <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)]">
-            <div className="bg-[#14100c]/92">
+            <div className="bg-[#14100c]">
               <button
                 onClick={() => setTripCardExpanded((v) => !v)}
                 className="flex w-full items-center justify-between gap-2 border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] px-3 py-2.5 text-left"
@@ -648,14 +648,14 @@ export default function DriverDashboard() {
 
         {step === 'summary' && summaryTrip && (
           <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)]">
-            <div className="border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] bg-[#14100c]/92 px-3 py-2.5">
+            <div className="border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] bg-[#14100c] px-3 py-2.5">
               <span className="text-[9px] font-medium tracking-wide text-[#e8c9a8]">MANIFESTE DE VOL · TERMINÉ</span>
               <div className="mt-1 text-[10.5px] text-[#a89680]">
                 Avec {passengerContact?.full_name ?? '—'} · {elapsedMin ?? '—'} min · {summaryTrip.distance_km?.toFixed(1) ?? '—'} km
               </div>
             </div>
 
-            <div className="bg-[#14100c]/92 px-3 py-2.5">
+            <div className="bg-[#14100c] px-3 py-2.5">
               <div className="flex items-center gap-0.5">
                 {[1, 2, 3, 4, 5].map((n) => (
                   <button key={n} onClick={() => setRatingStars(n)} aria-label={`${n} étoiles`}>
@@ -711,7 +711,7 @@ export default function DriverDashboard() {
       </nav>
 
       {bottomTab !== 'accueil' && (
-        <div className="absolute inset-x-3 bottom-16 top-20 z-20 flex flex-col overflow-hidden border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c]/97 p-3.5 text-sm text-[#e8c9a8]">
+        <div className="absolute inset-x-3 bottom-16 top-20 z-20 flex flex-col overflow-hidden border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c] p-3.5 text-sm text-[#e8c9a8]">
           <div className="mb-3 flex flex-none items-center justify-between border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] pb-2.5">
             <h2 className="text-[13px] font-medium tracking-wide">
               {bottomTab === 'historique'
@@ -928,7 +928,7 @@ function TripCardBody({
             <span
               key={vt}
               className={`px-1.5 py-0.5 text-[9px] ${
-                vt === trip.vehicle_type ? 'bg-[#a97a5b]/25 text-[#e8c9a8]' : 'text-[#6b5c48]'
+                vt === trip.vehicle_type ? 'bg-[#3a2a1c] text-[#e8c9a8]' : 'text-[#6b5c48]'
               }`}
             >
               {VEHICLE_LABELS[vt]}
