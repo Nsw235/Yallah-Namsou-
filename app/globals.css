@@ -345,12 +345,33 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
   font-size:9.5px; font-weight:800; padding:2px 8px; transform:rotate(-9deg); letter-spacing:1px;
 }
 
-/* Sélecteur de classe (remplace .vehicles/.vcard dans ce nouvel écran) */
-.yn-classes{ display:flex; gap:8px; margin:12px 0; }
-.yn-cclass{ flex:1; text-align:center; border-radius:14px; padding:9px 6px 10px; background:rgba(255,255,255,0.03); border:1.5px solid rgba(255,255,255,0.08); cursor:pointer; }
-.yn-cclass img{ width:100%; max-width:52px; margin-bottom:4px; display:block; margin-left:auto; margin-right:auto; }
-.yn-cclass .cname{ font-size:12px; font-weight:700; color:var(--copper-cream); }
-.yn-cclass .cprice{ font-size:10.5px; color:var(--text-dim); margin-top:1px; }
+/* Départ + Destination fusionnés dans un seul bloc à bordure fine,
+   séparés par un simple trait — remplace les deux .field empilés. */
+.yn-addr-group{
+  border:1px solid rgba(232,201,168,0.28); border-radius:14px; overflow:hidden;
+  background:rgba(255,255,255,0.03); margin-bottom:2px;
+}
+.yn-addr-row{ display:flex; align-items:center; gap:9px; padding:10px 12px; position:relative; }
+.yn-addr-row-b{ border-bottom:1px solid rgba(232,201,168,0.18); }
+.yn-addr-row input{
+  flex:1; min-width:0; background:transparent; border:none; color:var(--copper-cream);
+  font-size:13.5px; font-family:var(--font); padding:0;
+}
+.yn-addr-row input:focus{ outline:none; }
+.yn-addr-row input::placeholder{ color:var(--text-dim); }
+.yn-addr-icon{ flex:0 0 auto; width:9px; height:9px; border-radius:50%; }
+.yn-addr-icon-dot{ background:var(--copper-light); box-shadow:0 0 0 3px rgba(232,201,168,0.16); }
+.yn-addr-icon-pin{ background:#e05a5a; border-radius:2px 2px 2px 0; transform:rotate(45deg); width:8px; height:8px; }
+
+/* Sélecteur de classe (remplace .vehicles/.vcard dans ce nouvel écran) —
+   version compacte : icônes et cartes réduites pour laisser la carte
+   respirer et pour s'adapter à des stickers plus petits/personnalisés. */
+.yn-classes-label{ font-size:10.5px; letter-spacing:.5px; color:var(--text-dim); font-weight:700; margin:12px 0 6px 2px; text-transform:uppercase; }
+.yn-classes{ display:flex; gap:6px; margin:0 0 10px; }
+.yn-cclass{ flex:1; text-align:center; border-radius:12px; padding:7px 4px 8px; background:rgba(255,255,255,0.03); border:1.5px solid rgba(255,255,255,0.08); cursor:pointer; }
+.yn-cclass img{ width:100%; max-width:32px; margin-bottom:3px; display:block; margin-left:auto; margin-right:auto; }
+.yn-cclass .cname{ font-size:11px; font-weight:700; color:var(--copper-cream); }
+.yn-cclass .cprice{ font-size:10px; color:var(--text-dim); margin-top:1px; }
 .yn-cclass.selected{ border-color:var(--copper); background:rgba(169,122,91,0.12); box-shadow:0 0 14px rgba(169,122,91,0.4); }
 
 /* Recherche de chauffeur : rose des vents tournante (remplace le sonar). */
