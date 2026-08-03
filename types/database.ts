@@ -60,6 +60,10 @@ export interface Trip {
   accepted_at: string | null;
   started_at: string | null;
   completed_at: string | null;
+  /** Date-limite au-delà de laquelle une course "pending" est annulée automatiquement. */
+  expires_at: string | null;
+  /** Raison de l'annulation : passenger_cancelled, driver_cancelled ou timeout. */
+  cancel_reason: 'passenger_cancelled' | 'driver_cancelled' | 'timeout' | null;
   /** Rempli côté client pour les courses en attente (voir getPendingTrips). */
   passenger_profile?: Pick<Profile, 'full_name'> | null;
 }
