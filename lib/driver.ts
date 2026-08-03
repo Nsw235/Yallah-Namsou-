@@ -13,6 +13,7 @@ export type MyVehicle = {
 export type MyDriverProfile = {
   full_name: string | null;
   phone: string | null;
+  avatar_url: string | null;
   rating_avg: number;
   validation_status: string;
 };
@@ -21,7 +22,7 @@ export type MyDriverProfile = {
 export async function getMyDriverData(userId: string) {
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('full_name, phone')
+    .select('full_name, phone, avatar_url')
     .eq('id', userId)
     .single();
   if (profileError) throw profileError;
@@ -40,10 +41,34 @@ export async function getMyDriverData(userId: string) {
   if (vehiclesError) throw vehiclesError;
 
   return {
-    profile: profile as { full_name: string | null; phone: string | null },
+    profile: profile as { full_name: string | null; phone: string | null; avatar_url: string | null },
     driver: driver as { rating_avg: number; validation_status: string },
     vehicles: (vehicles ?? []) as MyVehicle[],
   };
+}
+
+/**
+ * Upload la photo de profil du chauffeur vers le bucket "avatars" (chemin
+ * {userId}/avatar.{ext}) et met à jour profiles.avatar_url avec l'URL
+ * publique (suffixée d'un cache-buster pour forcer le rafraîchissement
+ * visuel immédiat après remplacement).
+ */
+export async function updateMyAvatar(userId: string, file: File): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const path = `${userId}/avatar.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('avatars')
+    .upload(path, file, { upsert: true, cacheControl: '3600', contentType: file.type });
+  if (uploadError) throw uploadError;
+
+  const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path);
+  const url = `${pub.publicUrl}?t=${Date.now()}`;
+
+  const { error: updateError } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', userId);
+  if (updateError) throw updateError;
+
+  return url;
 }
 
 /** Change le statut d'un véhicule (en ligne / hors ligne / en course). */
