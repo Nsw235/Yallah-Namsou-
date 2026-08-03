@@ -17,9 +17,11 @@ import {
   cancelTrip,
   confirmMobilePayment,
   createTrip,
+  expireStaleTrips,
   getAvailableVehicles,
   getDriverAndVehicle,
   getPricingRules,
+  getTrip,
   rateTrip,
   subscribeToAvailableVehicles,
   subscribeToTrip,
@@ -72,6 +74,10 @@ export default function PrivateFleetApp() {
   const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
   const [availableVehicles, setAvailableVehicles] = useState<AvailableVehicle[]>([]);
   const [sheetExpanded, setSheetExpanded] = useState(false);
+  // Message affiché pendant la recherche (ex: "le chauffeur a annulé, on
+  // recherche à nouveau…") et compte à rebours avant annulation automatique.
+  const [searchNotice, setSearchNotice] = useState<string | null>(null);
+  const [searchSecondsLeft, setSearchSecondsLeft] = useState<number | null>(null);
   const submittingTrip = useRef(false);
 
   const distanceKm = useMemo(() => {
@@ -149,6 +155,8 @@ export default function PrivateFleetApp() {
     setMobilePaymentConfirmed(false);
     setDriverPos(null);
     setSheetExpanded(false);
+    setSearchNotice(null);
+    setSearchSecondsLeft(null);
   }
 
   async function handleConfirmTrip() {
@@ -194,6 +202,9 @@ export default function PrivateFleetApp() {
   // Écran 3 : la course est diffusée en temps réel à tous les chauffeurs
   // disponibles du bon type de véhicule. On attend qu'un chauffeur
   // l'accepte (Realtime UPDATE sur trips.driver_id), premier arrivé premier servi.
+  // Comme dans une vraie appli VTC, la recherche a un délai (voir
+  // trips.expires_at) : si personne n'accepte à temps, le serveur annule
+  // la course automatiquement et on revient à l'écran de réservation.
   useEffect(() => {
     if (step !== 3 || !trip) return;
     const unsubscribe = subscribeToTrip(trip.id, async (updated) => {
@@ -203,14 +214,56 @@ export default function PrivateFleetApp() {
           const { driver: d, vehicle: v } = await getDriverAndVehicle(updated.driver_id, updated.vehicle_id);
           setDriver(d);
           setVehicleInfo(v);
+          setSearchNotice(null);
           setStep(4);
         } catch (e: any) {
           setError(e?.message ?? "Impossible de charger les infos du chauffeur.");
         }
+      } else if (updated.status === 'cancelled') {
+        // Délai de recherche dépassé (ou annulation serveur) : on informe
+        // le passager et on le ramène à l'écran de réservation pour qu'il
+        // relance une demande, plutôt que de le laisser bloqué à regarder
+        // un écran de recherche qui ne mènera nulle part.
+        setError(null);
+        setSearchNotice(
+          updated.cancel_reason === 'timeout'
+            ? "Aucun chauffeur n'a accepté votre demande à temps. Veuillez réessayer."
+            : "Votre demande a été annulée. Veuillez réessayer."
+        );
+        window.setTimeout(() => resetToBooking(), 2600);
       }
     });
     return unsubscribe;
   }, [step, trip?.id]);
+
+  // Compte à rebours affiché pendant la recherche (écran 3), basé sur
+  // trips.expires_at. Purement visuel : l'annulation réelle est décidée
+  // côté serveur (job planifié), mais on déclenche aussi une vérification
+  // immédiate quand le compte à rebours atteint zéro, en filet de sécurité
+  // si le job planifié a un peu de retard.
+  useEffect(() => {
+    if (step !== 3 || !trip?.expires_at) {
+      setSearchSecondsLeft(null);
+      return;
+    }
+    const expiresAtMs = new Date(trip.expires_at).getTime();
+    let pokedServer = false;
+
+    function tick() {
+      const secondsLeft = Math.max(0, Math.round((expiresAtMs - Date.now()) / 1000));
+      setSearchSecondsLeft(secondsLeft);
+      if (secondsLeft === 0 && !pokedServer) {
+        pokedServer = true;
+        expireStaleTrips()
+          .then(() => (trip ? getTrip(trip.id) : null))
+          .then((refreshed) => refreshed && setTrip(refreshed))
+          .catch(() => {});
+      }
+    }
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [step, trip?.id, trip?.expires_at]);
 
   async function handleCancelSearch() {
     if (!trip) return;
@@ -238,13 +291,30 @@ export default function PrivateFleetApp() {
 
   // Écrans 4 et 5 : suit aussi les changements de statut poussés par le
   // chauffeur (in_progress, completed) pour rester synchronisé sans action
-  // du passager.
+  // du passager. On gère aussi explicitement les cas "chauffeur a annulé"
+  // (retour en recherche) et "annulée" : sans ça, l'écran restait bloqué
+  // sur les infos d'un chauffeur qui n'assurait plus la course.
   useEffect(() => {
     if ((step !== 4 && step !== 5) || !trip) return;
     const unsubscribe = subscribeToTrip(trip.id, (updated) => {
       setTrip(updated);
-      if (updated.status === 'in_progress') setStep(5);
-      if (updated.status === 'completed') setStep(6);
+      if (updated.status === 'in_progress') {
+        setStep(5);
+      } else if (updated.status === 'completed') {
+        setStep(6);
+      } else if (updated.status === 'pending') {
+        // Le chauffeur a annulé avant le départ : la course repart en
+        // recherche pour un autre chauffeur, avec un nouveau délai.
+        setDriver(null);
+        setVehicleInfo(null);
+        setDriverPos(null);
+        setSearchNotice('Le chauffeur a dû annuler. Nous recherchons un autre chauffeur…');
+        setStep(3);
+      } else if (updated.status === 'cancelled') {
+        setError(null);
+        setSearchNotice('Votre course a été annulée. Veuillez réessayer.');
+        window.setTimeout(() => resetToBooking(), 2600);
+      }
     });
     return unsubscribe;
   }, [step, trip?.id]);
@@ -335,6 +405,8 @@ export default function PrivateFleetApp() {
           <Screen3
             trip={trip}
             busy={busy}
+            notice={searchNotice}
+            secondsLeft={searchSecondsLeft}
             onCancel={handleCancelSearch}
             onOptions={() => setShowHistory(true)}
             onMenu={() => setShowMenu(true)}
@@ -718,16 +790,22 @@ function Screen2({
 function Screen3({
   trip,
   busy,
+  notice,
+  secondsLeft,
   onCancel,
   onOptions,
   onMenu,
 }: {
   trip: Trip;
   busy: boolean;
+  notice: string | null;
+  secondsLeft: number | null;
   onCancel: () => void;
   onOptions: () => void;
   onMenu: () => void;
 }) {
+  const mm = secondsLeft != null ? Math.floor(secondsLeft / 60) : null;
+  const ss = secondsLeft != null ? secondsLeft % 60 : null;
   return (
     <div className="screen fade">
       <RealMap pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }} />
@@ -739,8 +817,17 @@ function Screen3({
         <div className="yn-compass-core" />
       </div>
       <div className="yn-compass-label">
-        RECHERCHE D&apos;UN CHAUFFEUR
-        <span>Diffusion aux {VEHICLE_LABELS[trip.vehicle_type]} disponibles</span>
+        {notice ? notice.toUpperCase() : "RECHERCHE D'UN CHAUFFEUR"}
+        <span>
+          {notice
+            ? 'Merci de patienter…'
+            : `Diffusion aux ${VEHICLE_LABELS[trip.vehicle_type]} disponibles`}
+        </span>
+        {!notice && secondsLeft != null && mm != null && ss != null && (
+          <span style={{ display: 'block', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
+            Annulation auto dans {mm}:{String(ss).padStart(2, '0')}
+          </span>
+        )}
       </div>
       <div className="yn-ticket">
         <div className="yn-ticket-stub">

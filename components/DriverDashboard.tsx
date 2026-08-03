@@ -313,11 +313,11 @@ export default function DriverDashboard() {
   }
 
   async function handleCancel() {
-    if (!active || !active.vehicle_id) return;
+    if (!active) return;
     setBusy(true);
     setError(null);
     try {
-      await cancelTripAsDriver(active.id, active.vehicle_id);
+      await cancelTripAsDriver(active.id);
       if (session?.user) await refreshAll(session.user.id);
     } catch (e: any) {
       setError(e?.message ?? "Impossible d'annuler la course.");
