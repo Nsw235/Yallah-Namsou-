@@ -38,6 +38,18 @@ import AccountMenu from '@/components/AccountMenu';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
+/** Convertit la liste des véhicules en ligne (dispo) en pins 3D pour la carte :
+ *  utilisé sur les écrans 1, 2 et 3 pour que le passager voie en permanence
+ *  les chauffeurs connectés autour de lui, dès qu'ils passent en ligne. */
+function vehiclesToCarPins(availableVehicles: AvailableVehicle[]) {
+  return availableVehicles
+    .filter((v) => v.last_lat != null && v.last_lng != null)
+    .map((v) => ({
+      position: { lat: v.last_lat as number, lng: v.last_lng as number },
+      car3d: { modelUrl: CAR_MODEL_BY_TYPE[v.type] },
+    }));
+}
+
 type DriverInfo = {
   id: string;
   full_name: string | null;
@@ -74,6 +86,9 @@ export default function PrivateFleetApp() {
   const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
   const [availableVehicles, setAvailableVehicles] = useState<AvailableVehicle[]>([]);
   const [sheetExpanded, setSheetExpanded] = useState(false);
+  // Temps d'arrivée estimé du chauffeur assigné (calculé via l'itinéraire
+  // Mapbox trafic temps réel), affiché à l'écran 4 ("chauffeur en route").
+  const [driverEtaSeconds, setDriverEtaSeconds] = useState<number | null>(null);
   // Message affiché pendant la recherche (ex: "le chauffeur a annulé, on
   // recherche à nouveau…") et compte à rebours avant annulation automatique.
   const [searchNotice, setSearchNotice] = useState<string | null>(null);
@@ -398,6 +413,7 @@ export default function PrivateFleetApp() {
             onConfirm={handleConfirmTrip}
             onOptions={() => setShowHistory(true)}
             onMenu={() => setShowMenu(true)}
+            availableVehicles={availableVehicles}
           />
         )}
 
@@ -410,6 +426,7 @@ export default function PrivateFleetApp() {
             onCancel={handleCancelSearch}
             onOptions={() => setShowHistory(true)}
             onMenu={() => setShowMenu(true)}
+            availableVehicles={availableVehicles}
           />
         )}
 
@@ -423,6 +440,8 @@ export default function PrivateFleetApp() {
             driverPos={driverPos}
             onOptions={() => setShowHistory(true)}
             onMenu={() => setShowMenu(true)}
+            driverEtaSeconds={driverEtaSeconds}
+            onEtaChange={setDriverEtaSeconds}
           />
         )}
 
@@ -508,12 +527,7 @@ function Screen1({
     { key: 'suv', icon: '/icon_suv.png' },
   ];
   const ready = !!pickup && !!dropoff;
-  const carPins = availableVehicles
-    .filter((v) => v.last_lat != null && v.last_lng != null)
-    .map((v) => ({
-      position: { lat: v.last_lat as number, lng: v.last_lng as number },
-      car3d: { modelUrl: CAR_MODEL_BY_TYPE[v.type] },
-    }));
+  const carPins = vehiclesToCarPins(availableVehicles);
 
   return (
     <div className="screen fade">
@@ -742,6 +756,7 @@ function Screen2({
   onConfirm,
   onOptions,
   onMenu,
+  availableVehicles,
 }: {
   vehicle: VehicleType;
   price: number | null;
@@ -753,10 +768,18 @@ function Screen2({
   onConfirm: () => void;
   onOptions: () => void;
   onMenu: () => void;
+  availableVehicles: AvailableVehicle[];
 }) {
+  const carPins = vehiclesToCarPins(availableVehicles);
   return (
     <div className="screen fade">
-      <RealMap pickup={{ lat: pickup.lat, lng: pickup.lng }} dropoff={{ lat: dropoff.lat, lng: dropoff.lng }} showRoute routeColor="#e8c9a8" />
+      <RealMap
+        pickup={{ lat: pickup.lat, lng: pickup.lng }}
+        dropoff={{ lat: dropoff.lat, lng: dropoff.lng }}
+        showRoute
+        routeColor="#e8c9a8"
+        pins={carPins}
+      />
       <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
       <RouteCard pickup={pickup} dropoff={dropoff} />
       <div className="yn-ticket">
@@ -802,6 +825,7 @@ function Screen3({
   onCancel,
   onOptions,
   onMenu,
+  availableVehicles,
 }: {
   trip: Trip;
   busy: boolean;
@@ -810,12 +834,14 @@ function Screen3({
   onCancel: () => void;
   onOptions: () => void;
   onMenu: () => void;
+  availableVehicles: AvailableVehicle[];
 }) {
   const mm = secondsLeft != null ? Math.floor(secondsLeft / 60) : null;
   const ss = secondsLeft != null ? secondsLeft % 60 : null;
+  const carPins = vehiclesToCarPins(availableVehicles);
   return (
     <div className="screen fade">
-      <RealMap pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }} />
+      <RealMap pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }} pins={carPins} />
       <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
       <div className="yn-compass-wrap">
         <div className="yn-compass-ring" />
@@ -866,6 +892,8 @@ function Screen4({
   driverPos,
   onOptions,
   onMenu,
+  driverEtaSeconds,
+  onEtaChange,
 }: {
   driver: DriverInfo;
   vehicleInfo: VehicleInfo;
@@ -875,11 +903,27 @@ function Screen4({
   driverPos: { lat: number; lng: number } | null;
   onOptions: () => void;
   onMenu: () => void;
+  driverEtaSeconds: number | null;
+  onEtaChange: (seconds: number | null) => void;
 }) {
+  // Texte "communiqué" au passager sur le temps d'arrivée du chauffeur,
+  // recalculé en temps réel à partir de l'itinéraire trafic (RealMap → onRouteInfo).
+  const etaLabel =
+    driverEtaSeconds != null
+      ? driverEtaSeconds < 60
+        ? "Arrive à l'instant"
+        : `Arrive dans ${Math.round(driverEtaSeconds / 60)} min`
+      : 'Localisation du chauffeur…';
+
   return (
     <div className="screen fade">
       <RealMap
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
+        dropoff={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
+        driverPosition={driverPos ?? undefined}
+        showRoute
+        routeColor="#e8c9a8"
+        onRouteInfo={(info) => onEtaChange(info ? info.durationSeconds : null)}
         pins={[
           {
             position: driverPos ?? { lat: trip.pickup_lat, lng: trip.pickup_lng },
@@ -898,7 +942,10 @@ function Screen4({
             <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
             <div className="driver-info">
               <div className="driver-name">{driver.full_name ?? 'Chauffeur'}</div>
-              <div className="driver-eta">Le chauffeur arrive vers votre position de départ</div>
+              <div className="driver-eta">
+                Le chauffeur arrive vers votre position de départ
+                <span className="eta-badge">⏱ {etaLabel}</span>
+              </div>
               <div className="driver-meta">
                 <span className="star-badge">{Number(driver.rating_avg).toFixed(1)} ★</span>
               </div>
