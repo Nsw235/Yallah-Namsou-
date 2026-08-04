@@ -71,6 +71,24 @@ export async function updateMyAvatar(userId: string, file: File): Promise<string
   return url;
 }
 
+/**
+ * Met à jour le nom complet et/ou le téléphone du profil connecté.
+ * Générique : utilisée aussi bien côté chauffeur que côté passager
+ * (table `profiles` commune, policy RLS `profiles_update_own`).
+ */
+export async function updateMyProfileInfo(
+  userId: string,
+  data: { full_name?: string; phone?: string }
+): Promise<void> {
+  const payload: Record<string, string> = {};
+  if (data.full_name !== undefined) payload.full_name = data.full_name.trim();
+  if (data.phone !== undefined) payload.phone = data.phone.trim();
+  if (Object.keys(payload).length === 0) return;
+
+  const { error } = await supabase.from('profiles').update(payload).eq('id', userId);
+  if (error) throw error;
+}
+
 /** Change le statut d'un véhicule (en ligne / hors ligne / en course). */
 export async function setVehicleStatus(vehicleId: string, status: 'offline' | 'available' | 'busy') {
   const { error } = await supabase.from('vehicles').update({ status }).eq('id', vehicleId);
