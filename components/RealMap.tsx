@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 export type LatLng = { lat: number; lng: number };
 export type MapPin = {
@@ -43,27 +43,19 @@ const MAP_STYLE = 'mapbox://styles/devnos/cms9xitev009301s80im37bm5';
 // Modèle 3D par défaut du véhicule (place ton .glb dans /public/models/).
 const DEFAULT_CAR_MODEL_URL = '/models/berline.glb';
 
+/** Handle impératif exposé via ref : permet de recentrer la caméra sans
+ *  remonter le composant (évite de perdre/recréer le contexte WebGL). */
+export type RealMapHandle = {
+  /** Recentre la caméra sur les points actuellement affichés (pins, chauffeur, pickup/dropoff). */
+  recenter: () => void;
+};
+
 /**
  * Carte vecteur Mapbox GL JS : rendu fluide, trafic en temps réel,
  * itinéraire "driving-traffic" (tient compte des embouteillages),
  * marqueurs animés en continu (position interpolée, pas de saut).
  */
-export default function RealMap({
-  pickup,
-  dropoff,
-  driverPosition,
-  showRoute = false,
-  routeColor = '#e8c9a8',
-  pins = [],
-  pitch = 0,
-  buildings3d = false,
-  use3dCar = false,
-  carModelUrl = DEFAULT_CAR_MODEL_URL,
-  carHeading = 90,
-  onNavigationUpdate,
-  onRouteInfo,
-  overviewZoom = 15,
-}: {
+const RealMap = forwardRef<RealMapHandle, {
   pickup?: LatLng | null;
   dropoff?: LatLng | null;
   /** Position live du chauffeur (GPS). Si fournie, sert de point de départ
@@ -92,7 +84,22 @@ export default function RealMap({
    *  la position du chauffeur, personne à proximité). Par défaut 15 (rue). Passer
    *  une valeur plus basse (ex: 12.5) pour une vue d'ensemble de la ville. */
   overviewZoom?: number;
-}) {
+}>(function RealMap({
+  pickup,
+  dropoff,
+  driverPosition,
+  showRoute = false,
+  routeColor = '#e8c9a8',
+  pins = [],
+  pitch = 0,
+  buildings3d = false,
+  use3dCar = false,
+  carModelUrl = DEFAULT_CAR_MODEL_URL,
+  carHeading = 90,
+  onNavigationUpdate,
+  onRouteInfo,
+  overviewZoom = 15,
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Record<string, any>>({});
@@ -201,6 +208,37 @@ export default function RealMap({
     };
   }, []);
 
+  // Recentre la caméra sur les points actuellement affichés (pickup, dropoff,
+  // chauffeur, pins). Factorisé ici pour être appelable à la fois automatiquement
+  // (quand les positions changent) et manuellement (bouton "Recentrer" via ref),
+  // sans jamais remonter/recréer la carte (ce qui plantait le contexte WebGL).
+  const recenterView = async () => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const coords: [number, number][] = [];
+    if (pickup) coords.push([pickup.lng, pickup.lat]);
+    if (dropoff) coords.push([dropoff.lng, dropoff.lat]);
+    if (driverPosition) coords.push([driverPosition.lng, driverPosition.lat]);
+    pins.forEach((p) => coords.push([p.position.lng, p.position.lat]));
+
+    if (coords.length === 1) {
+      map.easeTo({ center: coords[0], zoom: overviewZoom, pitch, bearing: map.getBearing(), duration: 800 });
+    } else if (coords.length > 1) {
+      const mapboxgl = (await import('mapbox-gl')).default;
+      const bounds = coords.reduce(
+        (b, c) => b.extend(c as any),
+        new mapboxgl.LngLatBounds(coords[0], coords[0])
+      );
+      // IMPORTANT : fitBounds() remet pitch/bearing à 0 par défaut si on ne
+      // les précise pas ici — ça écrasait la vue inclinée (ciel visible) à
+      // chaque recentrage sur plusieurs points (ex: chauffeur + pickup).
+      map.fitBounds(bounds, { padding: 60, duration: 800, pitch, bearing: map.getBearing() });
+    }
+  };
+
+  useImperativeHandle(ref, () => ({ recenter: recenterView }));
+
   // Marqueurs pickup / dropoff + pins (chauffeur, etc.), avec déplacement animé.
   useEffect(() => {
     const map = mapRef.current;
@@ -259,23 +297,7 @@ export default function RealMap({
         animFrames.current[key] = requestAnimationFrame(step);
       });
 
-      const coords: [number, number][] = [];
-      if (pickup) coords.push([pickup.lng, pickup.lat]);
-      if (dropoff) coords.push([dropoff.lng, dropoff.lat]);
-      if (driverPosition) coords.push([driverPosition.lng, driverPosition.lat]);
-      pins.forEach((p) => coords.push([p.position.lng, p.position.lat]));
-      if (coords.length === 1) {
-        map.easeTo({ center: coords[0], zoom: overviewZoom, pitch, bearing: map.getBearing(), duration: 800 });
-      } else if (coords.length > 1) {
-        const bounds = coords.reduce(
-          (b, c) => b.extend(c as any),
-          new (await import('mapbox-gl')).default.LngLatBounds(coords[0], coords[0])
-        );
-        // IMPORTANT : fitBounds() remet pitch/bearing à 0 par défaut si on ne
-        // les précise pas ici — ça écrasait la vue inclinée (ciel visible) à
-        // chaque recentrage sur plusieurs points (ex: chauffeur + pickup).
-        map.fitBounds(bounds, { padding: 60, duration: 800, pitch, bearing: map.getBearing() });
-      }
+      await recenterView();
     }
 
     if (map.isStyleLoaded()) render();
@@ -451,7 +473,11 @@ export default function RealMap({
   }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, showRoute]);
 
   return <div ref={containerRef} className="real-map" />;
-}
+});
+
+RealMap.displayName = 'RealMap';
+
+export default RealMap;
 
 function dropEl(color: string): HTMLElement {
   const el = document.createElement('div');

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Flame, Maximize2, LocateFixed, Crosshair, SlidersHorizontal } from 'lucide-react';
-import RealMap from '@/components/RealMap';
+import RealMap, { type RealMapHandle } from '@/components/RealMap';
 import { MOCK_FLEET, STATUS_META } from './mockData';
 
 const STATUS_EMOJI: Record<string, string> = {
@@ -13,7 +13,7 @@ const STATUS_EMOJI: Record<string, string> = {
 
 export default function MapView() {
   const [heatmapOn, setHeatmapOn] = useState(true);
-  const [mapKey, setMapKey] = useState(0); // force re-center by remounting the map
+  const mapRef = useRef<RealMapHandle>(null);
 
   const now = new Date();
   const dateStr = now.toLocaleDateString('fr-FR');
@@ -42,7 +42,7 @@ export default function MapView() {
 
       {/* Carte GPS */}
       <div className="relative flex-1 min-h-[380px] overflow-hidden rounded-2xl border border-border">
-        <RealMap key={mapKey} pitch={55} buildings3d pins={pins} />
+        <RealMap ref={mapRef} pitch={55} buildings3d pins={pins} />
 
         {heatmapOn && (
           <div className="sv-pill absolute left-3 top-3 z-10 max-w-[70%] rounded-full px-3 py-1.5 text-[11px] font-bold text-amber-300">
@@ -69,7 +69,7 @@ export default function MapView() {
             <LocateFixed size={18} />
           </button>
           <button
-            onClick={() => setMapKey((k) => k + 1)}
+            onClick={() => mapRef.current?.recenter()}
             className="sv-btn-copper flex items-center gap-1.5 rounded-full px-4 py-2.5 text-xs font-extrabold shadow-copper"
           >
             <Crosshair size={14} /> Recenter

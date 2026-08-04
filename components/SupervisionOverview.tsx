@@ -37,7 +37,7 @@ import {
 } from '@/lib/admin';
 import { CAR_MODEL_BY_TYPE } from '@/lib/pricing';
 import type { VehicleType } from '@/types/database';
-import RealMap, { type MapPin as MapPinData } from '@/components/RealMap';
+import RealMap, { type MapPin as MapPinData, type RealMapHandle } from '@/components/RealMap';
 
 type NavKey = 'flotte' | 'carte' | 'stats' | 'parametres';
 
@@ -61,7 +61,10 @@ export default function SupervisionOverview() {
   const [fleetError, setFleetError] = useState<string | null>(null);
   const [editingVehicle, setEditingVehicle] = useState<FleetVehicle | null>(null);
   const [mapFullscreen, setMapFullscreen] = useState(false);
-  const [mapKey, setMapKey] = useState(0);
+  // Ref vers l'instance RealMap : le recentrage passe par map.flyTo()/fitBounds()
+  // (voir RealMap.recenter()) au lieu de remonter le composant via une `key`,
+  // ce qui plantait le contexte WebGL.
+  const mapRef = useRef<RealMapHandle>(null);
 
   const flotteRef = useRef<HTMLDivElement>(null);
   const carteRef = useRef<HTMLDivElement>(null);
@@ -331,7 +334,7 @@ export default function SupervisionOverview() {
             }
           >
             <RealMap
-              key={mapKey}
+              ref={mapRef}
               pitch={22}
               overviewZoom={12.5}
               buildings3d
@@ -344,28 +347,36 @@ export default function SupervisionOverview() {
               YALLAH NAMSOU · VUE D&apos;ENSEMBLE
             </span>
 
-            <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex gap-3 rounded-xl border-[0.5px] border-[rgba(176,141,87,0.25)] bg-[rgba(10,11,13,0.85)] px-3 py-2 text-[9px] font-bold text-[#e8c9a8]">
-              {(['available', 'busy', 'offline'] as FleetVehicle['status'][]).map((key) => (
-                <span key={key} className="flex items-center gap-1">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: STATUS_DOT[key] }} />
-                  {STATUS_LABEL[key]}
-                </span>
-              ))}
-            </div>
+            {/* Légende + contrôles : vraie ligne flex (justify-between) plutôt que
+                deux blocs absolus superposés indépendamment — la légende peut
+                rétrécir/passer à la ligne (flex-wrap, min-w-0) sans jamais
+                chevaucher le groupe de boutons, qui lui ne rétrécit pas (shrink-0). */}
+            <div className="absolute inset-x-3 bottom-3 z-10 flex items-end justify-between gap-2">
+              <div className="pointer-events-none flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl border-[0.5px] border-[rgba(176,141,87,0.25)] bg-[rgba(10,11,13,0.85)] px-3 py-2 text-[9px] font-bold text-[#e8c9a8]">
+                {(['available', 'busy', 'offline'] as FleetVehicle['status'][]).map((key) => (
+                  <span key={key} className="flex items-center gap-1 whitespace-nowrap">
+                    <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: STATUS_DOT[key] }} />
+                    {STATUS_LABEL[key]}
+                  </span>
+                ))}
+              </div>
 
-            <button
-              aria-label={mapFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
-              onClick={() => setMapFullscreen((f) => !f)}
-              className="absolute bottom-3 right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-[rgba(176,141,87,0.35)] bg-[rgba(10,11,13,0.85)] text-[#e8c9a8]"
-            >
-              {mapFullscreen ? <X size={16} /> : <Maximize2 size={14} />}
-            </button>
-            <button
-              onClick={() => setMapKey((k) => k + 1)}
-              className="absolute bottom-3 right-14 z-10 flex h-9 items-center gap-1.5 rounded-full bg-gradient-to-b from-[#e8c9a8] to-[#a97a5b] px-3.5 text-xs font-extrabold text-[#241a13]"
-            >
-              <Crosshair size={13} /> Recentrer
-            </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  onClick={() => mapRef.current?.recenter()}
+                  className="flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full bg-gradient-to-b from-[#e8c9a8] to-[#a97a5b] px-3.5 text-xs font-extrabold text-[#241a13]"
+                >
+                  <Crosshair size={13} /> Recentrer
+                </button>
+                <button
+                  aria-label={mapFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
+                  onClick={() => setMapFullscreen((f) => !f)}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[rgba(176,141,87,0.35)] bg-[rgba(10,11,13,0.85)] text-[#e8c9a8]"
+                >
+                  {mapFullscreen ? <X size={16} /> : <Maximize2 size={14} />}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
