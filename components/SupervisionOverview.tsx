@@ -60,6 +60,8 @@ export default function SupervisionOverview() {
   const [fleet, setFleet] = useState<FleetVehicle[]>([]);
   const [fleetError, setFleetError] = useState<string | null>(null);
   const [editingVehicle, setEditingVehicle] = useState<FleetVehicle | null>(null);
+  const [mapFullscreen, setMapFullscreen] = useState(false);
+  const [mapKey, setMapKey] = useState(0);
 
   const flotteRef = useRef<HTMLDivElement>(null);
   const carteRef = useRef<HTMLDivElement>(null);
@@ -117,6 +119,7 @@ export default function SupervisionOverview() {
   const dateStr = now.toLocaleDateString('fr-FR');
   const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   const maxVal = Math.max(...MOCK_STATS.byType.map((b) => b.value), 1);
+  const geolocatedFleet = fleet.filter((v) => v.last_lat != null && v.last_lng != null);
 
   if (session === undefined || (isAdmin === null && session)) {
     return (
@@ -293,52 +296,75 @@ export default function SupervisionOverview() {
           </div>
         </div>
 
-        {/* Carte */}
+        {/* Carte — vue d'ensemble de la ville pour la supervision de flotte :
+            pitch plat + zoom large (comme côté chauffeur hors course) pour
+            voir tous les véhicules géolocalisés en un coup d'œil. */}
         <div ref={carteRef} className="px-3 pt-2">
-          <div className="relative h-64 overflow-hidden rounded-2xl border border-[rgba(176,141,87,0.28)] bg-[#121418]">
-            <RealMap
-              pitch={75}
-              buildings3d
-              pins={fleet
-                .filter((v) => v.last_lat != null && v.last_lng != null)
-                .map<MapPinData>((v) => ({
-                  position: { lat: v.last_lat as number, lng: v.last_lng as number },
-                  car3d: { modelUrl: CAR_MODEL_BY_TYPE[v.type as VehicleType] },
-                }))}
-            />
-            {fleet
-              .filter((v) => v.last_lat != null && v.last_lng != null)
-              .map((v, i) => (
-                <span
-                  key={v.id}
-                  className="pointer-events-none absolute z-10 rounded-full px-2 py-1 text-[9px] font-extrabold text-[#241a13]"
-                  style={{
-                    background: STATUS_DOT[v.status],
-                    top: `${10 + i * 30}%`,
-                    left: i % 2 === 0 ? '6%' : undefined,
-                    right: i % 2 === 1 ? '6%' : undefined,
-                  }}
+          <div className="mb-2 flex gap-1.5">
+            {(
+              [
+                ['available', 'En attente'],
+                ['busy', 'En course'],
+                ['offline', 'Hors ligne'],
+              ] as [FleetVehicle['status'], string][]
+            ).map(([key, label]) => {
+              const count = fleet.filter((v) => v.status === key).length;
+              return (
+                <div
+                  key={key}
+                  className="flex-1 rounded-xl border-[0.5px] border-[rgba(176,141,87,0.25)] bg-[rgba(20,22,26,0.9)] px-2 py-2 text-center"
                 >
-                  ● {STATUS_LABEL[v.status]}
+                  <div className="text-sm font-extrabold" style={{ color: STATUS_DOT[key] }}>
+                    {count}
+                  </div>
+                  <div className="text-[9px] font-bold text-[#9aa0aa]">{label}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div
+            className={
+              mapFullscreen
+                ? 'fixed inset-0 z-50 bg-[#0a0b0d]'
+                : 'relative h-[62dvh] overflow-hidden rounded-2xl border border-[rgba(176,141,87,0.28)] bg-[#121418]'
+            }
+          >
+            <RealMap
+              key={mapKey}
+              pitch={22}
+              overviewZoom={12.5}
+              buildings3d
+              pins={geolocatedFleet.map<MapPinData>((v) => ({
+                position: { lat: v.last_lat as number, lng: v.last_lng as number },
+                car3d: { modelUrl: CAR_MODEL_BY_TYPE[v.type as VehicleType] },
+              }))}
+            />
+            <span className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-lg border-[1.5px] border-[rgba(176,141,87,0.5)] bg-[rgba(10,11,13,0.85)] px-3.5 py-1.5 text-xs font-extrabold text-[#e8c9a8]">
+              YALLAH NAMSOU · VUE D&apos;ENSEMBLE
+            </span>
+
+            <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex gap-3 rounded-xl border-[0.5px] border-[rgba(176,141,87,0.25)] bg-[rgba(10,11,13,0.85)] px-3 py-2 text-[9px] font-bold text-[#e8c9a8]">
+              {(['available', 'busy', 'offline'] as FleetVehicle['status'][]).map((key) => (
+                <span key={key} className="flex items-center gap-1">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: STATUS_DOT[key] }} />
+                  {STATUS_LABEL[key]}
                 </span>
               ))}
-            <span className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-lg border-[1.5px] border-[rgba(176,141,87,0.5)] bg-[rgba(10,11,13,0.85)] px-3.5 py-1.5 text-xs font-extrabold text-[#e8c9a8]">
-              YALLAH NAMSOU
-            </span>
+            </div>
+
             <button
-              aria-label="Plein écran"
-              className="absolute bottom-2.5 left-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-[rgba(176,141,87,0.35)] bg-[rgba(10,11,13,0.85)] text-[#e8c9a8]"
+              aria-label={mapFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
+              onClick={() => setMapFullscreen((f) => !f)}
+              className="absolute bottom-3 right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-[rgba(176,141,87,0.35)] bg-[rgba(10,11,13,0.85)] text-[#e8c9a8]"
             >
-              <Maximize2 size={14} />
+              {mapFullscreen ? <X size={16} /> : <Maximize2 size={14} />}
             </button>
             <button
-              aria-label="Géolocaliser"
-              className="absolute bottom-14 right-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-[rgba(10,11,13,0.85)] text-[#e8c9a8]"
+              onClick={() => setMapKey((k) => k + 1)}
+              className="absolute bottom-3 right-14 z-10 flex h-9 items-center gap-1.5 rounded-full bg-gradient-to-b from-[#e8c9a8] to-[#a97a5b] px-3.5 text-xs font-extrabold text-[#241a13]"
             >
-              <Crosshair size={16} />
-            </button>
-            <button className="absolute bottom-2.5 right-2.5 z-10 rounded-full bg-gradient-to-b from-[#e8c9a8] to-[#a97a5b] px-4 py-1.5 text-xs font-extrabold text-[#241a13]">
-              Recentrer
+              <Crosshair size={13} /> Recentrer
             </button>
           </div>
         </div>
