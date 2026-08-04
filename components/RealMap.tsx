@@ -58,6 +58,7 @@ export default function RealMap({
   carModelUrl = DEFAULT_CAR_MODEL_URL,
   carHeading = 90,
   onNavigationUpdate,
+  onRouteInfo,
 }: {
   pickup?: LatLng | null;
   dropoff?: LatLng | null;
