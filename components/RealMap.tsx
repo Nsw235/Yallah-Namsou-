@@ -208,6 +208,34 @@ const RealMap = forwardRef<RealMapHandle, {
     };
   }, []);
 
+  // Force Mapbox GL à recalculer/redimensionner son canvas WebGL dès que son
+  // conteneur change de taille (ex: clavier virtuel qui s'ouvre sur mobile —
+  // voir ViewportHeightFix.tsx : --app-vh rétrécit alors la hauteur de
+  // l'appli). `trackResize` (activé par défaut sur Mapbox GL) n'écoute que
+  // l'évènement `resize` de la fenêtre, qui ne se déclenche PAS quand seul le
+  // `visualViewport` change (cas du clavier iOS) : sans cet observer, le
+  // canvas garde son ancienne taille interne alors que son élément DOM a
+  // rétréci → rendu noir/déformé. `requestAnimationFrame` évite les erreurs
+  // "ResizeObserver loop" et laisse le layout se stabiliser avant de resize.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        mapRef.current?.resize();
+      });
+    });
+    observer.observe(container);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, []);
+
   // Recentre la caméra sur les points actuellement affichés (pickup, dropoff,
   // chauffeur, pins). Factorisé ici pour être appelable à la fois automatiquement
   // (quand les positions changent) et manuellement (bouton "Recentrer" via ref),

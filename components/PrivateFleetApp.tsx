@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
 import { PaymentMethod, PricingRule, Trip, VehicleType } from '@/types/database';
@@ -639,6 +639,13 @@ function AddressField({
   const [results, setResults] = useState<GeoResult[]>([]);
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
+  const rowRef = useRef<HTMLDivElement>(null);
+  // Position calculée dynamiquement (voir dropdown plus bas) : le menu de
+  // suggestions est rendu en `position:fixed` ancré sur ce champ plutôt
+  // qu'en `position:absolute` imbriqué dans `.yn-addr-group` — ce parent a
+  // `overflow:hidden` (pour arrondir le bloc DÉPART/DESTINATION) qui
+  // rognait purement et simplement la liste, la rendant invisible.
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
   useEffect(() => {
     if (value) return;
@@ -682,8 +689,32 @@ function AddressField({
     }
   }, [value]);
 
+  // Recalcule la position du menu (ancré sous le champ) à chaque ouverture,
+  // et la tient à jour tant qu'il est ouvert : le clavier virtuel fait
+  // bouger toute la feuille du bas (voir --app-vh dans ViewportHeightFix),
+  // donc la position à l'écran du champ change après l'ouverture initiale.
+  // `useLayoutEffect` : calcule avant le premier paint, pas de flash à (0,0).
+  useLayoutEffect(() => {
+    if (!open) return;
+    const updatePosition = () => {
+      const rect = rowRef.current?.getBoundingClientRect();
+      if (rect) setDropdownPos({ top: rect.bottom, left: rect.left, width: rect.width });
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    window.visualViewport?.addEventListener('resize', updatePosition);
+    window.visualViewport?.addEventListener('scroll', updatePosition);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+      window.visualViewport?.removeEventListener('resize', updatePosition);
+      window.visualViewport?.removeEventListener('scroll', updatePosition);
+    };
+  }, [open]);
+
   return (
-    <div className={`yn-addr-row ${last ? '' : 'yn-addr-row-b'}`} style={{ position: 'relative' }}>
+    <div ref={rowRef} className={`yn-addr-row ${last ? '' : 'yn-addr-row-b'}`} style={{ position: 'relative' }}>
       <span className={`yn-addr-icon yn-addr-icon-${icon}`} aria-hidden="true" />
       <input
         type="text"
@@ -694,10 +725,19 @@ function AddressField({
         onFocus={() => results.length > 0 && setOpen(true)}
       />
       {searching && <div className="route-sub" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)' }}>…</div>}
-      {open && results.length > 0 && (
+      {open && results.length > 0 && dropdownPos && (
         <div
           className="glass"
-          style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, borderRadius: 12, marginTop: 4, maxHeight: 180, overflowY: 'auto' }}
+          style={{
+            position: 'fixed',
+            top: dropdownPos.top + 4,
+            left: dropdownPos.left,
+            width: dropdownPos.width,
+            zIndex: 999,
+            borderRadius: 12,
+            maxHeight: 180,
+            overflowY: 'auto',
+          }}
         >
           {results.map((r, i) => (
             <div
