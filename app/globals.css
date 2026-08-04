@@ -350,6 +350,15 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 .yn-ticket-body{
   background:var(--copper-deep); border:1px solid rgba(169,122,91,0.28); border-bottom:none;
   border-radius:26px 26px 0 0; padding:16px 16px 0;
+  /* Quand le clavier virtuel réduit l'espace visible (--app-vh rétrécit —
+     voir ViewportHeightFix.tsx), ce bloc peut devenir plus haut que l'espace
+     restant. Sans cette limite, le haut du bloc (champ DÉPART) sortait de
+     l'écran et se retrouvait rogné/invisible par le `overflow:hidden` du
+     conteneur parent. On borne sa hauteur et on le rend défilable : tout
+     reste accessible en scrollant, rien n'est plus jamais coupé.
+     180px ≈ hauteur réservée au talon en dessous (prix + bouton + marge). */
+  max-height:calc(var(--app-vh, 100dvh) - 180px);
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
 }
 .yn-ticket-stub{
   background:var(--copper-cream); color:var(--copper-deep); position:relative;
