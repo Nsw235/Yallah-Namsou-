@@ -63,6 +63,7 @@ export default function AuthGate({ onAuthed }: { onAuthed: () => void }) {
     <div className="auth-screen fade">
       <img src="/logo.png" alt="Yalla Nimshi" className="auth-logo-img" />
       <img src="/tagline-banner.png" alt="Service de transport d'exception" className="auth-tagline-img" />
+      <img src="/fleet-cars.png" alt="Flotte Yalla Nimshi" className="auth-fleet-img" />
       <div className="auth-sub">
         {mode === 'signin' ? 'Connectez-vous pour réserver votre course.' : 'Créez votre compte passager.'}
       </div>
@@ -132,6 +133,11 @@ export default function AuthGate({ onAuthed }: { onAuthed: () => void }) {
             <button onClick={() => { setMode('signin'); setError(null); }}>Se connecter</button>
           </>
         )}
+      </div>
+
+      <div className="auth-tracking">
+        <div className="auth-tracking-label">Suivi en direct</div>
+        <img src="/live-tracking.png" alt="Suivi en direct de votre course" className="auth-tracking-img" />
       </div>
     </div>
   );
