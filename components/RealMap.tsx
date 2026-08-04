@@ -104,6 +104,16 @@ const RealMap = forwardRef<RealMapHandle, {
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Record<string, any>>({});
   const animFrames = useRef<Record<string, number>>({});
+  // Le style personnalisé du projet n'est pas un style "Standard" (v3) : il
+  // n'a pas d'import "basemap" et ne supporte donc PAS l'option `slot` sur
+  // les layers. `map.addLayer({..., slot: 'top'})` sur un tel style lève une
+  // EXCEPTION SYNCHRONE (pas un simple événement 'error' asynchrone) — non
+  // interceptée, elle remonte jusqu'à React et fait planter toute l'app
+  // ("Application error: a client-side exception has occurred"), typiquement
+  // dès qu'un véhicule 3D (dispo, ou chauffeur assigné après réservation)
+  // apparaît sur la carte. Ce ref, rempli une fois le style chargé, permet
+  // aux autres effets (modèles 3D) de savoir s'il est sûr d'utiliser `slot`.
+  const hasBasemapImportRef = useRef(false);
   // Si le fichier .glb demandé (carModelUrl) n'existe pas / échoue à charger,
   // on retombe automatiquement sur le marqueur emoji plutôt que de n'afficher
   // aucun véhicule du tout.
@@ -142,6 +152,7 @@ const RealMap = forwardRef<RealMapHandle, {
       map.on('style.load', () => {
         const styleJson = map.getStyle?.();
         const hasBasemapImport = Array.isArray(styleJson?.imports) && styleJson.imports.some((i: any) => i.id === 'basemap');
+        hasBasemapImportRef.current = hasBasemapImport;
 
         // Calque trafic live officiel Mapbox (congestion en temps réel).
         // `slot: 'top'` n'existe que sur les styles Standard (v3) : on ne
@@ -373,35 +384,56 @@ const RealMap = forwardRef<RealMapHandle, {
       cars.forEach((car) => {
         const sourceId = `${car.id}-source`;
         const layerId = `${car.id}-layer`;
-        if (map.getLayer(layerId)) map.removeLayer(layerId);
-        if (map.getSource(sourceId)) map.removeSource(sourceId);
+        try {
+          if (map.getLayer(layerId)) map.removeLayer(layerId);
+          if (map.getSource(sourceId)) map.removeSource(sourceId);
 
-        map.addSource(sourceId, {
-          type: 'model',
-          models: {
-            car: {
-              uri: car.modelUrl,
-              position: [car.position.lng, car.position.lat],
-              orientation: [0, 0, car.heading],
+          map.addSource(sourceId, {
+            type: 'model',
+            models: {
+              car: {
+                // Résolue en URL absolue : la source 'model' est chargée par un
+                // worker Mapbox GL, dont le contexte de résolution d'URL relative
+                // peut différer de celui du document.
+                uri: new URL(car.modelUrl, window.location.origin).toString(),
+                position: [car.position.lng, car.position.lat],
+                orientation: [0, 0, car.heading],
+              },
             },
-          },
-        } as any);
+          } as any);
 
-        map.addLayer({
-          id: layerId,
-          type: 'model',
-          source: sourceId,
-          slot: 'top',
-          paint: {
-            'model-scale': [
-              'interpolate',
-              ['linear'],
-              ['zoom'],
-              12, ['literal', [0.5, 0.5, 0.5]],
-              18, ['literal', [2.5, 2.5, 2.5]],
-            ],
-          },
-        } as any);
+          map.addLayer({
+            id: layerId,
+            type: 'model',
+            source: sourceId,
+            // `slot` n'existe que sur les styles Standard (v3, avec import
+            // "basemap") — l'ajouter sur un style classique fait échouer
+            // addLayer(). On ne le passe donc que si le style chargé le
+            // supporte réellement (voir hasBasemapImportRef ci-dessus).
+            ...(hasBasemapImportRef.current ? { slot: 'top' } : {}),
+            paint: {
+              'model-scale': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                12, ['literal', [0.5, 0.5, 0.5]],
+                18, ['literal', [2.5, 2.5, 2.5]],
+              ],
+            },
+          } as any);
+        } catch (err) {
+          // Filet de sécurité : un style/version Mapbox qui rejette ce layer
+          // (slot, type 'model' non supporté, etc.) peut lever une exception
+          // SYNCHRONE plutôt que d'émettre l'événement 'error' du style. Sans
+          // ce try/catch, cette exception remontait jusqu'à React et faisait
+          // planter toute l'application. On se contente de logguer et de
+          // basculer sur le repli emoji (véhicule du chauffeur connecté)
+          // plutôt que de crasher — les pins car3d en échec restent invisibles,
+          // comme documenté dans DIAGNOSTIC.md.
+          // eslint-disable-next-line no-console
+          console.warn('[RealMap] Échec ajout modèle 3D, repli emoji :', err);
+          if (car.id === 'car-3d-ego') setModelFailed(true);
+        }
       });
     }
 
