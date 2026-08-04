@@ -16,6 +16,9 @@ export type FleetVehicle = {
   status: 'offline' | 'available' | 'busy';
   driver_name: string | null;
   driver_id: string;
+  driver_phone?: string | null;
+  driver_avatar?: string | null;
+  passenger_capacity?: number;
   last_lat: number | null;
   last_lng: number | null;
 };
@@ -24,21 +27,32 @@ export type FleetVehicle = {
 export async function getFleetOverview(): Promise<FleetVehicle[]> {
   const { data: vehicles, error } = await supabase
     .from('vehicles')
-    .select('id, type, plate, brand, model, status, driver_id, last_lat, last_lng');
+    .select('id, type, plate, brand, model, status, driver_id, passenger_capacity, last_lat, last_lng');
   if (error) throw error;
   if (!vehicles || vehicles.length === 0) return [];
 
   const driverIds = Array.from(new Set(vehicles.map((v) => v.driver_id)));
   const { data: profiles, error: profilesError } = await supabase
     .from('profiles')
-    .select('id, full_name')
+    .select('id, full_name, phone, avatar_url')
     .in('id', driverIds);
   if (profilesError) throw profilesError;
 
-  return vehicles.map((v) => ({
-    ...v,
-    driver_name: profiles?.find((p) => p.id === v.driver_id)?.full_name ?? null,
-  }));
+  return vehicles.map((v) => {
+    const p = profiles?.find((pr) => pr.id === v.driver_id);
+    return {
+      ...v,
+      driver_name: p?.full_name ?? null,
+      driver_phone: p?.phone ?? null,
+      driver_avatar: p?.avatar_url ?? null,
+    };
+  });
+}
+
+/** Change uniquement le statut d'un véhicule (ex: mise hors ligne manuelle par l'admin). */
+export async function updateVehicleStatus(vehicleId: string, status: 'offline' | 'available' | 'busy') {
+  const { error } = await supabase.from('vehicles').update({ status }).eq('id', vehicleId);
+  if (error) throw error;
 }
 
 /**
@@ -180,7 +194,7 @@ export async function setDriverValidation(driverId: string, status: 'approved' |
  */
 export async function updateVehicle(
   vehicleId: string,
-  patch: { plate?: string; brand?: string | null; model?: string | null }
+  patch: { plate?: string; brand?: string | null; model?: string | null; passenger_capacity?: number }
 ) {
   const { error } = await supabase.from('vehicles').update(patch).eq('id', vehicleId);
   if (error) throw error;
@@ -194,5 +208,198 @@ export async function updateVehicle(
  */
 export async function resetDriverPassword(email: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(email);
+  if (error) throw error;
+}
+
+/**
+ * Met à jour le profil (nom, téléphone) et/ou les infos chauffeur (permis)
+ * d'un chauffeur donné. Réservé au BackOffice admin.
+ */
+export async function updateDriverInfo(
+  driverId: string,
+  patch: { full_name?: string; phone?: string; license_number?: string | null }
+) {
+  const { full_name, phone, ...driverPatch } = patch;
+  if (full_name !== undefined || phone !== undefined) {
+    const profilePatch: Record<string, string> = {};
+    if (full_name !== undefined) profilePatch.full_name = full_name;
+    if (phone !== undefined) profilePatch.phone = phone;
+    const { error } = await supabase.from('profiles').update(profilePatch).eq('id', driverId);
+    if (error) throw error;
+  }
+  if (Object.keys(driverPatch).length > 0) {
+    const { error } = await supabase.from('drivers').update(driverPatch).eq('id', driverId);
+    if (error) throw error;
+  }
+}
+
+/**
+ * Change le mot de passe d'un chauffeur via la route serveur
+ * /api/admin/driver-password (clé service_role, jamais exposée au client).
+ */
+export async function adminSetDriverPassword(driverId: string, newPassword: string) {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) throw new Error('Session invalide.');
+
+  const res = await fetch('/api/admin/driver-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ driverId, newPassword }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body?.error ?? 'Échec du changement de mot de passe.');
+}
+
+/**
+ * Upload la photo de profil d'un chauffeur (bucket "avatars") pour le
+ * compte de l'admin. Nécessite une policy de storage autorisant le rôle
+ * admin à écrire dans le dossier {driverId}/ du bucket.
+ */
+export async function adminUpdateDriverAvatar(driverId: string, file: File): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const path = `${driverId}/avatar.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('avatars')
+    .upload(path, file, { upsert: true, cacheControl: '3600', contentType: file.type });
+  if (uploadError) throw uploadError;
+
+  const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path);
+  const url = `${pub.publicUrl}?t=${Date.now()}`;
+
+  const { error: updateError } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', driverId);
+  if (updateError) throw updateError;
+
+  return url;
+}
+
+export type DriverDetail = {
+  id: string;
+  full_name: string | null;
+  phone: string | null;
+  license_number: string | null;
+  avatar_url: string | null;
+  rating_avg: number;
+  validation_status: string;
+  completed_trips: number;
+  cancelled_trips: number;
+  revenue_total: number;
+  vehicles: FleetVehicle[];
+};
+
+/** Fiche complète de chaque chauffeur : profil, stats, véhicules assignés. */
+export async function getDriverDetails(): Promise<DriverDetail[]> {
+  const { data: drivers, error } = await supabase
+    .from('drivers')
+    .select('id, license_number, rating_avg, validation_status');
+  if (error) throw error;
+  if (!drivers || drivers.length === 0) return [];
+
+  const ids = drivers.map((d) => d.id);
+
+  const { data: profiles, error: profilesError } = await supabase
+    .from('profiles')
+    .select('id, full_name, phone, avatar_url')
+    .in('id', ids);
+  if (profilesError) throw profilesError;
+
+  const { data: trips, error: tripsError } = await supabase
+    .from('trips')
+    .select('driver_id, status, estimated_price, final_price')
+    .in('driver_id', ids);
+  if (tripsError) throw tripsError;
+
+  const { data: vehicles, error: vehiclesError } = await supabase
+    .from('vehicles')
+    .select('id, type, plate, brand, model, status, driver_id, passenger_capacity, last_lat, last_lng')
+    .in('driver_id', ids);
+  if (vehiclesError) throw vehiclesError;
+
+  return drivers.map((d) => {
+    const profile = profiles?.find((p) => p.id === d.id);
+    const driverTrips = (trips ?? []).filter((t) => t.driver_id === d.id);
+    const completed = driverTrips.filter((t) => t.status === 'completed');
+    const cancelled = driverTrips.filter((t) => t.status === 'cancelled');
+
+    return {
+      id: d.id,
+      full_name: profile?.full_name ?? null,
+      phone: profile?.phone ?? null,
+      license_number: d.license_number,
+      avatar_url: profile?.avatar_url ?? null,
+      rating_avg: d.rating_avg,
+      validation_status: d.validation_status,
+      completed_trips: completed.length,
+      cancelled_trips: cancelled.length,
+      revenue_total: completed.reduce((s, t) => s + Number(t.final_price ?? t.estimated_price ?? 0), 0),
+      vehicles: (vehicles ?? [])
+        .filter((v) => v.driver_id === d.id)
+        .map((v) => ({
+          ...v,
+          driver_name: profile?.full_name ?? null,
+          driver_phone: profile?.phone ?? null,
+          driver_avatar: profile?.avatar_url ?? null,
+        })),
+    };
+  });
+}
+
+export type DailyPoint = { date: string; revenue: number; trips: number; cancelled: number };
+
+/** Série jour par jour (revenus/courses/annulations) sur les N derniers jours. */
+export async function getAnalyticsSeries(days: number): Promise<DailyPoint[]> {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - (days - 1));
+
+  const { data, error } = await supabase
+    .from('trips')
+    .select('status, estimated_price, final_price, requested_at')
+    .gte('requested_at', start.toISOString());
+  if (error) throw error;
+  const rows = data ?? [];
+
+  const points: DailyPoint[] = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    const dateStr = d.toISOString().slice(0, 10);
+    const dayRows = rows.filter((t) => (t.requested_at as string).slice(0, 10) === dateStr);
+    const cancelled = dayRows.filter((t) => t.status === 'cancelled').length;
+    const revenue = dayRows
+      .filter((t) => ['accepted', 'in_progress', 'completed'].includes(t.status))
+      .reduce((s, t) => s + Number(t.final_price ?? t.estimated_price ?? 0), 0);
+    points.push({ date: dateStr, revenue, trips: dayRows.length, cancelled });
+  }
+  return points;
+}
+
+export type PaymentBreakdown = { method: string; total: number; count: number };
+
+/** Répartition des paiements confirmés par méthode (cash / airtel / moov). */
+export async function getPaymentBreakdown(): Promise<PaymentBreakdown[]> {
+  const { data, error } = await supabase.from('payments').select('method, amount').eq('status', 'paid');
+  if (error) throw error;
+
+  const map = new Map<string, { total: number; count: number }>();
+  (data ?? []).forEach((p) => {
+    const cur = map.get(p.method) ?? { total: 0, count: 0 };
+    cur.total += Number(p.amount ?? 0);
+    cur.count += 1;
+    map.set(p.method, cur);
+  });
+  return Array.from(map.entries()).map(([method, v]) => ({ method, ...v }));
+}
+
+/** Grille tarifaire (réexportée ici pour @/lib/admin, source de vérité : @/lib/rides). */
+export { getPricingRules } from '@/lib/rides';
+
+/** Met à jour un tarif (prise en charge, prix/km, multiplicateur heures de pointe). */
+export async function updatePricingRule(
+  id: string,
+  patch: { base_fare: number; price_per_km: number; peak_multiplier: number }
+) {
+  const { error } = await supabase.from('pricing_rules').update(patch).eq('id', id);
   if (error) throw error;
 }
