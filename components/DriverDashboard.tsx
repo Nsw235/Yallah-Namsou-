@@ -433,7 +433,7 @@ export default function DriverDashboard() {
         },
       }))
     : [];
-  const showCompass = step === 'in_progress' || step === 'summary';
+  const showCompass = step === 'in_progress' || step === 'summary' || step === 'available';
   const displayTrip = summaryTrip ?? active;
   const elapsedMin =
     summaryTrip?.started_at && summaryTrip?.completed_at
@@ -441,10 +441,12 @@ export default function DriverDashboard() {
       : null;
 
   // Vue "ciel visible" très inclinée (75°) + voiture 3D uniquement pendant la
-  // course (aller chercher le client ou avec le client à bord). Le reste du
-  // temps (Accueil, résumé de fin de course), une vue plus classique suffit.
+  // course (aller chercher le client ou avec le client à bord). Hors course,
+  // une vue plus plate et dézoomée ("vue d'ensemble de la ville") aide le
+  // chauffeur à se repérer plus facilement dans N'Djamena.
   const onTrip = step === 'accepted' || step === 'in_progress';
-  const mapPitch = onTrip ? 75 : 45;
+  const mapPitch = onTrip ? 75 : 32;
+  const mapOverviewZoom = step === 'available' ? 12.5 : 15;
   const myVehicleType: VehicleType = myVehicle?.type ?? 'berline';
   const carModelUrl = CAR_MODEL_BY_TYPE[myVehicleType];
 
@@ -458,6 +460,7 @@ export default function DriverDashboard() {
           pins={step === 'available' ? pendingPins : []}
           use3dCar={onTrip}
           carModelUrl={carModelUrl}
+          overviewZoom={mapOverviewZoom}
           pickup={step === 'accepted' && active ? { lat: active.pickup_lat, lng: active.pickup_lng } : undefined}
           dropoff={
             (step === 'in_progress' || step === 'summary') && displayTrip
@@ -522,6 +525,13 @@ export default function DriverDashboard() {
       {showCompass && (
         <div className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-[#1c1108] text-[#e8c9a8] backdrop-blur">
           <Compass size={20} />
+        </div>
+      )}
+
+      {step === 'available' && (
+        <div className="relative z-10 mx-3 mt-3 flex w-fit items-center gap-1.5 rounded-full border-[0.5px] border-[rgba(169,122,91,0.35)] bg-[rgba(13,9,6,0.72)] px-3 py-1.5 text-[10px] font-medium text-[#e8c9a8] backdrop-blur-sm">
+          <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: online ? '#5be08a' : '#8a7358' }} />
+          Vue d&apos;ensemble · N&apos;Djamena
         </div>
       )}
 

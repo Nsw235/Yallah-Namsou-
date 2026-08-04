@@ -15,6 +15,7 @@ import {
   getDriverStats,
   getFleetOverview,
   setDriverValidation,
+  subscribeToFleetChanges,
 } from '@/lib/admin';
 import AuthGate from '@/components/AuthGate';
 import RealMap from '@/components/RealMap';
@@ -99,6 +100,15 @@ export default function AdminDashboard() {
     return () => clearInterval(id);
   }, [isAdmin]);
 
+  // En complément du polling ci-dessus : mise à jour instantanée dès qu'un
+  // véhicule change de statut ou de position GPS, pour que la carte de
+  // supervision (onglet "Supervision Carte") reflète la flotte en direct.
+  useEffect(() => {
+    if (!isAdmin) return;
+    const unsubscribe = subscribeToFleetChanges(refresh);
+    return unsubscribe;
+  }, [isAdmin]);
+
   async function handleValidation(driverId: string, status: 'approved' | 'rejected' | 'suspended') {
     setBusy(true);
     setError(null);
@@ -128,6 +138,26 @@ export default function AdminDashboard() {
   }, [fleet]);
 
   const typeColors: Record<string, string> = { berline: 'var(--copper-light)', van: 'var(--copper)', suv: 'var(--copper-dark)' };
+
+  // Pins temps réel pour la carte de supervision : un point coloré par
+  // véhicule géolocalisé, statut encodé par couleur (vert = en attente /
+  // bleu = en course / gris = hors ligne, exclu de la carte car sans intérêt
+  // opérationnel et potentiellement sans position récente).
+  const STATUS_DOT_COLOR: Record<FleetVehicle['status'], string> = {
+    available: '#35e6a0',
+    busy: '#35d4ff',
+    offline: '#8a7a6b',
+  };
+  const fleetPins = fleet
+    .filter((v) => v.status !== 'offline' && v.last_lat != null && v.last_lng != null)
+    .map((v) => ({
+      position: { lat: v.last_lat as number, lng: v.last_lng as number },
+      dot: {
+        color: STATUS_DOT_COLOR[v.status],
+        pulse: v.status === 'busy',
+        label: v.plate,
+      },
+    }));
   const donutGradient = (() => {
     let acc = 0;
     const stops = byType.map((b) => {
@@ -228,16 +258,15 @@ export default function AdminDashboard() {
               </div>
             </div>
             <div className="admin-map-wrap">
-              <RealMap pitch={75} buildings3d showRoute={false} />
+              <RealMap pitch={0} buildings3d={false} showRoute={false} pins={fleetPins} overviewZoom={12.3} />
               <div className="admin-map-overlay">
-                <span className="heatmap-label">🔥 Heatmap de demande — zones actives</span>
+                <span className="heatmap-label">
+                  {fleetPins.length} véhicule{fleetPins.length !== 1 ? 's' : ''} géolocalisé{fleetPins.length !== 1 ? 's' : ''} en direct
+                </span>
                 <div className="vehicle-positions">
-                  {byType.map((b) => (
-                    <div key={b.type} className="veh-pos-row">
-                      <span className="veh-pos-dot" style={{ background: typeColors[b.type] }} />
-                      {b.type.toUpperCase()} · Clusters : {b.count}
-                    </div>
-                  ))}
+                  <div className="veh-pos-row"><span className="veh-pos-dot" style={{ background: '#35e6a0' }} />En attente · {availableVehicles.length}</div>
+                  <div className="veh-pos-row"><span className="veh-pos-dot" style={{ background: '#35d4ff' }} />En course · {busyVehicles.length}</div>
+                  <div className="veh-pos-row"><span className="veh-pos-dot" style={{ background: '#8a7a6b' }} />Hors ligne · {offlineVehicles.length}</div>
                 </div>
               </div>
             </div>

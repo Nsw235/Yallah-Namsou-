@@ -17,6 +17,9 @@ export type MapPin = {
   };
   /** Affiche un vrai modèle 3D (.glb) à la place de l'emoji — ex: un autre chauffeur disponible. */
   car3d?: { modelUrl?: string; heading?: number };
+  /** Petit point coloré (pulsant en option) — léger, pour afficher beaucoup de véhicules
+   *  d'un coup (ex: carte de supervision flotte côté admin) sans charger un modèle 3D par pin. */
+  dot?: { color: string; pulse?: boolean; label?: string };
 };
 /** Prochaine manœuvre du guidage virage par virage (voir onNavigationUpdate). */
 export type NavigationStep = {
@@ -59,6 +62,7 @@ export default function RealMap({
   carHeading = 90,
   onNavigationUpdate,
   onRouteInfo,
+  overviewZoom = 15,
 }: {
   pickup?: LatLng | null;
   dropoff?: LatLng | null;
@@ -84,6 +88,10 @@ export default function RealMap({
   /** Appelé à chaque recalcul d'itinéraire avec la distance/durée TOTALE (trafic pris en compte),
    *  ou null si pas d'itinéraire. Sert par ex. à afficher "chauffeur arrive dans X min" côté passager. */
   onRouteInfo?: (info: { distanceMeters: number; durationSeconds: number } | null) => void;
+  /** Niveau de zoom appliqué quand il n'y a qu'un seul point à centrer (ex: juste
+   *  la position du chauffeur, personne à proximité). Par défaut 15 (rue). Passer
+   *  une valeur plus basse (ex: 12.5) pour une vue d'ensemble de la ville. */
+  overviewZoom?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -215,7 +223,7 @@ export default function RealMap({
         if (p.car3d) return; // rendu en modèle 3D réel, pas en marqueur DOM plat
         wanted[`pin-${i}`] = {
           pos: p.position,
-          el: () => (p.passenger ? passengerEl(p.passenger) : emojiEl(p.emoji ?? '🚗')),
+          el: () => (p.passenger ? passengerEl(p.passenger) : p.dot ? dotEl(p.dot) : emojiEl(p.emoji ?? '🚗')),
         };
       });
 
@@ -257,7 +265,7 @@ export default function RealMap({
       if (driverPosition) coords.push([driverPosition.lng, driverPosition.lat]);
       pins.forEach((p) => coords.push([p.position.lng, p.position.lat]));
       if (coords.length === 1) {
-        map.easeTo({ center: coords[0], zoom: 15, pitch, bearing: map.getBearing(), duration: 800 });
+        map.easeTo({ center: coords[0], zoom: overviewZoom, pitch, bearing: map.getBearing(), duration: 800 });
       } else if (coords.length > 1) {
         const bounds = coords.reduce(
           (b, c) => b.extend(c as any),
@@ -273,7 +281,7 @@ export default function RealMap({
     if (map.isStyleLoaded()) render();
     else map.once('load', render);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins), effectiveUse3dCar]);
+  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins), effectiveUse3dCar, overviewZoom]);
 
   // Modèles 3D réels (.glb) : le véhicule du chauffeur connecté (driverPosition,
   // si use3dCar) + tout pin déclarant `car3d` (ex: autres chauffeurs disponibles
@@ -520,4 +528,58 @@ function emojiEl(emoji: string): HTMLElement {
   el.style.filter = 'drop-shadow(0 4px 8px rgba(0,0,0,0.6))';
   el.textContent = emoji;
   return el;
+}
+
+function dotEl(dot: { color: string; pulse?: boolean; label?: string }): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.style.position = 'relative';
+  wrap.style.width = '14px';
+  wrap.style.height = '14px';
+
+  if (dot.pulse) {
+    const ring = document.createElement('div');
+    ring.style.position = 'absolute';
+    ring.style.inset = '0';
+    ring.style.borderRadius = '50%';
+    ring.style.background = dot.color;
+    ring.style.opacity = '0.35';
+    ring.style.animation = 'yn-dot-pulse 1.8s ease-out infinite';
+    wrap.appendChild(ring);
+  }
+
+  const core = document.createElement('div');
+  core.style.position = 'absolute';
+  core.style.inset = '2px';
+  core.style.borderRadius = '50%';
+  core.style.background = dot.color;
+  core.style.border = '2px solid rgba(10,11,13,0.9)';
+  core.style.boxShadow = `0 0 6px ${dot.color}`;
+  wrap.appendChild(core);
+
+  if (dot.label) {
+    const tag = document.createElement('div');
+    tag.textContent = dot.label;
+    tag.style.position = 'absolute';
+    tag.style.top = '16px';
+    tag.style.left = '50%';
+    tag.style.transform = 'translateX(-50%)';
+    tag.style.fontSize = '9px';
+    tag.style.fontWeight = '700';
+    tag.style.color = '#f2f3f5';
+    tag.style.background = 'rgba(10,11,13,0.75)';
+    tag.style.padding = '1px 5px';
+    tag.style.borderRadius = '6px';
+    tag.style.whiteSpace = 'nowrap';
+    wrap.appendChild(tag);
+  }
+
+  if (!document.getElementById('yn-dot-pulse-style')) {
+    const style = document.createElement('style');
+    style.id = 'yn-dot-pulse-style';
+    style.textContent =
+      '@keyframes yn-dot-pulse{0%{transform:scale(1);opacity:.45}100%{transform:scale(2.6);opacity:0}}';
+    document.head.appendChild(style);
+  }
+
+  return wrap;
 }
