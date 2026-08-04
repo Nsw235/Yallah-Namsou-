@@ -7,18 +7,22 @@ import { formatFCFA } from '@/lib/pricing';
 import {
   ActiveTripRow,
   AdminMetrics,
-  DriverStatRow,
+  DriverDetail,
   FleetVehicle,
   checkIsAdmin,
   getActiveTrips,
   getAdminMetrics,
-  getDriverStats,
+  getDriverDetails,
   getFleetOverview,
   setDriverValidation,
   subscribeToFleetChanges,
 } from '@/lib/admin';
 import AuthGate from '@/components/AuthGate';
 import RealMap from '@/components/RealMap';
+import AdminFleetView from '@/components/admin/AdminFleetView';
+import AdminDriversView from '@/components/admin/AdminDriversView';
+import AdminAnalyticsView from '@/components/admin/AdminAnalyticsView';
+import AdminSettingsView from '@/components/admin/AdminSettingsView';
 
 type NavKey = 'dashboard' | 'map' | 'fleet' | 'drivers' | 'analytics' | 'settings';
 
@@ -44,7 +48,7 @@ export default function AdminDashboard() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [fleet, setFleet] = useState<FleetVehicle[]>([]);
   const [activeTrips, setActiveTrips] = useState<ActiveTripRow[]>([]);
-  const [drivers, setDrivers] = useState<DriverStatRow[]>([]);
+  const [drivers, setDrivers] = useState<DriverDetail[]>([]);
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -71,7 +75,7 @@ export default function AdminDashboard() {
       const [f, t, d, m] = await Promise.all([
         getFleetOverview(),
         getActiveTrips(),
-        getDriverStats(),
+        getDriverDetails(),
         getAdminMetrics(),
       ]);
       setFleet(f);
@@ -357,18 +361,7 @@ export default function AdminDashboard() {
 
       {nav === 'fleet' && (
         <div className="admin-list-view">
-          <div className="driver-card">
-            <h2>Flotte de véhicules ({fleet.length})</h2>
-            {fleet.map((v) => (
-              <div key={v.id} className="driver-list-row">
-                <div>
-                  <div className="driver-name">{v.brand} {v.model} — {v.plate}</div>
-                  <div className="route-sub">{v.type.toUpperCase()} · chauffeur : {v.driver_name ?? '—'}</div>
-                </div>
-                <span className={`star-badge status-${v.status}`}>{v.status}</span>
-              </div>
-            ))}
-          </div>
+          <AdminFleetView fleet={fleet} busy={busy} onChanged={refresh} />
           <div className="driver-card">
             <h2>Courses en cours ({activeTrips.length})</h2>
             {activeTrips.length === 0 && <p className="route-sub">Aucune course en cours actuellement.</p>}
@@ -387,41 +380,11 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {nav === 'drivers' && (
-        <div className="admin-list-view">
-          <div className="driver-card">
-            <h2>Chauffeurs</h2>
-            {drivers.map((d) => (
-              <div key={d.id} className="driver-list-row">
-                <div>
-                  <div className="driver-name">{d.full_name ?? 'Chauffeur'}</div>
-                  <div className="route-sub">
-                    {Number(d.rating_avg).toFixed(1)} ★ · {d.completed_trips} course(s) · {d.validation_status}
-                  </div>
-                </div>
-                {d.validation_status !== 'approved' ? (
-                  <button className="btn cyan" style={{ width: 'auto', padding: '8px 14px' }} disabled={busy} onClick={() => handleValidation(d.id, 'approved')}>
-                    APPROUVER
-                  </button>
-                ) : (
-                  <button className="btn ghost" style={{ width: 'auto', padding: '8px 14px' }} disabled={busy} onClick={() => handleValidation(d.id, 'suspended')}>
-                    SUSPENDRE
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {nav === 'drivers' && <AdminDriversView drivers={drivers} busy={busy} onChanged={refresh} />}
 
-      {(nav === 'analytics' || nav === 'settings') && (
-        <div className="admin-list-view">
-          <div className="driver-card">
-            <h2>{nav === 'analytics' ? 'Analyses' : 'Paramètres'}</h2>
-            <p className="route-sub">Section à venir.</p>
-          </div>
-        </div>
-      )}
+      {nav === 'analytics' && <AdminAnalyticsView drivers={drivers} />}
+
+      {nav === 'settings' && session && <AdminSettingsView session={session} />}
     </div>
   );
 }
