@@ -62,7 +62,10 @@ export default function AuthGate({ onAuthed }: { onAuthed: () => void }) {
   return (
     <div className="auth-screen fade">
       <img src="/logo.png" alt="Yalla Nimshi" className="auth-logo-img" />
-      <img src="/tagline-banner.png" alt="Service de transport d'exception" className="auth-tagline-img" />
+      <div className="auth-tagline">
+        <div className="auth-tagline-main">Service de transport d&apos;exception</div>
+        <div className="auth-tagline-sub">L&apos;élégance accessible à tous · N&apos;Djamena</div>
+      </div>
       <img src="/fleet-cars.png" alt="Flotte Yalla Nimshi" className="auth-fleet-img" />
       <div className="auth-sub">
         {mode === 'signin' ? 'Connectez-vous pour réserver votre course.' : 'Créez votre compte passager.'}
