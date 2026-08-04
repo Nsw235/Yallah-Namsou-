@@ -137,11 +137,6 @@ export default function AuthGate({ onAuthed }: { onAuthed: () => void }) {
           </>
         )}
       </div>
-
-      <div className="auth-tracking">
-        <div className="auth-tracking-label">Suivi en direct</div>
-        <img src="/live-tracking.png" alt="Suivi en direct de votre course" className="auth-tracking-img" />
-      </div>
     </div>
   );
 }
