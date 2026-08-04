@@ -6,12 +6,11 @@
 /* Design system "Supervision Totale" — dark premium / cuivre brossé   */
 /* ------------------------------------------------------------------ */
 .supervision-root {
+  /* Surcharge volontaire : cuivre plus soutenu que le --copper global (#a97a5b) */
   --copper: #b08d57;
-  --copper-light: #e8c9a8;
-  --copper-dark: #6b4a35;
   background: #000;
-  color: #f2f3f5;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  font-family: var(--font);
   width: 100%;
   max-width: 480px;
   margin: 0 auto;
