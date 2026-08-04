@@ -28,7 +28,7 @@ import {
 import { supabase } from '@/lib/supabaseClient';
 import { checkIsAdmin } from '@/lib/admin';
 import AuthGate from '@/components/AuthGate';
-import { MOCK_STATS } from '@/components/legacy/mockData';
+import { MOCK_STATS } from '@/components/mockData';
 import {
   getFleetOverview,
   subscribeToFleetChanges,
