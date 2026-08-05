@@ -38,7 +38,7 @@ const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
 // Si ce style est basé sur "Standard" (v3, avec imports), les fonctionnalités
 // natives (slots, config 3D) restent utilisables — sinon elles sont ignorées
 // proprement (voir `hasBasemapImport` plus bas).
-const MAP_STYLE = 'mapbox://styles/devnos/cms9xitev009301s80im37bm5';
+const MAP_STYLE = 'mapbox://styles/devnos/cmsgphos4009301sa1rhm9gg1';
 
 // Modèle 3D par défaut du véhicule (place ton .glb dans /public/models/).
 const DEFAULT_CAR_MODEL_URL = '/models/berline.glb';
