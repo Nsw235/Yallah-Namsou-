@@ -86,6 +86,12 @@ personnalisée) est la vraie correction de fond — les correctifs ci-dessus
 garantissent seulement qu'en attendant (ou si l'upgrade n'est pas possible),
 les véhicules restent visibles via le repli emoji plutôt que de disparaître.
 
+**Mise à jour :** nouveau style Standard intégré —
+`mapbox://styles/devnos/cmsgphos4009301sa1rhm9gg1` (remplace l'ancien style
+classique dans `RealMap.tsx`). À vérifier en conditions réelles que les
+modèles `.glb` s'affichent désormais directement, sans passer par le repli
+icône.
+
 ## 3. Optimisation des quotas Mapbox
 
 Deux consommateurs de quota identifiés :
