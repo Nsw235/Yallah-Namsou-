@@ -102,6 +102,13 @@ const RealMap = forwardRef<RealMapHandle, {
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
+  // Vrai dès que `map.remove()` a été appelé (démontage). Les autres effects
+  // partagent cette même instance `map` et peuvent tenter d'y accéder (getLayer,
+  // removeLayer...) dans LEUR propre cleanup, exécuté au même moment que celui-ci
+  // — sans garde, ça plante avec "this.style is undefined" si la carte a déjà été
+  // détruite en premier (l'ordre d'exécution des cleanups entre effects n'est pas
+  // quelque chose sur lequel on doit compter ici).
+  const mapRemovedRef = useRef(false);
   const markersRef = useRef<Record<string, any>>({});
   const animFrames = useRef<Record<string, number>>({});
   // Le style personnalisé du projet n'est pas un style "Standard" (v3) : il
@@ -214,6 +221,7 @@ const RealMap = forwardRef<RealMapHandle, {
   useEffect(() => {
     return () => {
       Object.values(animFrames.current).forEach((id) => cancelAnimationFrame(id));
+      mapRemovedRef.current = true;
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -441,13 +449,27 @@ const RealMap = forwardRef<RealMapHandle, {
     else map.once('style.load', upsertCarModels);
 
     return () => {
+      // La carte a déjà été détruite par l'autre effect (démontage de RealMap) :
+      // toute méthode Mapbox (getLayer, getSource...) planterait ici avec
+      // "this.style is undefined" puisque le style interne n'existe plus.
+      // Rien à nettoyer dans ce cas, la carte entière disparaît de toute façon.
+      if (mapRemovedRef.current) return;
       map.off('error', onMapError);
       // Nettoie uniquement les modèles gérés par ce rendu (via activeIds),
       // pour ne pas toucher aux sources/layers d'un autre appel en cours.
-      activeIds.forEach((id) => {
-        if (map.getLayer(`${id}-layer`)) map.removeLayer(`${id}-layer`);
-        if (map.getSource(`${id}-source`)) map.removeSource(`${id}-source`);
-      });
+      try {
+        activeIds.forEach((id) => {
+          if (map.getLayer(`${id}-layer`)) map.removeLayer(`${id}-layer`);
+          if (map.getSource(`${id}-source`)) map.removeSource(`${id}-source`);
+        });
+      } catch (err) {
+        // Filet de sécurité supplémentaire : même garde protégée, Mapbox peut
+        // lever une exception synchrone en pleine phase de démontage React —
+        // on logue plutôt que de planter toute l'app (même principe que le
+        // try/catch de upsertCarModels ci-dessus).
+        // eslint-disable-next-line no-console
+        console.warn('[RealMap] Échec nettoyage modèles 3D au démontage :', err);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveUse3dCar, carModelUrl, carHeading, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins)]);
@@ -477,6 +499,9 @@ const RealMap = forwardRef<RealMapHandle, {
           onRouteInfo?.(null);
           return;
         }
+        // La carte a pu être détruite (changement d'écran) pendant l'attente
+        // de la réponse réseau ci-dessus : `map.getSource` planterait sinon.
+        if (mapRemovedRef.current) return;
         const src = map.getSource('route');
         if (src) src.setData({ type: 'Feature', properties: {}, geometry });
 
@@ -510,6 +535,7 @@ const RealMap = forwardRef<RealMapHandle, {
         // Hors-ligne : trait direct départ → arrivée en secours.
         onNavigationUpdate?.(null);
         onRouteInfo?.(null);
+        if (mapRemovedRef.current) return;
         const src = map.getSource('route');
         if (src) {
           src.setData({
