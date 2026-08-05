@@ -258,7 +258,7 @@ export async function confirmCashPayment(tripId: string) {
   if (error) throw error;
 }
 
-/** Historique + statistiques du chauffeur. */
+/** Historique complet des courses terminées du chauffeur (onglet Statistiques). */
 export async function getMyTripHistory(driverId: string): Promise<Trip[]> {
   const { data, error } = await supabase
     .from('trips')
@@ -268,6 +268,44 @@ export async function getMyTripHistory(driverId: string): Promise<Trip[]> {
     .order('completed_at', { ascending: false });
   if (error) throw error;
   return (data ?? []) as Trip[];
+}
+
+export type DriverStats = {
+  today_earnings: number;
+  today_count: number;
+  week_earnings: number;
+  week_count: number;
+  total_earnings: number;
+  total_count: number;
+};
+
+const STATS_STALE_TIME_MS = 60_000;
+const statsCache = new Map<string, { data: DriverStats; fetchedAt: number }>();
+
+/**
+ * Synthèse des gains pré-calculée côté SQL (fonction `get_driver_stats`,
+ * security definer) : aucune somme n'est faite côté client. Résultat mis en
+ * cache en mémoire (staleTime 60s) pour éviter de re-requêter Supabase à
+ * chaque clic sur l'onglet Statistiques.
+ */
+export async function getDriverStats(driverId: string, opts?: { force?: boolean }): Promise<DriverStats> {
+  const cached = statsCache.get(driverId);
+  if (!opts?.force && cached && Date.now() - cached.fetchedAt < STATS_STALE_TIME_MS) {
+    return cached.data;
+  }
+  const { data, error } = await supabase.rpc('get_driver_stats', { p_driver_id: driverId });
+  if (error) throw error;
+  const row = (Array.isArray(data) ? data[0] : data) as DriverStats;
+  const stats: DriverStats = {
+    today_earnings: Number(row?.today_earnings ?? 0),
+    today_count: Number(row?.today_count ?? 0),
+    week_earnings: Number(row?.week_earnings ?? 0),
+    week_count: Number(row?.week_count ?? 0),
+    total_earnings: Number(row?.total_earnings ?? 0),
+    total_count: Number(row?.total_count ?? 0),
+  };
+  statsCache.set(driverId, { data: stats, fetchedAt: Date.now() });
+  return stats;
 }
 
 /**
