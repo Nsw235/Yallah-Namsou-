@@ -93,6 +93,10 @@ export default function PrivateFleetApp() {
   // recherche à nouveau…") et compte à rebours avant annulation automatique.
   const [searchNotice, setSearchNotice] = useState<string | null>(null);
   const [searchSecondsLeft, setSearchSecondsLeft] = useState<number | null>(null);
+  // Ajustement du prix recommandé par le passager (façon Heetch : +/- autour
+  // du tarif calculé), en FCFA. Remis à zéro dès que le véhicule ou le
+  // trajet changent, pour ne jamais reporter un ajustement obsolète.
+  const [priceOffset, setPriceOffset] = useState(0);
   const submittingTrip = useRef(false);
 
   const distanceKm = useMemo(() => {
@@ -158,6 +162,34 @@ export default function PrivateFleetApp() {
     return estimatePrice(rule, distanceKm);
   }
 
+  // Pas d'ajustement et bornes (+/- 20% du prix recommandé, arrondi à la
+  // centaine de FCFA) — même logique de "prix proposé" que Heetch.
+  const PRICE_STEP = 100;
+  const recommendedPrice = priceFor(vehicle);
+  const priceBounds = useMemo(() => {
+    if (recommendedPrice == null) return null;
+    return {
+      min: Math.floor((recommendedPrice * 0.8) / PRICE_STEP) * PRICE_STEP,
+      max: Math.ceil((recommendedPrice * 1.2) / PRICE_STEP) * PRICE_STEP,
+    };
+  }, [recommendedPrice]);
+  const selectedPrice = recommendedPrice != null ? recommendedPrice + priceOffset : null;
+
+  function adjustPrice(direction: 1 | -1) {
+    if (recommendedPrice == null || !priceBounds) return;
+    setPriceOffset((current) => {
+      const next = current + direction * PRICE_STEP;
+      const clamped = Math.min(priceBounds.max - recommendedPrice, Math.max(priceBounds.min - recommendedPrice, next));
+      return clamped;
+    });
+  }
+
+  // Le prix ajusté n'a de sens que pour ce véhicule / ce trajet précis :
+  // on le réinitialise si l'un des deux change.
+  useEffect(() => {
+    setPriceOffset(0);
+  }, [vehicle, pickup, dropoff]);
+
   function resetToBooking() {
     setStep(1);
     setTrip(null);
@@ -181,7 +213,7 @@ export default function PrivateFleetApp() {
     setBusy(true);
     setError(null);
     try {
-      const price = priceFor(vehicle);
+      const price = selectedPrice;
       if (price == null) throw new Error('Grille tarifaire indisponible pour ce véhicule.');
       const newTrip = await createTrip({
         passengerId: session.user.id,
@@ -388,6 +420,9 @@ export default function PrivateFleetApp() {
             vehicle={vehicle}
             onSelect={setVehicle}
             priceFor={priceFor}
+            selectedPrice={selectedPrice}
+            priceBounds={priceBounds}
+            onAdjustPrice={adjustPrice}
             pickup={pickup}
             dropoff={dropoff}
             onPickupChange={setPickup}
@@ -404,7 +439,7 @@ export default function PrivateFleetApp() {
         {step === 2 && pickup && dropoff && (
           <Screen2
             vehicle={vehicle}
-            price={priceFor(vehicle)}
+            price={selectedPrice}
             pickup={pickup}
             dropoff={dropoff}
             busy={busy}
@@ -466,7 +501,7 @@ export default function PrivateFleetApp() {
 
         {showPaymentModal && (
           <PaymentModal
-            amount={priceFor(vehicle)}
+            amount={selectedPrice}
             selected={paymentMethod}
             onClose={() => setShowPaymentModal(false)}
             onSelect={(method, phone) => {
@@ -492,10 +527,21 @@ export default function PrivateFleetApp() {
 /* ---------------------------------------------------------------------- */
 /* ÉCRAN 1 — Sélection véhicule                                          */
 /* ---------------------------------------------------------------------- */
+// Sous-titre affiché sous le nom du véhicule dans la liste (façon Heetch :
+// nom du véhicule + info rapide comme le nombre de places).
+const VEHICLE_SUBTITLE: Record<VehicleType, string> = {
+  berline: '4 places',
+  van: '7 places',
+  suv: '5 places',
+};
+
 function Screen1({
   vehicle,
   onSelect,
   priceFor,
+  selectedPrice,
+  priceBounds,
+  onAdjustPrice,
   pickup,
   dropoff,
   onPickupChange,
@@ -510,6 +556,9 @@ function Screen1({
   vehicle: VehicleType;
   onSelect: (v: VehicleType) => void;
   priceFor: (v: VehicleType) => number | null;
+  selectedPrice: number | null;
+  priceBounds: { min: number; max: number } | null;
+  onAdjustPrice: (direction: 1 | -1) => void;
   pickup: GeoResult | null;
   dropoff: GeoResult | null;
   onPickupChange: (g: GeoResult) => void;
@@ -527,6 +576,8 @@ function Screen1({
     { key: 'suv', icon: '/icon_suv.png' },
   ];
   const ready = !!pickup && !!dropoff;
+  const atMin = !!priceBounds && !!selectedPrice && selectedPrice <= priceBounds.min;
+  const atMax = !!priceBounds && !!selectedPrice && selectedPrice >= priceBounds.max;
   const carPins = vehiclesToCarPins(availableVehicles);
 
   return (
@@ -589,26 +640,52 @@ function Screen1({
               <AddressField label="DÉPART" icon="dot" placeholder="D'où partez-vous ?" value={pickup} onChange={onPickupChange} />
               <AddressField label="DESTINATION" icon="pin" placeholder="Où allez-vous ?" value={dropoff} onChange={onDropoffChange} last />
             </div>
-            <div className="yn-classes-label">Véhicule</div>
-            <div className="yn-classes">
+            <div className="yn-classes-label">Choisissez votre véhicule</div>
+            <div className="yn-vlist">
               {types.map((t) => (
-                <div key={t.key} className={`yn-cclass ${vehicle === t.key ? 'selected' : ''}`} onClick={() => onSelect(t.key)}>
-                  <img src={t.icon} alt={VEHICLE_LABELS[t.key]} />
-                  <div className="cname">{VEHICLE_LABELS[t.key]}</div>
-                  <div className="cprice">{ready ? formatFCFA(priceFor(t.key)) : '—'}</div>
+                <div
+                  key={t.key}
+                  className={`yn-vrow ${vehicle === t.key ? 'selected' : ''}`}
+                  onClick={() => onSelect(t.key)}
+                >
+                  <img className="yn-vrow-icon" src={t.icon} alt={VEHICLE_LABELS[t.key]} />
+                  <div className="yn-vrow-info">
+                    <div className="yn-vrow-name">{VEHICLE_LABELS[t.key]}</div>
+                    <div className="yn-vrow-sub">{VEHICLE_SUBTITLE[t.key]}</div>
+                  </div>
+                  <div className="yn-vrow-price">{ready ? formatFCFA(priceFor(t.key)) : '—'}</div>
                 </div>
               ))}
             </div>
+
+            {ready && (
+              <div className="yn-price-stepper">
+                <button
+                  type="button"
+                  className="yn-stepper-btn"
+                  onClick={() => onAdjustPrice(-1)}
+                  disabled={atMin}
+                  aria-label="Diminuer le prix proposé"
+                >
+                  −
+                </button>
+                <div className="yn-stepper-mid">
+                  <div className="yn-stepper-price">{formatFCFA(selectedPrice)}</div>
+                  <div className="yn-stepper-caption">Prix recommandé : {formatFCFA(priceFor(vehicle))}</div>
+                </div>
+                <button
+                  type="button"
+                  className="yn-stepper-btn"
+                  onClick={() => onAdjustPrice(1)}
+                  disabled={atMax}
+                  aria-label="Augmenter le prix proposé"
+                >
+                  +
+                </button>
+              </div>
+            )}
           </div>
           <div className="yn-ticket-stub">
-            <div className="yn-stub-row">
-              <div>
-                <div className="yn-stub-label">Tarif estimé</div>
-                <div className="yn-stub-price">{ready ? formatFCFA(priceFor(vehicle)) : '—'}</div>
-              </div>
-              <div className="yn-stub-code">TCHAD<br />N&apos;Djamena</div>
-            </div>
-            <div className="yn-stub-dash" />
             <button className="yn-stub-btn" onClick={onSearch} disabled={!ready}>
               {ready ? 'CONFIRMER LA COURSE' : 'CHOISISSEZ VOS ADRESSES'}
             </button>
