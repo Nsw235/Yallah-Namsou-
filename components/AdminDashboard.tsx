@@ -14,6 +14,8 @@ import {
   getAdminMetrics,
   getDriverDetails,
   getFleetOverview,
+  scheduleMaintenance,
+  sendFleetNotification,
   setDriverValidation,
   subscribeToFleetChanges,
 } from '@/lib/admin';
@@ -23,6 +25,7 @@ import AdminFleetView from '@/components/admin/AdminFleetView';
 import AdminDriversView from '@/components/admin/AdminDriversView';
 import AdminAnalyticsView from '@/components/admin/AdminAnalyticsView';
 import AdminSettingsView from '@/components/admin/AdminSettingsView';
+import { ToastProvider, useToast } from '@/components/Toast';
 
 type NavKey = 'dashboard' | 'map' | 'fleet' | 'drivers' | 'analytics' | 'settings';
 
@@ -43,7 +46,8 @@ function NavIcon({ children }: { children: JSX.Element }) {
   );
 }
 
-export default function AdminDashboard() {
+function AdminDashboardInner() {
+  const pushToast = useToast();
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [fleet, setFleet] = useState<FleetVehicle[]>([]);
@@ -54,6 +58,15 @@ export default function AdminDashboard() {
   const [busy, setBusy] = useState(false);
   const [nav, setNav] = useState<NavKey>('dashboard');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [actionModal, setActionModal] = useState<'notif' | 'maint' | 'call' | null>(null);
+  const [notifMessage, setNotifMessage] = useState('');
+  const [notifSaving, setNotifSaving] = useState(false);
+  const [notifErr, setNotifErr] = useState<string | null>(null);
+  const [maintSelected, setMaintSelected] = useState<string[]>([]);
+  const [maintDate, setMaintDate] = useState('');
+  const [maintNote, setMaintNote] = useState('');
+  const [maintSaving, setMaintSaving] = useState(false);
+  const [maintErr, setMaintErr] = useState<string | null>(null);
 
   const NAV_LABELS: Record<NavKey, string> = {
     dashboard: 'Tableau de bord',
@@ -112,6 +125,45 @@ export default function AdminDashboard() {
     const unsubscribe = subscribeToFleetChanges(refresh);
     return unsubscribe;
   }, [isAdmin]);
+
+  async function sendNotification() {
+    if (!notifMessage.trim() || !session?.user) return;
+    setNotifSaving(true);
+    setNotifErr(null);
+    try {
+      await sendFleetNotification(notifMessage.trim(), session.user.id, online.length);
+      pushToast(`Notification envoyée à ${online.length} chauffeur${online.length !== 1 ? 's' : ''} en ligne`);
+      setNotifMessage('');
+      setActionModal(null);
+    } catch (e: any) {
+      setNotifErr(e?.message ?? "Échec de l'envoi.");
+    } finally {
+      setNotifSaving(false);
+    }
+  }
+
+  function toggleMaintVehicle(id: string) {
+    setMaintSelected((sel) => (sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]));
+  }
+
+  async function planMaintenance() {
+    if (!session?.user || maintSelected.length === 0 || !maintDate) return;
+    setMaintSaving(true);
+    setMaintErr(null);
+    try {
+      await scheduleMaintenance(maintSelected, maintDate, session.user.id, maintNote.trim() || undefined);
+      pushToast(`Maintenance planifiée pour ${maintSelected.length} véhicule${maintSelected.length !== 1 ? 's' : ''}`);
+      setMaintSelected([]);
+      setMaintDate('');
+      setMaintNote('');
+      setActionModal(null);
+      await refresh();
+    } catch (e: any) {
+      setMaintErr(e?.message ?? 'Échec de la planification.');
+    } finally {
+      setMaintSaving(false);
+    }
+  }
 
   async function handleValidation(driverId: string, status: 'approved' | 'rejected' | 'suspended') {
     setBusy(true);
@@ -195,6 +247,12 @@ export default function AdminDashboard() {
       );
     return list;
   }, [drivers, offlineVehicles, activeTrips]);
+
+  const [alertFilter, setAlertFilter] = useState<'all' | 'crit' | 'warn'>('all');
+  const visibleAlerts = useMemo(
+    () => (alertFilter === 'all' ? alerts : alerts.filter((a) => a.level === alertFilter)),
+    [alerts, alertFilter]
+  );
 
   const now = new Date();
   const dateStr = now.toLocaleDateString('fr-FR');
@@ -330,10 +388,15 @@ export default function AdminDashboard() {
 
             <div className="admin-panel">
               <h3>Alertes et Incidents</h3>
-              <div className="alert-filter">⚙ Filtrer les alertes</div>
+              <button
+                className="alert-filter"
+                onClick={() => setAlertFilter((f) => (f === 'all' ? 'crit' : f === 'crit' ? 'warn' : 'all'))}
+              >
+                ⚙ {alertFilter === 'all' ? 'Toutes les alertes' : alertFilter === 'crit' ? 'Critiques uniquement' : 'Avertissements uniquement'}
+              </button>
               <div className="alert-list">
-                {alerts.length === 0 && <div className="alert-empty">Aucune alerte actuellement.</div>}
-                {alerts.map((a, i) => (
+                {visibleAlerts.length === 0 && <div className="alert-empty">Aucune alerte actuellement.</div>}
+                {visibleAlerts.map((a, i) => (
                   <div key={i} className="alert-row">
                     <span className={`adot ${a.level}`} />
                     <div className="atext">
@@ -349,11 +412,10 @@ export default function AdminDashboard() {
           <div className="admin-actions">
             <h3>Actions Administratives</h3>
             <div className="admin-actions-grid">
-              {['GESTION DES TARIFS', 'NOTIFICATION FLOTTE', 'MAINTENANCE VÉHICULES', 'APPELS OPÉRATEURS'].map((label) => (
-                <button key={label} className="admin-action-btn" onClick={() => alert(`${label} — fonctionnalité à venir.`)}>
-                  {label}
-                </button>
-              ))}
+              <button className="admin-action-btn" onClick={() => setNav('settings')}>GESTION DES TARIFS</button>
+              <button className="admin-action-btn" onClick={() => setActionModal('notif')}>NOTIFICATION FLOTTE</button>
+              <button className="admin-action-btn" onClick={() => setActionModal('maint')}>MAINTENANCE VÉHICULES</button>
+              <button className="admin-action-btn" onClick={() => setActionModal('call')}>APPELS OPÉRATEURS</button>
             </div>
           </div>
         </>
@@ -385,6 +447,101 @@ export default function AdminDashboard() {
       {nav === 'analytics' && <AdminAnalyticsView drivers={drivers} />}
 
       {nav === 'settings' && session && <AdminSettingsView session={session} />}
+
+      {actionModal === 'notif' && (
+        <div className="modal-overlay" onClick={() => setActionModal(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Notification flotte</h3>
+            <p className="route-sub" style={{ marginBottom: 14 }}>
+              Envoyée à {online.length} chauffeur{online.length !== 1 ? 's' : ''} en ligne actuellement.
+            </p>
+            <div className="field">
+              <label>MESSAGE</label>
+              <textarea
+                rows={4}
+                style={{ resize: 'none' }}
+                placeholder="Écrivez votre message…"
+                value={notifMessage}
+                onChange={(e) => setNotifMessage(e.target.value)}
+              />
+            </div>
+            {notifErr && <div className="auth-error">{notifErr}</div>}
+            <div className="btn-row">
+              <button className="btn ghost" onClick={() => setActionModal(null)}>Annuler</button>
+              <button className="btn amber" disabled={notifSaving || !notifMessage.trim()} onClick={sendNotification}>
+                {notifSaving ? 'Envoi…' : 'Envoyer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {actionModal === 'maint' && (
+        <div className="modal-overlay" onClick={() => setActionModal(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Maintenance véhicules</h3>
+            {fleet.map((v) => (
+              <div className="modal-list-row" key={v.id}>
+                <input type="checkbox" checked={maintSelected.includes(v.id)} onChange={() => toggleMaintVehicle(v.id)} />
+                <div style={{ flex: 1 }}>
+                  <div className="driver-name">{v.brand} {v.model}</div>
+                  <div className="route-sub">{v.plate}</div>
+                </div>
+              </div>
+            ))}
+            <div className="field" style={{ marginTop: 12 }}>
+              <label>DATE PLANIFIÉE</label>
+              <input type="date" value={maintDate} onChange={(e) => setMaintDate(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>NOTE (OPTIONNEL)</label>
+              <input placeholder="Ex : vidange, contrôle technique…" value={maintNote} onChange={(e) => setMaintNote(e.target.value)} />
+            </div>
+            {maintErr && <div className="auth-error">{maintErr}</div>}
+            <div className="btn-row">
+              <button className="btn ghost" onClick={() => setActionModal(null)}>Annuler</button>
+              <button className="btn amber" disabled={maintSaving || maintSelected.length === 0 || !maintDate} onClick={planMaintenance}>
+                {maintSaving ? 'Planification…' : 'Planifier'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {actionModal === 'call' && (
+        <div className="modal-overlay" onClick={() => setActionModal(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Appels opérateurs</h3>
+            {[
+              { n: "Standard N'Djamena", p: '+235 22 51 00 00' },
+              { n: 'Support technique', p: '+235 22 51 00 01' },
+            ].map((o) => (
+              <div className="modal-list-row" key={o.p}>
+                <div style={{ flex: 1 }}>
+                  <div className="driver-name">{o.n}</div>
+                  <div className="route-sub">{o.p}</div>
+                </div>
+                <a
+                  className="btn amber"
+                  style={{ width: 'auto', padding: '10px 16px' }}
+                  href={`tel:${o.p.replace(/\s/g, '')}`}
+                  onClick={() => pushToast(`Appel vers ${o.n}`)}
+                >
+                  Appeler
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function AdminDashboard() {
+  return (
+    <ToastProvider>
+      <AdminDashboardInner />
+    </ToastProvider>
   );
 }
