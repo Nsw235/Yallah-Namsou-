@@ -24,6 +24,7 @@ import AdminDriversView from '@/components/admin/AdminDriversView';
 import AdminAnalyticsView from '@/components/admin/AdminAnalyticsView';
 import AdminSettingsView from '@/components/admin/AdminSettingsView';
 import { AdminTopBar, KPICard } from '@/components/admin/ui';
+import { showInfo } from '@/lib/notify';
 
 type NavKey = 'dashboard' | 'map' | 'fleet' | 'drivers' | 'analytics' | 'settings';
 
@@ -334,7 +335,7 @@ export default function AdminDashboard() {
             <h3>Actions Administratives</h3>
             <div className="admin-actions-grid">
               {['GESTION DES TARIFS', 'NOTIFICATION FLOTTE', 'MAINTENANCE VÉHICULES', 'APPELS OPÉRATEURS'].map((label) => (
-                <button key={label} className="admin-action-btn" onClick={() => alert(`${label} — fonctionnalité à venir.`)}>
+                <button key={label} className="admin-action-btn" onClick={() => showInfo(`${label} — fonctionnalité à venir.`)}>
                   {label}
                 </button>
               ))}
