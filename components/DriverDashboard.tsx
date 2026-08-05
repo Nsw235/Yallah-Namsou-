@@ -7,12 +7,10 @@ import {
   Star,
   ThumbsUp,
   Home,
-  History,
-  Wallet,
+  Radar as RadarIcon,
+  BarChart3,
   User as UserIcon,
   ArrowUp,
-  ArrowLeft,
-  ArrowRight,
   CornerUpLeft,
   CornerUpRight,
   RotateCcw,
@@ -25,11 +23,13 @@ import { supabase } from '@/lib/supabaseClient';
 import { Trip, VehicleType } from '@/types/database';
 import { CAR_MODEL_BY_TYPE, formatFCFA, haversineKm, VEHICLE_LABELS } from '@/lib/pricing';
 import {
+  DriverStats,
   MyDriverProfile,
   MyVehicle,
   acceptTrip,
   cancelTripAsDriver,
   finishTrip,
+  getDriverStats,
   getMyActiveTrip,
   getMyDriverData,
   getMyTripHistory,
@@ -46,6 +46,7 @@ import AuthGate from '@/components/AuthGate';
 import RealMap, { type NavigationStep } from '@/components/RealMap';
 
 const VEHICLE_TYPES: VehicleType[] = ['berline', 'van', 'suv'];
+type BottomTab = 'home' | 'radar' | 'stats' | 'profil';
 
 function playNotificationBeep() {
   try {
@@ -109,10 +110,11 @@ export default function DriverDashboard() {
   const [ratingStars, setRatingStars] = useState(4);
   const [ratingTag, setRatingTag] = useState<'client_sympa' | 'aucun'>('aucun');
   const [comment, setComment] = useState('');
-  const [bottomTab, setBottomTab] = useState<'accueil' | 'historique' | 'courses' | 'gains' | 'profil'>('accueil');
+  const [bottomTab, setBottomTab] = useState<BottomTab>('home');
   const [history, setHistory] = useState<Trip[]>([]);
-  const [historyLoaded, setHistoryLoaded] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
+  const [stats, setStats] = useState<DriverStats | null>(null);
+  const [statsLoaded, setStatsLoaded] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [navInfo, setNavInfo] = useState<NavigationStep | null>(null);
   const [tripCardExpanded, setTripCardExpanded] = useState(false);
@@ -198,18 +200,21 @@ export default function DriverDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id]);
 
+  // Statistiques + historique : chargés uniquement à l'ouverture de l'onglet
+  // Statistiques, avec cache (staleTime côté lib/driver.ts) pour éviter de
+  // re-requêter Supabase à chaque clic d'onglet.
   useEffect(() => {
     if (!session?.user) return;
-    if ((bottomTab === 'historique' || bottomTab === 'gains') && !historyLoaded) {
-      setHistoryLoading(true);
-      getMyTripHistory(session.user.id)
-        .then((trips) => {
-          setHistory(trips);
-          setHistoryLoaded(true);
-        })
-        .catch((e: any) => setError(e?.message ?? "Impossible de charger l'historique."))
-        .finally(() => setHistoryLoading(false));
-    }
+    if (bottomTab !== 'stats' || statsLoaded) return;
+    setStatsLoading(true);
+    Promise.all([getDriverStats(session.user.id), getMyTripHistory(session.user.id)])
+      .then(([s, h]) => {
+        setStats(s);
+        setHistory(h);
+        setStatsLoaded(true);
+      })
+      .catch((e: any) => setError(e?.message ?? 'Impossible de charger les statistiques.'))
+      .finally(() => setStatsLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bottomTab, session?.user?.id]);
 
@@ -242,8 +247,12 @@ export default function DriverDashboard() {
     await supabase.auth.signOut();
   }
 
+  // Supabase Realtime (WebSocket `trips`) : actif UNIQUEMENT sur l'onglet
+  // Radar. La souscription est détruite dès qu'on quitte cet onglet, pour
+  // économiser les quotas Supabase/Vercel.
   useEffect(() => {
     if (!session?.user) return;
+    if (bottomTab !== 'radar') return;
     const userId = session.user.id;
     const unsubscribe = subscribeToTripChanges(({ eventType, trip }) => {
       if (eventType === 'INSERT' && trip.status === 'pending') {
@@ -255,7 +264,7 @@ export default function DriverDashboard() {
     });
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.id]);
+  }, [bottomTab, session?.user?.id]);
 
   const myVehicle = vehicles[0];
   const online = myVehicle?.status !== 'offline';
@@ -278,14 +287,18 @@ export default function DriverDashboard() {
     if (!session?.user) return;
     const v = vehicles.find((x) => x.type === trip.vehicle_type && x.status === 'available');
     if (!v) {
-      setError("Aucun véhicule disponible pour ce type (passez en ligne).");
+      setError('Aucun véhicule disponible pour ce type (passez en ligne).');
       return;
     }
     setBusy(true);
     setError(null);
     try {
       const accepted = await acceptTrip(trip.id, session.user.id, v.id);
-      if (!accepted) setError('Trop tard : un autre chauffeur a déjà accepté cette course.');
+      if (!accepted) {
+        setError('Trop tard : un autre chauffeur a déjà accepté cette course.');
+      } else {
+        setBottomTab('home'); // bascule sur la carte pour la navigation
+      }
       await refreshAll(session.user.id);
     } catch (e: any) {
       setError(e?.message ?? "Impossible d'accepter cette course.");
@@ -343,6 +356,7 @@ export default function DriverDashboard() {
       setRatingStars(4);
       setRatingTag('aucun');
       setComment('');
+      setStatsLoaded(false); // les gains viennent de changer : on invalide le cache
       if (session?.user) await refreshAll(session.user.id);
     } catch (e: any) {
       setError(e?.message ?? 'Impossible de terminer la course.');
@@ -412,8 +426,7 @@ export default function DriverDashboard() {
 
   const shownPending = pending.filter((t) => !dismissed.includes(t.id));
 
-  // Course la plus proche en premier : c'est elle qu'on propose en priorité
-  // au chauffeur (carte Accepter/Refuser + tête de liste dans l'onglet Courses).
+  // Course la plus proche en premier.
   const sortedPending = driverPos
     ? [...shownPending].sort(
         (a, b) =>
@@ -422,17 +435,6 @@ export default function DriverDashboard() {
       )
     : shownPending;
 
-  const pendingPins = driverPos
-    ? sortedPending.map((t, i) => ({
-        position: { lat: t.pickup_lat, lng: t.pickup_lng },
-        passenger: {
-          initials: initials(t.passenger_profile?.full_name ?? null),
-          name: t.passenger_profile?.full_name ?? 'Passager',
-          distanceKm: haversineKm(driverPos.lat, driverPos.lng, t.pickup_lat, t.pickup_lng),
-          highlight: i === 0,
-        },
-      }))
-    : [];
   const showCompass = step === 'in_progress' || step === 'summary' || step === 'available';
   const displayTrip = summaryTrip ?? active;
   const elapsedMin =
@@ -440,474 +442,419 @@ export default function DriverDashboard() {
       ? Math.max(1, Math.round((new Date(summaryTrip.completed_at).getTime() - new Date(summaryTrip.started_at).getTime()) / 60000))
       : null;
 
-  // Vue "ciel visible" très inclinée (75°) + voiture 3D uniquement pendant la
-  // course (aller chercher le client ou avec le client à bord). Hors course,
-  // une vue plus plate et dézoomée ("vue d'ensemble de la ville") aide le
-  // chauffeur à se repérer plus facilement dans N'Djamena.
   const onTrip = step === 'accepted' || step === 'in_progress';
   const mapPitch = onTrip ? 75 : 32;
   const mapOverviewZoom = step === 'available' ? 12.5 : 15;
   const myVehicleType: VehicleType = myVehicle?.type ?? 'berline';
   const carModelUrl = CAR_MODEL_BY_TYPE[myVehicleType];
 
+  // Onglet HOME : carte plein écran, épurée. Aucune fenêtre modale
+  // d'historique/gains ici — uniquement le suivi de la course en cours.
+  const showMap = bottomTab === 'home' || bottomTab === 'radar';
+
   return (
     <div className="relative flex h-dvh flex-col overflow-hidden bg-[#0d0906]">
-      <div className="absolute inset-0">
-        <RealMap
-          pitch={mapPitch}
-          buildings3d
-          driverPosition={driverPos}
-          pins={step === 'available' ? pendingPins : []}
-          use3dCar={onTrip}
-          carModelUrl={carModelUrl}
-          overviewZoom={mapOverviewZoom}
-          pickup={step === 'accepted' && active ? { lat: active.pickup_lat, lng: active.pickup_lng } : undefined}
-          dropoff={
-            (step === 'in_progress' || step === 'summary') && displayTrip
-              ? { lat: displayTrip.dropoff_lat, lng: displayTrip.dropoff_lng }
-              : step === 'accepted' && active
-                ? { lat: active.pickup_lat, lng: active.pickup_lng }
-                : undefined
-          }
-          showRoute={step === 'accepted' || step === 'in_progress'}
-          routeColor="#4d9fff"
-          onNavigationUpdate={onTrip ? setNavInfo : undefined}
-        />
-      </div>
-
-      <div className="relative z-10 mt-4 ml-3.5 flex w-fit items-center gap-2 rounded-full border-[0.5px] border-[rgba(169,122,91,0.4)] bg-[rgba(13,9,6,0.72)] py-1.5 pl-1.5 pr-3 backdrop-blur-sm">
-        <div
-          className="flex h-8 w-8 flex-none items-center justify-center rounded-full border-2 bg-[#3a2a1c] bg-cover bg-center text-[10px] font-medium text-[#e8c9a8]"
-          style={{
-            borderColor: step === 'available' && online ? '#5be08a' : '#6b4a35',
-            backgroundImage: profile?.avatar_url ? `url(${profile.avatar_url})` : undefined,
-          }}
-        >
-          {!profile?.avatar_url && initials(profile?.full_name ?? null)}
-        </div>
-        <div className="flex flex-col leading-tight">
-          <span className="text-[11px] font-medium text-[#f7e6d4]">{profile?.full_name ?? 'Chauffeur'}</span>
-          <span
-            className="font-mono text-[9px] font-medium tracking-wide"
-            style={{
-              color:
-                step === 'available' && online
-                  ? '#5be08a'
-                  : step === 'available' && !online
-                    ? '#7a6a58'
-                    : '#e8c9a8',
-            }}
-          >
-            {Number(profile?.rating_avg ?? 0).toFixed(1)} · {step === 'available' ? (online ? 'EN LIGNE' : 'HORS LIGNE') : step === 'summary' ? 'DISPONIBLE' : 'OCCUPÉ'}
-          </span>
-        </div>
-
-        {step === 'available' && (
-          <button
-            onClick={handleToggleOnline}
-            disabled={busy}
-            className="relative ml-1 h-[17px] w-[30px] flex-none rounded-full border-[0.5px] transition-colors duration-200"
-            style={{
-              borderColor: online ? '#5be08a' : '#6b4a35',
-              background: online ? '#1f4d33' : '#2a2118',
-            }}
-            aria-pressed={online}
-            aria-label="Basculer en ligne / hors ligne"
-          >
-            <span
-              className="absolute top-[2px] h-3 w-3 rounded-full transition-all duration-200"
-              style={{ left: online ? 14 : 2, background: online ? '#5be08a' : '#e8c9a8' }}
+      <div className="relative flex-1 overflow-hidden">
+        {showMap && (
+          <div className="absolute inset-0">
+            <RealMap
+              pitch={mapPitch}
+              buildings3d
+              driverPosition={driverPos}
+              pins={[]}
+              use3dCar={onTrip}
+              carModelUrl={carModelUrl}
+              overviewZoom={mapOverviewZoom}
+              pickup={step === 'accepted' && active ? { lat: active.pickup_lat, lng: active.pickup_lng } : undefined}
+              dropoff={
+                (step === 'in_progress' || step === 'summary') && displayTrip
+                  ? { lat: displayTrip.dropoff_lat, lng: displayTrip.dropoff_lng }
+                  : step === 'accepted' && active
+                    ? { lat: active.pickup_lat, lng: active.pickup_lng }
+                    : undefined
+              }
+              showRoute={step === 'accepted' || step === 'in_progress'}
+              routeColor="#4d9fff"
+              onNavigationUpdate={onTrip ? setNavInfo : undefined}
             />
-          </button>
-        )}
-      </div>
-
-      {showCompass && (
-        <div className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-[#1c1108] text-[#e8c9a8] backdrop-blur">
-          <Compass size={20} />
-        </div>
-      )}
-
-      {step === 'available' && (
-        <div className="relative z-10 mx-3 mt-3 flex w-fit items-center gap-1.5 rounded-full border-[0.5px] border-[rgba(169,122,91,0.35)] bg-[rgba(13,9,6,0.72)] px-3 py-1.5 text-[10px] font-medium text-[#e8c9a8] backdrop-blur-sm">
-          <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: online ? '#5be08a' : '#8a7358' }} />
-          Vue d&apos;ensemble · N&apos;Djamena
-        </div>
-      )}
-
-      {error && (
-        <div className="relative z-10 mx-3 mt-2 border-[0.5px] border-[rgba(226,75,74,0.3)] px-3 py-2 text-[11px] text-[#e2807f]">{error}</div>
-      )}
-      {newRequestAlert && (
-        <div className="relative z-10 mx-3 mt-2 flex items-center gap-2 rounded-xl border-[0.5px] border-[#5be08a] bg-[rgba(13,9,6,0.88)] px-3 py-2 text-[11px] text-[#f7e6d4]">
-          <Bell size={14} className="flex-none text-[#5be08a]" />
-          Course la plus proche disponible
-          {sortedPending[0] && driverPos && (
-            <span className="ml-auto flex-none font-mono text-[10px] text-[#5be08a]">
-              {haversineKm(driverPos.lat, driverPos.lng, sortedPending[0].pickup_lat, sortedPending[0].pickup_lng).toFixed(1)} km
-            </span>
-          )}
-        </div>
-      )}
-
-      {navInfo && onTrip && (
-        <div className="relative z-10 mx-3 mt-3 flex items-center gap-2.5 rounded-2xl bg-[#2d6fe0] px-4 py-2.5 text-white">
-          <ManeuverIcon type={navInfo.type} modifier={navInfo.modifier} size={20} />
-          <div className="flex flex-col leading-tight">
-            <span className="text-[11px] font-bold text-white/80">{formatDistance(navInfo.distanceMeters)}</span>
-            <span className="text-xs font-extrabold">{navInfo.instruction}</span>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="flex-1" />
+        {/* ---------- ONGLET HOME ---------- */}
+        {bottomTab === 'home' && (
+          <>
+            <div className="relative z-10 mt-4 ml-3.5 flex w-fit items-center gap-2 rounded-full border-[0.5px] border-[rgba(169,122,91,0.4)] bg-[rgba(13,9,6,0.72)] py-1.5 pl-1.5 pr-3 backdrop-blur-sm">
+              <div
+                className="flex h-8 w-8 flex-none items-center justify-center rounded-full border-2 bg-[#3a2a1c] bg-cover bg-center text-[10px] font-medium text-[#e8c9a8]"
+                style={{
+                  borderColor: step === 'available' && online ? '#5be08a' : '#6b4a35',
+                  backgroundImage: profile?.avatar_url ? `url(${profile.avatar_url})` : undefined,
+                }}
+              >
+                {!profile?.avatar_url && initials(profile?.full_name ?? null)}
+              </div>
+              <div className="flex flex-col leading-tight">
+                <span className="text-[11px] font-medium text-[#f7e6d4]">{profile?.full_name ?? 'Chauffeur'}</span>
+                <span
+                  className="font-mono text-[9px] font-medium tracking-wide"
+                  style={{
+                    color:
+                      step === 'available' && online
+                        ? '#5be08a'
+                        : step === 'available' && !online
+                          ? '#7a6a58'
+                          : '#e8c9a8',
+                  }}
+                >
+                  {Number(profile?.rating_avg ?? 0).toFixed(1)} · {step === 'available' ? (online ? 'EN LIGNE' : 'HORS LIGNE') : step === 'summary' ? 'DISPONIBLE' : 'OCCUPÉ'}
+                </span>
+              </div>
 
-      <div className="relative z-10">
-        {step === 'available' && (
-          <div className="flex gap-2.5 overflow-x-auto px-3 pb-3" style={{ scrollSnapType: 'x mandatory' }}>
-            {sortedPending.length === 0 && (
-              <div className="w-full border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c] p-4 text-center text-xs text-[#8a7358]">
-                Aucune course en attente pour le moment.
+              {step === 'available' && (
+                <button
+                  onClick={handleToggleOnline}
+                  disabled={busy}
+                  className="relative ml-1 h-[17px] w-[30px] flex-none rounded-full border-[0.5px] transition-colors duration-200"
+                  style={{
+                    borderColor: online ? '#5be08a' : '#6b4a35',
+                    background: online ? '#1f4d33' : '#2a2118',
+                  }}
+                  aria-pressed={online}
+                  aria-label="Basculer en ligne / hors ligne"
+                >
+                  <span
+                    className="absolute top-[2px] h-3 w-3 rounded-full transition-all duration-200"
+                    style={{ left: online ? 14 : 2, background: online ? '#5be08a' : '#e8c9a8' }}
+                  />
+                </button>
+              )}
+            </div>
+
+            {showCompass && (
+              <div className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-[#1c1108] text-[#e8c9a8] backdrop-blur">
+                <Compass size={20} />
               </div>
             )}
-            {sortedPending.map((t, i) => (
-              <div key={t.id} className="flex w-64 flex-none" style={{ scrollSnapAlign: 'start' }}>
-                <div
-                  className="w-[3px] flex-none"
-                  style={{ background: 'repeating-linear-gradient(180deg,#6b4a35 0 4px,transparent 4px 8px)' }}
-                />
-                <div className={`flex-1 border-[0.5px] border-l-0 p-3 ${i === 0 ? 'border-[#a97a5b] bg-[#241a13]' : 'border-[rgba(169,122,91,0.28)] bg-[#14100c]'}`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[8px] font-medium tracking-wide text-[#8a7358]">
-                      MANIFESTE {i === 0 ? '· PLUS PROCHE' : ''}
-                    </span>
-                    {driverPos && (
-                      <span className="font-mono text-[8px] text-[#8a7358]">
-                        {haversineKm(driverPos.lat, driverPos.lng, t.pickup_lat, t.pickup_lng).toFixed(1)} KM
+
+            {step === 'available' && (
+              <div className="relative z-10 mx-3 mt-3 flex w-fit items-center gap-1.5 rounded-full border-[0.5px] border-[rgba(169,122,91,0.35)] bg-[rgba(13,9,6,0.72)] px-3 py-1.5 text-[10px] font-medium text-[#e8c9a8] backdrop-blur-sm">
+                <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: online ? '#5be08a' : '#8a7358' }} />
+                Vue d&apos;ensemble · N&apos;Djamena
+              </div>
+            )}
+
+            {error && (
+              <div className="relative z-10 mx-3 mt-2 border-[0.5px] border-[rgba(226,75,74,0.3)] px-3 py-2 text-[11px] text-[#e2807f]">{error}</div>
+            )}
+
+            {navInfo && onTrip && (
+              <div className="relative z-10 mx-3 mt-3 flex items-center gap-2.5 rounded-2xl bg-[#2d6fe0] px-4 py-2.5 text-white">
+                <ManeuverIcon type={navInfo.type} modifier={navInfo.modifier} size={20} />
+                <div className="flex flex-col leading-tight">
+                  <span className="text-[11px] font-bold text-white/80">{formatDistance(navInfo.distanceMeters)}</span>
+                  <span className="text-xs font-extrabold">{navInfo.instruction}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="absolute inset-x-0 bottom-0 z-10">
+              {step === 'accepted' && active && (
+                <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c]">
+                  <button
+                    onClick={() => setTripCardExpanded((v) => !v)}
+                    className="flex w-full items-center justify-between gap-2 border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] px-3 py-2.5 text-left"
+                  >
+                    <span className="text-[9px] font-medium tracking-wide text-[#e8c9a8]">EN ROUTE VERS LE PASSAGER</span>
+                    <ChevronUp size={13} className={`flex-none text-[#8a7358] transition-transform ${tripCardExpanded ? '' : 'rotate-180'}`} />
+                  </button>
+                  {!tripCardExpanded && (
+                    <div className="flex items-center justify-between px-3 py-2.5">
+                      <span className="truncate text-[11.5px] text-[#f7e6d4]">{active.pickup_address ?? 'Adresse de prise en charge'}</span>
+                      <span className="ml-2 flex-none font-mono text-[13px] text-[#f7e6d4]">{formatFCFA(active.estimated_price)}</span>
+                    </div>
+                  )}
+                  {tripCardExpanded && (
+                    <div className="px-3 py-2.5">
+                      <TripCardBody trip={active} passengerName={passengerContact?.full_name ?? null} showDestinationLabel="Destination" />
+                      {passengerContact?.phone && (
+                        <a
+                          href={`tel:${passengerContact.phone}`}
+                          className="mt-2 flex items-center justify-center gap-1.5 border-[0.5px] border-[rgba(169,122,91,0.28)] py-2 text-[10.5px] text-[#e8c9a8]"
+                        >
+                          Contacter · {passengerContact.phone}
+                        </a>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex border-t-[0.5px] border-[rgba(169,122,91,0.2)]">
+                    <button
+                      disabled={busy}
+                      onClick={handleCancel}
+                      className="flex flex-1 items-center justify-center gap-1.5 border-r-[0.5px] border-[rgba(169,122,91,0.2)] py-2.5 text-[10.5px] text-[#e2807f]"
+                    >
+                      ✕ Annuler
+                    </button>
+                    <button disabled={busy} onClick={handleArrive} className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[10.5px] text-[#e8c9a8]">
+                      ✓ J&apos;arrive
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {step === 'in_progress' && active && (
+                <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)]">
+                  <div className="bg-[#14100c]">
+                    <button
+                      onClick={() => setTripCardExpanded((v) => !v)}
+                      className="flex w-full items-center justify-between gap-2 border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] px-3 py-2.5 text-left"
+                    >
+                      <span className="text-[9px] font-medium tracking-wide text-[#e8c9a8]">
+                        AVEC {(passengerContact?.full_name ?? 'LA CLIENTE').toUpperCase()}
                       </span>
+                      <ChevronUp size={13} className={`flex-none text-[#8a7358] transition-transform ${tripCardExpanded ? '' : 'rotate-180'}`} />
+                    </button>
+                    {!tripCardExpanded && (
+                      <div className="flex items-center justify-between px-3 py-2.5">
+                        <span className="truncate text-[11.5px] text-[#f7e6d4]">→ {active.dropoff_address ?? 'Destination'}</span>
+                        <span className="ml-2 flex-none font-mono text-[13px] text-[#f7e6d4]">{formatFCFA(active.estimated_price)}</span>
+                      </div>
+                    )}
+                    {tripCardExpanded && (
+                      <div className="px-3 py-2.5">
+                        <TripCardBody trip={active} passengerName={passengerContact?.full_name ?? null} showDestinationLabel="Destination" />
+                        {passengerContact?.phone && (
+                          <a
+                            href={`tel:${passengerContact.phone}`}
+                            className="mt-2 flex items-center justify-center gap-1.5 border-[0.5px] border-[rgba(169,122,91,0.28)] py-2 text-[10.5px] text-[#e8c9a8]"
+                          >
+                            Contacter · {passengerContact.phone}
+                          </a>
+                        )}
+                        <button onClick={openExternalNavigation} className="mt-2 w-full text-center text-[10px] text-[#8a7358] underline">
+                          Ouvrir dans Maps (secours hors-ligne)
+                        </button>
+                      </div>
                     )}
                   </div>
-                  <div className="mt-1 truncate text-[11.5px] text-[#f7e6d4]">
-                    {t.pickup_address ?? 'Départ'} → {t.dropoff_address ?? 'Destination'}
-                  </div>
-                  <div className="mt-0.5 text-[10px] text-[#8a7358]">{t.passenger_profile?.full_name ?? 'Passager'} · {VEHICLE_LABELS[t.vehicle_type]}</div>
-                  <div className="mt-1.5 flex items-center justify-between">
-                    <span className="font-mono text-sm text-[#f7e6d4]">{formatFCFA(t.estimated_price)}</span>
-                    <div className="flex gap-2">
-                      <button
-                        disabled={busy}
-                        onClick={() => handleDismiss(t.id)}
-                        aria-label="Refuser"
-                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E24B4A] bg-[#4a1414] text-[#F09595] disabled:opacity-50"
-                      >
-                        <span className="text-sm leading-none">✕</span>
-                      </button>
-                      <button
-                        disabled={busy}
-                        onClick={() => handleAccept(t)}
-                        aria-label="Accepter"
-                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[#639922] bg-[#173404] text-[#C0DD97] disabled:opacity-50"
-                      >
-                        <span className="text-sm leading-none">✓</span>
-                      </button>
+                  <button disabled={busy} onClick={handleFinish} className="w-full bg-[#efd9b8] py-3 text-[12.5px] font-medium text-[#3c2a1a]">
+                    Terminer la course
+                  </button>
+                </div>
+              )}
+
+              {step === 'summary' && summaryTrip && (
+                <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)]">
+                  <div className="border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] bg-[#14100c] px-3 py-2.5">
+                    <span className="text-[9px] font-medium tracking-wide text-[#e8c9a8]">COURSE TERMINÉE</span>
+                    <div className="mt-1 text-[10.5px] text-[#a89680]">
+                      Avec {passengerContact?.full_name ?? '—'} · {elapsedMin ?? '—'} min · {summaryTrip.distance_km?.toFixed(1) ?? '—'} km
                     </div>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
 
-        {step === 'accepted' && active && (
-          <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c]">
-            <button
-              onClick={() => setTripCardExpanded((v) => !v)}
-              className="flex w-full items-center justify-between gap-2 border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] px-3 py-2.5 text-left"
-            >
-              <span className="text-[9px] font-medium tracking-wide text-[#e8c9a8]">EN ROUTE VERS LE PASSAGER</span>
-              <ChevronUp size={13} className={`flex-none text-[#8a7358] transition-transform ${tripCardExpanded ? '' : 'rotate-180'}`} />
-            </button>
-            {!tripCardExpanded && (
-              <div className="flex items-center justify-between px-3 py-2.5">
-                <span className="truncate text-[11.5px] text-[#f7e6d4]">{active.pickup_address ?? 'Adresse de prise en charge'}</span>
-                <span className="ml-2 flex-none font-mono text-[13px] text-[#f7e6d4]">{formatFCFA(active.estimated_price)}</span>
-              </div>
-            )}
-            {tripCardExpanded && (
-              <div className="px-3 py-2.5">
-                <TripCardBody trip={active} passengerName={passengerContact?.full_name ?? null} showDestinationLabel="Destination" />
-                {passengerContact?.phone && (
-                  <a
-                    href={`tel:${passengerContact.phone}`}
-                    className="mt-2 flex items-center justify-center gap-1.5 border-[0.5px] border-[rgba(169,122,91,0.28)] py-2 text-[10.5px] text-[#e8c9a8]"
-                  >
-                    Contacter · {passengerContact.phone}
-                  </a>
-                )}
-              </div>
-            )}
-            <div className="flex border-t-[0.5px] border-[rgba(169,122,91,0.2)]">
-              <button
-                disabled={busy}
-                onClick={handleCancel}
-                className="flex flex-1 items-center justify-center gap-1.5 border-r-[0.5px] border-[rgba(169,122,91,0.2)] py-2.5 text-[10.5px] text-[#e2807f]"
-              >
-                ✕ Annuler
-              </button>
-              <button disabled={busy} onClick={handleArrive} className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[10.5px] text-[#e8c9a8]">
-                ✓ J&apos;arrive
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step === 'in_progress' && active && (
-          <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)]">
-            <div className="bg-[#14100c]">
-              <button
-                onClick={() => setTripCardExpanded((v) => !v)}
-                className="flex w-full items-center justify-between gap-2 border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] px-3 py-2.5 text-left"
-              >
-                <span className="text-[9px] font-medium tracking-wide text-[#e8c9a8]">
-                  AVEC {(passengerContact?.full_name ?? 'LA CLIENTE').toUpperCase()}
-                </span>
-                <ChevronUp size={13} className={`flex-none text-[#8a7358] transition-transform ${tripCardExpanded ? '' : 'rotate-180'}`} />
-              </button>
-              {!tripCardExpanded && (
-                <div className="flex items-center justify-between px-3 py-2.5">
-                  <span className="truncate text-[11.5px] text-[#f7e6d4]">→ {active.dropoff_address ?? 'Destination'}</span>
-                  <span className="ml-2 flex-none font-mono text-[13px] text-[#f7e6d4]">{formatFCFA(active.estimated_price)}</span>
-                </div>
-              )}
-              {tripCardExpanded && (
-                <div className="px-3 py-2.5">
-                  <TripCardBody trip={active} passengerName={passengerContact?.full_name ?? null} showDestinationLabel="Destination" />
-                  {passengerContact?.phone && (
-                    <a
-                      href={`tel:${passengerContact.phone}`}
-                      className="mt-2 flex items-center justify-center gap-1.5 border-[0.5px] border-[rgba(169,122,91,0.28)] py-2 text-[10.5px] text-[#e8c9a8]"
+                  <div className="bg-[#14100c] px-3 py-2.5">
+                    <div className="flex items-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button key={n} onClick={() => setRatingStars(n)} aria-label={`${n} étoiles`}>
+                          <Star size={16} color="#e8c9a8" fill={n <= ratingStars ? '#e8c9a8' : 'none'} />
+                        </button>
+                      ))}
+                    </div>
+                    <textarea
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      placeholder="Commentaire facultatif…"
+                      className="mt-2 w-full border-[0.5px] border-[rgba(169,122,91,0.28)] bg-transparent px-2.5 py-2 text-[11.5px] text-[#f7e6d4] outline-none placeholder:text-[#6b5c48]"
+                      rows={2}
+                    />
+                    <button
+                      onClick={() => setRatingTag((t) => (t === 'client_sympa' ? 'aucun' : 'client_sympa'))}
+                      className={`mt-2 flex w-full items-center justify-center gap-1.5 border-[0.5px] py-2 text-[10.5px] ${
+                        ratingTag === 'client_sympa' ? 'border-[#a97a5b] text-[#e8c9a8]' : 'border-[rgba(169,122,91,0.2)] text-[#8a7358]'
+                      }`}
                     >
-                      Contacter · {passengerContact.phone}
-                    </a>
-                  )}
-                  <button onClick={openExternalNavigation} className="mt-2 w-full text-center text-[10px] text-[#8a7358] underline">
-                    Ouvrir dans Maps (secours hors-ligne)
-                  </button>
+                      <ThumbsUp size={12} /> Client sympa (bonus)
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between bg-[#efd9b8] px-3 py-2.5">
+                    <span className="font-mono text-base text-[#3c2a1a]">{formatFCFA(summaryTrip.final_price)}</span>
+                    <button disabled={busy} onClick={handleValidateSummary} className="bg-[#3c2a1a] px-3.5 py-2 text-[10.5px] font-medium text-[#efd9b8]">
+                      {autoValidateCountdown !== null ? `Valider (${autoValidateCountdown}s)` : 'Valider et repartir'}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
-            <button disabled={busy} onClick={handleFinish} className="w-full bg-[#efd9b8] py-3 text-[12.5px] font-medium text-[#3c2a1a]">
-              Terminer la course
-            </button>
-          </div>
+          </>
         )}
 
-        {step === 'summary' && summaryTrip && (
-          <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)]">
-            <div className="border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] bg-[#14100c] px-3 py-2.5">
-              <span className="text-[9px] font-medium tracking-wide text-[#e8c9a8]">MANIFESTE DE VOL · TERMINÉ</span>
-              <div className="mt-1 text-[10.5px] text-[#a89680]">
-                Avec {passengerContact?.full_name ?? '—'} · {elapsedMin ?? '—'} min · {summaryTrip.distance_km?.toFixed(1) ?? '—'} km
+        {/* ---------- ONGLET RADAR ---------- */}
+        {bottomTab === 'radar' && (
+          <>
+            <div className="relative z-10 mx-3 mt-4 flex items-center justify-between border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[rgba(13,9,6,0.85)] px-3.5 py-2.5 backdrop-blur-sm">
+              <span className="text-[13px] font-medium tracking-wide text-[#e8c9a8]">Courses disponibles</span>
+              <span className="flex items-center gap-1.5 font-mono text-[9px] text-[#5be08a]">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#5be08a]" /> TEMPS RÉEL
+              </span>
+            </div>
+
+            {error && (
+              <div className="relative z-10 mx-3 mt-2 border-[0.5px] border-[rgba(226,75,74,0.3)] px-3 py-2 text-[11px] text-[#e2807f]">{error}</div>
+            )}
+            {newRequestAlert && (
+              <div className="relative z-10 mx-3 mt-2 flex items-center gap-2 rounded-xl border-[0.5px] border-[#5be08a] bg-[rgba(13,9,6,0.88)] px-3 py-2 text-[11px] text-[#f7e6d4]">
+                <Bell size={14} className="flex-none text-[#5be08a]" />
+                Nouvelle course disponible
               </div>
-            </div>
-
-            <div className="bg-[#14100c] px-3 py-2.5">
-              <div className="flex items-center gap-0.5">
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <button key={n} onClick={() => setRatingStars(n)} aria-label={`${n} étoiles`}>
-                    <Star size={16} color="#e8c9a8" fill={n <= ratingStars ? '#e8c9a8' : 'none'} />
-                  </button>
-                ))}
-              </div>
-              <textarea
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Commentaire facultatif…"
-                className="mt-2 w-full border-[0.5px] border-[rgba(169,122,91,0.28)] bg-transparent px-2.5 py-2 text-[11.5px] text-[#f7e6d4] outline-none placeholder:text-[#6b5c48]"
-                rows={2}
-              />
-              <button
-                onClick={() => setRatingTag((t) => (t === 'client_sympa' ? 'aucun' : 'client_sympa'))}
-                className={`mt-2 flex w-full items-center justify-center gap-1.5 border-[0.5px] py-2 text-[10.5px] ${
-                  ratingTag === 'client_sympa' ? 'border-[#a97a5b] text-[#e8c9a8]' : 'border-[rgba(169,122,91,0.2)] text-[#8a7358]'
-                }`}
-              >
-                <ThumbsUp size={12} /> Client sympa (bonus)
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between bg-[#efd9b8] px-3 py-2.5">
-              <span className="font-mono text-base text-[#3c2a1a]">{formatFCFA(summaryTrip.final_price)}</span>
-              <button disabled={busy} onClick={handleValidateSummary} className="bg-[#3c2a1a] px-3.5 py-2 text-[10.5px] font-medium text-[#efd9b8]">
-                {autoValidateCountdown !== null ? `Valider (${autoValidateCountdown}s)` : 'Valider et repartir'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <nav className="relative z-10 flex items-stretch justify-around border-t-[0.5px] border-[rgba(169,122,91,0.2)] bg-[#1c1108] py-1 pb-[calc(env(safe-area-inset-bottom,0px)+4px)]">
-        {(
-          [
-            { key: 'accueil', label: 'Accueil', icon: Home },
-            { key: 'historique', label: 'Historique', icon: History },
-            { key: 'courses', label: 'Courses', icon: Flag },
-            { key: 'gains', label: 'Gains', icon: Wallet },
-            { key: 'profil', label: 'Profil', icon: UserIcon },
-          ] as { key: typeof bottomTab; label: string; icon: typeof Home }[]
-        ).map(({ key, label, icon: Icon }) => {
-          const activeTab = bottomTab === key;
-          return (
-            <button key={key} onClick={() => setBottomTab(key)} aria-label={label} className="flex flex-1 flex-col items-center gap-1 py-1.5">
-              <Icon size={15} color={activeTab ? '#e8c9a8' : '#6b5c48'} />
-              <span className="h-[3px] w-[3px] rounded-full" style={{ background: activeTab ? '#e8c9a8' : 'transparent' }} />
-            </button>
-          );
-        })}
-      </nav>
-
-      {bottomTab !== 'accueil' && (
-        <div className="absolute inset-x-3 bottom-16 top-20 z-20 flex flex-col overflow-hidden border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c] p-3.5 text-sm text-[#e8c9a8]">
-          <div className="mb-3 flex flex-none items-center justify-between border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] pb-2.5">
-            <h2 className="text-[13px] font-medium tracking-wide">
-              {bottomTab === 'historique'
-                ? 'Historique des courses'
-                : bottomTab === 'courses'
-                  ? 'Courses disponibles'
-                  : bottomTab === 'gains'
-                    ? 'Mes gains'
-                    : 'Mon profil'}
-            </h2>
-            <button onClick={() => setBottomTab('accueil')} aria-label="Fermer" className="text-[#8a7358]">
-              <span className="text-sm leading-none">✕</span>
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto">
-            {(bottomTab === 'historique' || bottomTab === 'gains') && historyLoading && (
-              <div className="py-8 text-center text-xs text-[#8a7358]">Chargement…</div>
             )}
 
-            {bottomTab === 'historique' && !historyLoading && (
-              <>
-                {history.length === 0 ? (
-                  <div className="border-[0.5px] border-[rgba(169,122,91,0.2)] p-4 text-center text-xs text-[#8a7358]">
-                    Aucune course terminée pour le moment.
-                  </div>
-                ) : (
-                  <div className="flex flex-col">
-                    {history.map((t) => (
-                      <div key={t.id} className="border-b-[0.5px] border-[rgba(169,122,91,0.15)] py-2.5">
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono text-[10px] text-[#8a7358]">
-                            {t.completed_at ? new Date(t.completed_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
-                          </span>
-                          <span className="text-[9.5px] text-[#8a7358]">{VEHICLE_LABELS[t.vehicle_type]}</span>
-                        </div>
-                        <div className="mt-1 text-[12px] text-[#f7e6d4]">{t.pickup_address ?? 'Départ'} → {t.dropoff_address ?? 'Destination'}</div>
-                        <div className="mt-1 flex items-center justify-between">
-                          <span className="text-[10.5px] text-[#8a7358]">{t.distance_km ? `${t.distance_km.toFixed(1)} km` : ''}</span>
-                          <span className="font-mono text-[12.5px] text-[#e8c9a8]">{formatFCFA(t.final_price)}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
+            {/* Effet visuel radar (concentrique) centré sur la carte */}
+            <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center">
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="absolute rounded-full border border-[#a97a5b]/30"
+                  style={{
+                    width: 90 + i * 70,
+                    height: 90 + i * 70,
+                    animation: `yn-radar-pulse 2.4s ease-out ${i * 0.5}s infinite`,
+                  }}
+                />
+              ))}
+              <span className="absolute h-2 w-2 rounded-full bg-[#e8c9a8]" />
+            </div>
+            <style>{`
+              @keyframes yn-radar-pulse {
+                0% { opacity: 0.55; transform: scale(0.6); }
+                100% { opacity: 0; transform: scale(1); }
+              }
+            `}</style>
 
-            {bottomTab === 'courses' && (
-              <>
-                {sortedPending.length === 0 ? (
-                  <div className="border-[0.5px] border-[rgba(169,122,91,0.2)] p-4 text-center text-xs text-[#8a7358]">
+            <div className="absolute inset-x-0 bottom-0 z-10">
+              <div className="flex gap-2.5 overflow-x-auto px-3 pb-3" style={{ scrollSnapType: 'x mandatory' }}>
+                {sortedPending.length === 0 && (
+                  <div className="w-full border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c] p-4 text-center text-xs text-[#8a7358]">
                     Aucune course en attente pour le moment.
                   </div>
-                ) : (
-                  <div className="flex flex-col">
-                    {sortedPending.map((t, i) => (
-                      <div
-                        key={t.id}
-                        className={`border-b-[0.5px] py-2.5 ${i === 0 ? 'border-[#a97a5b]/30' : 'border-[rgba(169,122,91,0.15)]'}`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex h-7 w-7 flex-none items-center justify-center rounded-full border-[1.5px] border-[#6b4a35] text-[9.5px] text-[#e8c9a8]">
-                            {initials(t.passenger_profile?.full_name ?? null)}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-[12px] text-[#f7e6d4]">{t.passenger_profile?.full_name ?? 'Passager'}</div>
-                            <div className="truncate text-[10px] text-[#8a7358]">
-                              {t.pickup_address ?? 'Départ'} → {t.dropoff_address ?? 'Destination'}
-                            </div>
-                          </div>
-                          <div className="flex-none text-right">
-                            <div className="font-mono text-[12px] text-[#f7e6d4]">{formatFCFA(t.estimated_price)}</div>
-                            {driverPos && (
-                              <div className="font-mono text-[9px] text-[#8a7358]">
-                                {haversineKm(driverPos.lat, driverPos.lng, t.pickup_lat, t.pickup_lng).toFixed(1)} km
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="mt-2 flex gap-2">
+                )}
+                {sortedPending.map((t, i) => (
+                  <div key={t.id} className="flex w-64 flex-none" style={{ scrollSnapAlign: 'start' }}>
+                    <div
+                      className="w-[3px] flex-none"
+                      style={{ background: 'repeating-linear-gradient(180deg,#6b4a35 0 4px,transparent 4px 8px)' }}
+                    />
+                    <div className={`flex-1 border-[0.5px] border-l-0 p-3 ${i === 0 ? 'border-[#a97a5b] bg-[#241a13]' : 'border-[rgba(169,122,91,0.28)] bg-[#14100c]'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[8px] font-medium tracking-wide text-[#8a7358]">
+                          MANIFESTE {i === 0 ? '· PLUS PROCHE' : ''}
+                        </span>
+                        {driverPos && (
+                          <span className="font-mono text-[8px] text-[#8a7358]">
+                            {haversineKm(driverPos.lat, driverPos.lng, t.pickup_lat, t.pickup_lng).toFixed(1)} KM
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 truncate text-[11.5px] text-[#f7e6d4]">
+                        {t.pickup_address ?? 'Départ'} → {t.dropoff_address ?? 'Destination'}
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-[#8a7358]">{t.passenger_profile?.full_name ?? 'Passager'} · {VEHICLE_LABELS[t.vehicle_type]}</div>
+                      <div className="mt-1.5 flex items-center justify-between">
+                        <span className="font-mono text-sm text-[#f7e6d4]">{formatFCFA(t.estimated_price)}</span>
+                        <div className="flex gap-2">
                           <button
                             disabled={busy}
                             onClick={() => handleDismiss(t.id)}
-                            className="flex-1 rounded-lg bg-[#F09595] py-2 text-[11px] font-medium text-[#501313] disabled:opacity-50"
+                            aria-label="Refuser"
+                            className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E24B4A] bg-[#4a1414] text-[#F09595] disabled:opacity-50"
                           >
-                            Refuser
+                            <span className="text-sm leading-none">✕</span>
                           </button>
                           <button
                             disabled={busy}
                             onClick={() => handleAccept(t)}
-                            className="flex-1 rounded-lg bg-[#639922] py-2 text-[11px] font-medium text-[#173404] disabled:opacity-50"
+                            aria-label="Accepter"
+                            className="flex h-8 w-8 items-center justify-center rounded-full border border-[#639922] bg-[#173404] text-[#C0DD97] disabled:opacity-50"
                           >
-                            Accepter
+                            <span className="text-sm leading-none">✓</span>
                           </button>
                         </div>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                )}
-              </>
-            )}
+                ))}
+              </div>
+            </div>
+          </>
+        )}
 
-            {bottomTab === 'gains' && !historyLoading && (
-              <>
-                {(() => {
-                  const now = new Date();
-                  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                  const startOfWeek = new Date(startOfToday);
-                  startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay());
+        {/* ---------- ONGLET STATISTIQUES ---------- */}
+        {bottomTab === 'stats' && (
+          <div className="absolute inset-0 z-10 flex flex-col overflow-hidden bg-[#0d0906] p-3.5 text-sm text-[#e8c9a8]">
+            <h2 className="mb-3 flex-none border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] pb-2.5 text-[13px] font-medium tracking-wide">
+              Synthèse des gains
+            </h2>
+            <div className="flex-1 overflow-y-auto">
+              {statsLoading && <div className="py-8 text-center text-xs text-[#8a7358]">Chargement…</div>}
 
-                  const sum = (trips: Trip[]) => trips.reduce((acc, t) => acc + (t.final_price ?? 0), 0);
-                  const withDate = history.filter((t) => t.completed_at);
-                  const today = withDate.filter((t) => new Date(t.completed_at as string) >= startOfToday);
-                  const week = withDate.filter((t) => new Date(t.completed_at as string) >= startOfWeek);
+              {!statsLoading && stats && (
+                <div className="flex flex-col border-b-[0.5px] border-[rgba(169,122,91,0.28)] pb-1">
+                  {[
+                    { label: "Aujourd'hui", value: stats.today_earnings, count: stats.today_count },
+                    { label: 'Cette semaine', value: stats.week_earnings, count: stats.week_count },
+                    { label: 'Total', value: stats.total_earnings, count: stats.total_count },
+                  ].map((c) => (
+                    <div key={c.label} className="flex items-center justify-between border-b-[0.5px] border-[rgba(169,122,91,0.15)] py-2.5">
+                      <div>
+                        <div className="text-[11px] text-[#a89680]">{c.label}</div>
+                        <div className="text-[9.5px] text-[#6b5c48]">{c.count} course{c.count > 1 ? 's' : ''}</div>
+                      </div>
+                      <div className="font-mono text-base text-[#e8c9a8]">{formatFCFA(c.value)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-                  const cards = [
-                    { label: "Aujourd'hui", value: sum(today), count: today.length },
-                    { label: 'Cette semaine', value: sum(week), count: week.length },
-                    { label: 'Total', value: sum(history), count: history.length },
-                  ];
-
-                  return (
+              {!statsLoading && (
+                <>
+                  <h3 className="mb-1.5 mt-3 text-[11px] font-medium tracking-wide text-[#e8c9a8]">
+                    Historique des courses ({history.length})
+                  </h3>
+                  {history.length === 0 ? (
+                    <div className="border-[0.5px] border-[rgba(169,122,91,0.2)] p-4 text-center text-xs text-[#8a7358]">
+                      Aucune course terminée pour le moment.
+                    </div>
+                  ) : (
                     <div className="flex flex-col">
-                      {cards.map((c) => (
-                        <div key={c.label} className="flex items-center justify-between border-b-[0.5px] border-[rgba(169,122,91,0.15)] py-2.5">
-                          <div>
-                            <div className="text-[11px] text-[#a89680]">{c.label}</div>
-                            <div className="text-[9.5px] text-[#6b5c48]">{c.count} course{c.count > 1 ? 's' : ''}</div>
+                      {history.map((t) => (
+                        <div key={t.id} className="border-b-[0.5px] border-[rgba(169,122,91,0.15)] py-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-[10px] text-[#8a7358]">
+                              {t.completed_at ? new Date(t.completed_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                            </span>
+                            <span className="text-[9.5px] text-[#8a7358]">{VEHICLE_LABELS[t.vehicle_type]}</span>
                           </div>
-                          <div className="font-mono text-base text-[#e8c9a8]">{formatFCFA(c.value)}</div>
+                          <div className="mt-1 text-[12px] text-[#f7e6d4]">{t.pickup_address ?? 'Départ'} → {t.dropoff_address ?? 'Destination'}</div>
+                          <div className="mt-1 flex items-center justify-between">
+                            <span className="text-[10.5px] text-[#8a7358]">{t.distance_km ? `${t.distance_km.toFixed(1)} km` : ''}</span>
+                            <span className="font-mono text-[12.5px] text-[#e8c9a8]">{formatFCFA(t.final_price)}</span>
+                          </div>
                         </div>
                       ))}
                     </div>
-                  );
-                })()}
-              </>
-            )}
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
-            {bottomTab === 'profil' && (
+        {/* ---------- ONGLET PROFIL ---------- */}
+        {bottomTab === 'profil' && (
+          <div className="absolute inset-0 z-10 flex flex-col overflow-hidden bg-[#0d0906] p-3.5 text-sm text-[#e8c9a8]">
+            <h2 className="mb-3 flex-none border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] pb-2.5 text-[13px] font-medium tracking-wide">
+              Mon profil
+            </h2>
+            <div className="flex-1 overflow-y-auto">
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3 border-b-[0.5px] border-[rgba(169,122,91,0.15)] pb-3">
                   <input
@@ -985,10 +932,31 @@ export default function DriverDashboard() {
                   {signingOut ? 'Déconnexion…' : 'Se déconnecter'}
                 </button>
               </div>
-            )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      <nav className="relative z-20 flex flex-none items-stretch justify-around border-t-[0.5px] border-[rgba(169,122,91,0.2)] bg-[#1c1108] py-1 pb-[calc(env(safe-area-inset-bottom,0px)+4px)]">
+        {(
+          [
+            { key: 'home', label: 'Home', icon: Home },
+            { key: 'radar', label: 'Radar', icon: RadarIcon },
+            { key: 'stats', label: 'Statistiques', icon: BarChart3 },
+            { key: 'profil', label: 'Profil', icon: UserIcon },
+          ] as { key: BottomTab; label: string; icon: typeof Home }[]
+        ).map(({ key, label, icon: Icon }) => {
+          const activeTab = bottomTab === key;
+          return (
+            <button key={key} onClick={() => setBottomTab(key)} aria-label={label} className="flex flex-1 flex-col items-center gap-1 py-1.5">
+              <Icon size={15} color={activeTab ? '#e8c9a8' : '#6b5c48'} />
+              <span className="text-[8.5px]" style={{ color: activeTab ? '#e8c9a8' : '#6b5c48' }}>
+                {label}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }
