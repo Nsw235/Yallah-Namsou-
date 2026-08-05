@@ -23,6 +23,7 @@ import AdminFleetView from '@/components/admin/AdminFleetView';
 import AdminDriversView from '@/components/admin/AdminDriversView';
 import AdminAnalyticsView from '@/components/admin/AdminAnalyticsView';
 import AdminSettingsView from '@/components/admin/AdminSettingsView';
+import { AdminTopBar, KPICard } from '@/components/admin/ui';
 
 type NavKey = 'dashboard' | 'map' | 'fleet' | 'drivers' | 'analytics' | 'settings';
 
@@ -32,7 +33,7 @@ const NAV_ITEMS: { key: NavKey; label: string; icon: JSX.Element }[] = [
   { key: 'fleet', label: 'Flotte', icon: <path d="M3 13l2-6h14l2 6v6H3v-6Zm3 6v2m12-2v2M3 13h18M7 16h.01M17 16h.01" /> },
   { key: 'drivers', label: 'Chauffeurs', icon: <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0" /> },
   { key: 'analytics', label: 'Analyses', icon: <path d="M4 20V10M11 20V4M18 20v-7" /> },
-  { key: 'settings', label: 'Paramètres', icon: <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8-3-1.7-.6.4-1.8-1.4-1.4-1.8.4L15 7l-.6-1.9h-2L11.8 7l-1.8-.4-1.4 1.4.4 1.8L7.5 9.6l.4 1.8-.4 1.8L9.5 14l-.4 1.8 1.4 1.4 1.8-.4.6 1.9h2l.6-1.9 1.8.4 1.4-1.4-.4-1.8 1.7-.7Z" /> },
+  { key: 'settings', label: 'Paramètres', icon: <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8-3-1.7-.6.4-1.8-1.4-1.4-1.8.4L15 7l-.6-1.9h-2L11.8 7l-1.8-.4-1.4 1.4.4 1.8L7.5 9.6l.4 1.8-.4 1.8L9.5 [...]" /> },
 ];
 
 function NavIcon({ children }: { children: JSX.Element }) {
@@ -97,16 +98,13 @@ export default function AdminDashboard() {
       .catch((e) => setError(e?.message ?? 'Erreur.'));
   }, [session?.user?.id]);
 
-  // Rafraîchit périodiquement pour un effet "temps réel" sur la carte et les métriques.
+  // Rafraîchit périodiquement
   useEffect(() => {
     if (!isAdmin) return;
     const id = setInterval(refresh, 20000);
     return () => clearInterval(id);
   }, [isAdmin]);
 
-  // En complément du polling ci-dessus : mise à jour instantanée dès qu'un
-  // véhicule change de statut ou de position GPS, pour que la carte de
-  // supervision (onglet "Supervision Carte") reflète la flotte en direct.
   useEffect(() => {
     if (!isAdmin) return;
     const unsubscribe = subscribeToFleetChanges(refresh);
@@ -143,10 +141,6 @@ export default function AdminDashboard() {
 
   const typeColors: Record<string, string> = { berline: 'var(--copper-light)', van: 'var(--copper)', suv: 'var(--copper-dark)' };
 
-  // Pins temps réel pour la carte de supervision : un point coloré par
-  // véhicule géolocalisé, statut encodé par couleur (vert = en attente /
-  // bleu = en course / gris = hors ligne, exclu de la carte car sans intérêt
-  // opérationnel et potentiellement sans position récente).
   const STATUS_DOT_COLOR: Record<FleetVehicle['status'], string> = {
     available: '#35e6a0',
     busy: '#35d4ff',
@@ -172,9 +166,6 @@ export default function AdminDashboard() {
     return `conic-gradient(${stops.join(', ')})`;
   })();
 
-  // Alertes dérivées de données réelles : les incidents ne sont pas encore trackés en base,
-  // donc on remonte ici les signaux concrets déjà disponibles (courses en attente, chauffeurs
-  // suspendus, véhicules indisponibles) plutôt que des valeurs inventées.
   const alerts = useMemo(() => {
     const list: { level: 'crit' | 'warn'; title: string; sub: string }[] = [];
     drivers
@@ -200,6 +191,13 @@ export default function AdminDashboard() {
   const dateStr = now.toLocaleDateString('fr-FR');
   const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
+  const toggleTheme = () => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const current = root.getAttribute('data-theme') || 'light';
+    root.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+  };
+
   if (session === undefined || (isAdmin === null && session)) {
     return <div className="driver-wrap"><div className="spinner" /></div>;
   }
@@ -217,14 +215,9 @@ export default function AdminDashboard() {
 
   return (
     <div className="admin-shell">
-      <div className="admin-mobile-topbar">
-        <button className="admin-burger-btn" onClick={() => setMobileNavOpen(true)} aria-label="Ouvrir le menu">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </button>
-        <h2>{NAV_LABELS[nav]}</h2>
-        <span style={{ width: 42 }} />
+      {/* Top bar */}
+      <div className="admin-header p-4">
+        <AdminTopBar title={NAV_LABELS[nav]} username={session?.user?.email ?? session?.user?.id} onToggleTheme={toggleTheme} />
       </div>
 
       {mobileNavOpen && <div className="admin-nav-overlay" onClick={() => setMobileNavOpen(false)} />}
@@ -312,19 +305,10 @@ export default function AdminDashboard() {
 
             <div className="admin-panel">
               <h3>Performance Clé</h3>
-              <div className="kpi-row">
-                <div className="kpi-box">
-                  <div className="kpi-label">TAUX D&apos;OCCUPATION</div>
-                  <div className="kpi-value up">{occupancyRate}%</div>
-                </div>
-                <div className="kpi-box">
-                  <div className="kpi-label">REVENUS (Temps réel)</div>
-                  <div className="kpi-value">{metrics ? formatFCFA(metrics.revenueToday) : '—'}</div>
-                </div>
-                <div className="kpi-box">
-                  <div className="kpi-label">TAUX D&apos;ANNULATION</div>
-                  <div className="kpi-value down">{metrics ? metrics.cancellationRate : 0}%</div>
-                </div>
+              <div className="kpi-row grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <KPICard title="Taux d'occupation" value={`${occupancyRate}%`} />
+                <KPICard title="Revenus (aujourd'hui)" value={metrics ? formatFCFA(metrics.revenueToday) : '—'} />
+                <KPICard title="Taux d'annulation" value={`${metrics ? metrics.cancellationRate : 0}%`} />
               </div>
             </div>
 
