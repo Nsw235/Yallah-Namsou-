@@ -423,12 +423,36 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
    version compacte : icônes et cartes réduites pour laisser la carte
    respirer et pour s'adapter à des stickers plus petits/personnalisés. */
 .yn-classes-label{ font-size:10.5px; letter-spacing:.5px; color:var(--text-dim); font-weight:700; margin:12px 0 6px 2px; text-transform:uppercase; }
-.yn-classes{ display:flex; gap:6px; margin:0 0 10px; }
-.yn-cclass{ flex:1; text-align:center; border-radius:12px; padding:4px 2px 6px; background:rgba(255,255,255,0.03); border:1.5px solid rgba(255,255,255,0.08); cursor:pointer; }
-.yn-cclass img{ width:100%; max-width:60px; margin-bottom:2px; display:block; margin-left:auto; margin-right:auto; }
-.yn-cclass .cname{ font-size:11px; font-weight:700; color:var(--copper-cream); }
-.yn-cclass .cprice{ font-size:10px; color:var(--text-dim); margin-top:1px; }
-.yn-cclass.selected{ border-color:var(--copper); background:rgba(169,122,91,0.12); box-shadow:0 0 14px rgba(169,122,91,0.4); }
+
+/* Liste verticale de véhicules (icône / nom+places / prix), même schéma
+   que l'écran "Choisissez votre service" de Heetch. */
+.yn-vlist{ display:flex; flex-direction:column; gap:6px; margin:0 0 10px; }
+.yn-vrow{
+  display:flex; align-items:center; gap:10px;
+  padding:8px 10px; border-radius:12px;
+  background:rgba(255,255,255,0.03); border:1.5px solid rgba(255,255,255,0.08);
+  cursor:pointer;
+}
+.yn-vrow-icon{ width:44px; height:auto; flex:0 0 auto; }
+.yn-vrow-info{ flex:1; min-width:0; }
+.yn-vrow-name{ font-size:13px; font-weight:700; color:var(--copper-cream); }
+.yn-vrow-sub{ font-size:10px; color:var(--text-dim); margin-top:1px; }
+.yn-vrow-price{ font-size:13px; font-weight:800; color:var(--copper-cream); flex:0 0 auto; }
+.yn-vrow.selected{ border-color:var(--copper); background:rgba(169,122,91,0.12); box-shadow:0 0 14px rgba(169,122,91,0.4); }
+
+/* Stepper de prix (+/-) façon Heetch : le passager ajuste le tarif proposé
+   autour du prix recommandé, dans les bornes calculées côté app. */
+.yn-price-stepper{ display:flex; align-items:center; justify-content:center; gap:18px; padding:6px 0 2px; }
+.yn-stepper-btn{
+  width:30px; height:30px; border-radius:50%; flex:0 0 auto;
+  background:rgba(169,122,91,0.16); color:var(--copper-cream);
+  font-size:16px; font-weight:700; line-height:1;
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+}
+.yn-stepper-btn:disabled{ opacity:.35; cursor:default; }
+.yn-stepper-mid{ text-align:center; min-width:120px; }
+.yn-stepper-price{ font-size:20px; font-weight:800; color:var(--copper-cream); line-height:1.1; }
+.yn-stepper-caption{ font-size:9px; color:var(--text-dim); margin-top:2px; }
 
 /* Recherche de chauffeur : rose des vents tournante (remplace le sonar). */
 .yn-compass-wrap{ position:absolute; top:40%; left:50%; transform:translate(-50%,-50%); width:170px; height:170px; }
