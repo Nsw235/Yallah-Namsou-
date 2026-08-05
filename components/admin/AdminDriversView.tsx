@@ -9,6 +9,9 @@ import {
   setDriverValidation,
   updateDriverInfo,
 } from '@/lib/admin';
+import { useToast } from '@/components/Toast';
+
+const VALIDATION_LABEL: Record<string, string> = { approved: 'approuvé', rejected: 'rejeté', suspended: 'suspendu', pending: 'en attente' };
 
 export default function AdminDriversView({
   drivers,
@@ -19,6 +22,7 @@ export default function AdminDriversView({
   busy: boolean;
   onChanged: () => void;
 }) {
+  const pushToast = useToast();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<DriverDetail | null>(null);
   const [tab, setTab] = useState<'profil' | 'securite' | 'vehicules'>('profil');
@@ -66,6 +70,7 @@ export default function AdminDriversView({
       await setDriverValidation(selected.id, status);
       await refreshSelected();
       setSelected({ ...selected, validation_status: status });
+      pushToast(`${selected.full_name ?? 'Chauffeur'} : ${VALIDATION_LABEL[status]}`);
     } catch (e: any) {
       setErr(e?.message ?? 'Action impossible.');
     }
@@ -81,6 +86,7 @@ export default function AdminDriversView({
       const url = await adminUpdateDriverAvatar(selected.id, file);
       setSelected({ ...selected, avatar_url: url });
       await refreshSelected();
+      pushToast('Photo mise à jour');
     } catch (e: any) {
       setErr(e?.message ?? "Impossible d'envoyer la photo.");
     } finally {
@@ -100,6 +106,7 @@ export default function AdminDriversView({
       });
       setSelected({ ...selected, full_name: nameDraft.trim(), phone: phoneDraft.trim(), license_number: licenseDraft.trim() || null });
       await refreshSelected();
+      pushToast('Profil chauffeur mis à jour');
     } catch (e: any) {
       setErr(e?.message ?? 'Échec de la mise à jour.');
     } finally {
@@ -124,6 +131,7 @@ export default function AdminDriversView({
       setPassword('');
       setPassword2('');
       setPasswordOk(true);
+      pushToast('Mot de passe chauffeur changé');
       setTimeout(() => setPasswordOk(false), 3000);
     } catch (e: any) {
       setErr(e?.message ?? 'Échec du changement de mot de passe.');

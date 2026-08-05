@@ -5,12 +5,14 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
 import { formatFCFA } from '@/lib/pricing';
 import { getPricingRules, updatePricingRule } from '@/lib/admin';
+import { useToast } from '@/components/Toast';
 
 type PricingRow = { id: string; vehicle_type: string; base_fare: number; price_per_km: number; peak_multiplier: number };
 
 const TYPE_LABEL: Record<string, string> = { berline: 'Berline', van: 'Van', suv: 'SUV' };
 
 export default function AdminSettingsView({ session }: { session: Session }) {
+  const pushToast = useToast();
   const [rules, setRules] = useState<PricingRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, { base_fare: string; price_per_km: string; peak_multiplier: string }>>({});
   const [loading, setLoading] = useState(true);
@@ -59,6 +61,7 @@ export default function AdminSettingsView({ session }: { session: Session }) {
         peak_multiplier: Number(d.peak_multiplier),
       });
       setSavedId(id);
+      pushToast(`Tarif ${TYPE_LABEL[rules.find((r) => r.id === id)?.vehicle_type ?? ''] ?? ''} mis à jour`);
       setTimeout(() => setSavedId(null), 2000);
       load();
     } catch (e: any) {
@@ -85,6 +88,7 @@ export default function AdminSettingsView({ session }: { session: Session }) {
       setNewPassword('');
       setNewPassword2('');
       setPwdOk(true);
+      pushToast('Mot de passe changé');
       setTimeout(() => setPwdOk(false), 3000);
     } catch (e: any) {
       setPwdErr(e?.message ?? 'Échec du changement de mot de passe.');

@@ -1,11 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { FleetVehicle, updateVehicle, updateVehicleStatus } from '@/lib/admin';
+import { useEffect, useMemo, useState } from 'react';
+import { FleetVehicle, removeVehicle, updateVehicle, updateVehicleStatus } from '@/lib/admin';
+import { useToast } from '@/components/Toast';
+import VehicleHistoryModal from '@/components/admin/VehicleHistoryModal';
 
 const STATUS_LABEL: Record<string, string> = { available: 'En attente', busy: 'En course', offline: 'Hors ligne' };
 
 export default function AdminFleetView({ fleet, busy, onChanged }: { fleet: FleetVehicle[]; busy: boolean; onChanged: () => void }) {
+  const pushToast = useToast();
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'berline' | 'van' | 'suv'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'available' | 'busy' | 'offline'>('all');
@@ -13,6 +16,16 @@ export default function AdminFleetView({ fleet, busy, onChanged }: { fleet: Flee
   const [draft, setDraft] = useState({ plate: '', brand: '', model: '', passenger_capacity: 4 });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [historyFor, setHistoryFor] = useState<FleetVehicle | null>(null);
+  const [removing, setRemoving] = useState<FleetVehicle | null>(null);
+  const [removeSaving, setRemoveSaving] = useState(false);
+
+  useEffect(() => {
+    const close = () => setOpenMenu(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, []);
 
   const filtered = useMemo(() => {
     return fleet.filter((v) => {
@@ -28,6 +41,7 @@ export default function AdminFleetView({ fleet, busy, onChanged }: { fleet: Flee
   }, [fleet, query, typeFilter, statusFilter]);
 
   function openEdit(v: FleetVehicle) {
+    setOpenMenu(null);
     setEditing(v);
     setErr(null);
     setDraft({ plate: v.plate, brand: v.brand ?? '', model: v.model ?? '', passenger_capacity: v.passenger_capacity ?? 4 });
@@ -44,6 +58,7 @@ export default function AdminFleetView({ fleet, busy, onChanged }: { fleet: Flee
         model: draft.model.trim() || null,
         passenger_capacity: Number(draft.passenger_capacity) || 4,
       });
+      pushToast(`${draft.plate.trim()} — véhicule mis à jour`);
       setEditing(null);
       onChanged();
     } catch (e: any) {
@@ -54,11 +69,28 @@ export default function AdminFleetView({ fleet, busy, onChanged }: { fleet: Flee
   }
 
   async function toggleOffline(v: FleetVehicle) {
+    setOpenMenu(null);
     try {
       await updateVehicleStatus(v.id, v.status === 'offline' ? 'available' : 'offline');
+      pushToast(v.status === 'offline' ? `${v.plate} remis en ligne` : `${v.plate} mis hors ligne`);
       onChanged();
     } catch (e: any) {
       setErr(e?.message ?? 'Action impossible.');
+    }
+  }
+
+  async function confirmRemove() {
+    if (!removing) return;
+    setRemoveSaving(true);
+    try {
+      await removeVehicle(removing.id);
+      pushToast(`${removing.plate} retiré de la flotte`);
+      setRemoving(null);
+      onChanged();
+    } catch (e: any) {
+      setErr(e?.message ?? 'Impossible de retirer ce véhicule.');
+    } finally {
+      setRemoveSaving(false);
     }
   }
 
@@ -92,7 +124,7 @@ export default function AdminFleetView({ fleet, busy, onChanged }: { fleet: Flee
             <span>Capacité</span>
             <span>Statut</span>
             <span>Position GPS</span>
-            <span>Actions</span>
+            <span></span>
           </div>
           {filtered.map((v) => (
             <div key={v.id} className="fleet-table-row">
@@ -110,21 +142,86 @@ export default function AdminFleetView({ fleet, busy, onChanged }: { fleet: Flee
                 </div>
               </div>
               <div>{v.passenger_capacity ?? '—'} places</div>
-              <span className={`star-badge status-${v.status}`}>{STATUS_LABEL[v.status]}</span>
+              <span className={`star-badge status-${v.status}`}>
+                <span className="bdot" />
+                {STATUS_LABEL[v.status]}
+              </span>
               <div className="route-sub">
                 {v.last_lat != null && v.last_lng != null ? `${v.last_lat.toFixed(4)}, ${v.last_lng.toFixed(4)}` : 'Aucune'}
               </div>
-              <div className="fleet-cell-actions">
-                <button className="btn ghost" style={{ width: 'auto', padding: '7px 12px' }} onClick={() => openEdit(v)}>
-                  Modifier
+              <div className="row-menu-wrap">
+                <button
+                  className="dots-btn"
+                  onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === v.id ? null : v.id); }}
+                  aria-label="Actions"
+                >
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M12 6h.01M12 12h.01M12 18h.01" />
+                  </svg>
                 </button>
-                <button className="btn ghost" style={{ width: 'auto', padding: '7px 12px' }} disabled={busy} onClick={() => toggleOffline(v)}>
-                  {v.status === 'offline' ? 'Remettre en ligne' : 'Mettre hors ligne'}
-                </button>
+                {openMenu === v.id && (
+                  <div className="row-dropdown" onClick={(e) => e.stopPropagation()}>
+                    <button onClick={() => openEdit(v)}>Modifier</button>
+                    <button disabled={busy} onClick={() => toggleOffline(v)}>
+                      {v.status === 'offline' ? 'Remettre en ligne' : 'Mettre hors ligne'}
+                    </button>
+                    <button onClick={() => { setOpenMenu(null); setHistoryFor(v); }}>Historique</button>
+                    <hr />
+                    <button className="danger" onClick={() => { setOpenMenu(null); setRemoving(v); }}>Retirer</button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
           {filtered.length === 0 && <div className="alert-empty">Aucun véhicule ne correspond aux filtres.</div>}
+        </div>
+
+        <div className="fleet-card-list">
+          {filtered.map((v) => (
+            <div key={v.id} className="fleet-card">
+              <div className="fleet-card-top">
+                <div>
+                  <div className="driver-name">{v.brand} {v.model}</div>
+                  <div className="route-sub">{v.plate} · {v.type.toUpperCase()} · {v.passenger_capacity ?? '—'} places</div>
+                </div>
+                <div className="row-menu-wrap">
+                  <button
+                    className="dots-btn"
+                    onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === v.id ? null : v.id); }}
+                    aria-label="Actions"
+                  >
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M12 6h.01M12 12h.01M12 18h.01" />
+                    </svg>
+                  </button>
+                  {openMenu === v.id && (
+                    <div className="row-dropdown" onClick={(e) => e.stopPropagation()}>
+                      <button onClick={() => openEdit(v)}>Modifier</button>
+                      <button disabled={busy} onClick={() => toggleOffline(v)}>
+                        {v.status === 'offline' ? 'Remettre en ligne' : 'Mettre hors ligne'}
+                      </button>
+                      <button onClick={() => { setOpenMenu(null); setHistoryFor(v); }}>Historique</button>
+                      <hr />
+                      <button className="danger" onClick={() => { setOpenMenu(null); setRemoving(v); }}>Retirer</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <span className={`star-badge status-${v.status}`}>
+                <span className="bdot" />
+                {STATUS_LABEL[v.status]}
+              </span>
+              <div className="fleet-card-driver">
+                <span className="mini-avatar" style={v.driver_avatar ? { backgroundImage: `url(${v.driver_avatar})` } : undefined}>
+                  {!v.driver_avatar && (v.driver_name ?? '?').charAt(0).toUpperCase()}
+                </span>
+                <div>
+                  <div>{v.driver_name ?? '—'}</div>
+                  <div className="route-sub">{v.driver_phone ?? ''}</div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -159,6 +256,32 @@ export default function AdminFleetView({ fleet, busy, onChanged }: { fleet: Flee
               <button className="btn ghost" onClick={() => setEditing(null)}>Annuler</button>
               <button className="btn amber" disabled={saving} onClick={saveEdit}>
                 {saving ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {historyFor && (
+        <VehicleHistoryModal
+          vehicleId={historyFor.id}
+          vehicleLabel={`${historyFor.brand ?? ''} ${historyFor.model ?? ''} · ${historyFor.plate}`}
+          onClose={() => setHistoryFor(null)}
+        />
+      )}
+
+      {removing && (
+        <div className="modal-overlay" onClick={() => setRemoving(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Retirer {removing.plate} de la flotte ?</h3>
+            <p className="route-sub" style={{ marginBottom: 14 }}>
+              Ce véhicule ne sera plus visible dans la supervision ni assignable à des courses. Son historique de courses est conservé.
+            </p>
+            {err && <div className="auth-error">{err}</div>}
+            <div className="btn-row">
+              <button className="btn ghost" onClick={() => setRemoving(null)}>Annuler</button>
+              <button className="btn amber" style={{ background: 'linear-gradient(180deg,#ff8a8a,var(--danger))' }} disabled={removeSaving} onClick={confirmRemove}>
+                {removeSaving ? 'Retrait…' : 'Retirer'}
               </button>
             </div>
           </div>
