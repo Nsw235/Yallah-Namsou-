@@ -68,6 +68,16 @@ function playNotificationBeep() {
   }
 }
 
+// Extrait une zone/quartier approximatif d'une adresse formattée
+// ("Lieu, 6ème Arrondissement, N'Djaména, Tchad" -> "6ème Arrondissement"),
+// utilisé pour donner une info honnête pendant le court masquage de la
+// destination exacte sur les nouvelles courses.
+function approxZone(address: string | null): string {
+  if (!address) return 'zone à préciser';
+  const parts = address.split(',').map((p) => p.trim()).filter(Boolean);
+  return parts.length >= 2 ? parts[1] : parts[0] ?? 'zone à préciser';
+}
+
 function initials(name: string | null) {
   if (!name) return '?';
   return name
@@ -105,6 +115,12 @@ export default function DriverDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [newRequestAlert, setNewRequestAlert] = useState(false);
+  // IDs des courses arrivées à l'instant : la destination exacte est encore
+  // masquée le temps que les détails finissent de charger (~3s). Le prix,
+  // la zone et la distance approx. restent visibles, et les deux boutons
+  // (Refuser / Accepter) restent cliquables en permanence — on ne bloque
+  // jamais le chauffeur, on affiche juste une info partielle honnête.
+  const [loadingDetails, setLoadingDetails] = useState<Set<string>>(new Set());
   const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [ratingStars, setRatingStars] = useState(4);
@@ -259,6 +275,15 @@ export default function DriverDashboard() {
         setNewRequestAlert(true);
         playNotificationBeep();
         window.setTimeout(() => setNewRequestAlert(false), 4000);
+
+        setLoadingDetails((s) => new Set(s).add(trip.id));
+        window.setTimeout(() => {
+          setLoadingDetails((s) => {
+            const next = new Set(s);
+            next.delete(trip.id);
+            return next;
+          });
+        }, 3000);
       }
       refreshAll(userId);
     });
@@ -744,6 +769,11 @@ export default function DriverDashboard() {
                       style={{ background: 'repeating-linear-gradient(180deg,#6b4a35 0 4px,transparent 4px 8px)' }}
                     />
                     <div className={`flex-1 border-[0.5px] border-l-0 p-3 ${i === 0 ? 'border-[#a97a5b] bg-[#241a13]' : 'border-[rgba(169,122,91,0.28)] bg-[#14100c]'}`}>
+                      {loadingDetails.has(t.id) && (
+                        <div className="mb-1.5 border-[0.5px] border-[#378ADD]/40 bg-[#042C53]/60 px-2 py-1 text-center text-[9px] font-medium text-[#B5D4F4]">
+                          Nouvelle course · détails en cours de chargement
+                        </div>
+                      )}
                       <div className="flex items-center justify-between">
                         <span className="text-[8px] font-medium tracking-wide text-[#8a7358]">
                           MANIFESTE {i === 0 ? '· PLUS PROCHE' : ''}
@@ -755,7 +785,10 @@ export default function DriverDashboard() {
                         )}
                       </div>
                       <div className="mt-1 truncate text-[11.5px] text-[#f7e6d4]">
-                        {t.pickup_address ?? 'Départ'} → {t.dropoff_address ?? 'Destination'}
+                        {t.pickup_address ?? 'Départ'} →{' '}
+                        {loadingDetails.has(t.id)
+                          ? `${approxZone(t.dropoff_address)} (adresse exacte à venir…)`
+                          : t.dropoff_address ?? 'Destination'}
                       </div>
                       <div className="mt-0.5 text-[10px] text-[#8a7358]">{t.passenger_profile?.full_name ?? 'Passager'} · {VEHICLE_LABELS[t.vehicle_type]}</div>
                       <div className="mt-1.5 flex items-center justify-between">
