@@ -912,7 +912,10 @@ function Screen3({
       <div className="yn-compass-wrap">
         <div className="yn-compass-ring" />
         <div className="yn-compass-ring r2" />
-        <div className="yn-needle" />
+        <div className="yn-radar-sweep" />
+        <div className="yn-radar-ring" />
+        <div className="yn-radar-ring d2" />
+        <div className="yn-radar-ring d3" />
         <div className="yn-compass-core" />
       </div>
       <div className="yn-compass-label">

@@ -121,14 +121,24 @@ const RealMap = forwardRef<RealMapHandle, {
   // apparaît sur la carte. Ce ref, rempli une fois le style chargé, permet
   // aux autres effets (modèles 3D) de savoir s'il est sûr d'utiliser `slot`.
   const hasBasemapImportRef = useRef(false);
-  // Si le fichier .glb demandé (carModelUrl) n'existe pas / échoue à charger,
-  // on retombe automatiquement sur le marqueur emoji plutôt que de n'afficher
-  // aucun véhicule du tout.
-  const [modelFailed, setModelFailed] = useState(false);
+  // Si un modèle .glb demandé échoue à charger (style Mapbox sans support
+  // des layers 3D, fichier manquant, etc.), on retombe sur un marqueur plat
+  // stylé plutôt que de laisser le véhicule invisible. Indexé par URL (et
+  // non un simple booléen) pour que CHAQUE véhicule concerné bascule sur son
+  // repli — le chauffeur connecté (carModelUrl) comme les pins `car3d`
+  // (ex: chauffeurs disponibles autour du passager), qui n'avaient jusqu'ici
+  // aucun filet de sécurité et disparaissaient silencieusement en cas
+  // d'échec (voir DIAGNOSTIC.md).
+  const [failedModelUrls, setFailedModelUrls] = useState<Set<string>>(new Set());
   useEffect(() => {
-    setModelFailed(false);
+    setFailedModelUrls((s) => {
+      if (!s.has(carModelUrl)) return s;
+      const next = new Set(s);
+      next.delete(carModelUrl);
+      return next;
+    });
   }, [carModelUrl]);
-  const effectiveUse3dCar = use3dCar && !modelFailed;
+  const effectiveUse3dCar = use3dCar && !failedModelUrls.has(carModelUrl);
 
   // Initialisation (une seule fois).
   useEffect(() => {
@@ -302,13 +312,20 @@ const RealMap = forwardRef<RealMapHandle, {
         wanted['dropoff'] = { pos: dropoff, el: () => dropEl('#d97b6a') };
       }
       if (driverPosition && !effectiveUse3dCar) {
-        wanted['driver'] = { pos: driverPosition, el: () => emojiEl('🚗') };
+        wanted['driver'] = { pos: driverPosition, el: () => carIconEl() };
       }
       pins.forEach((p, i) => {
-        if (p.car3d) return; // rendu en modèle 3D réel, pas en marqueur DOM plat
+        if (p.car3d) {
+          const url = p.car3d.modelUrl ?? DEFAULT_CAR_MODEL_URL;
+          if (!failedModelUrls.has(url)) return; // rendu en modèle 3D réel, pas en marqueur DOM plat
+          // Modèle 3D indisponible pour cette URL : repli sur l'icône stylée
+          // plutôt que de laisser ce véhicule invisible.
+          wanted[`pin-${i}`] = { pos: p.position, el: () => carIconEl(p.car3d?.heading) };
+          return;
+        }
         wanted[`pin-${i}`] = {
           pos: p.position,
-          el: () => (p.passenger ? passengerEl(p.passenger) : p.dot ? dotEl(p.dot) : emojiEl(p.emoji ?? '🚗')),
+          el: () => (p.passenger ? passengerEl(p.passenger) : p.dot ? dotEl(p.dot) : p.emoji ? emojiEl(p.emoji) : carIconEl()),
         };
       });
 
@@ -350,7 +367,7 @@ const RealMap = forwardRef<RealMapHandle, {
     if (map.isStyleLoaded()) render();
     else map.once('load', render);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins), effectiveUse3dCar, overviewZoom]);
+  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins), effectiveUse3dCar, overviewZoom, Array.from(failedModelUrls).sort().join(',')]);
 
   // Modèles 3D réels (.glb) : le véhicule du chauffeur connecté (driverPosition,
   // si use3dCar) + tout pin déclarant `car3d` (ex: autres chauffeurs disponibles
@@ -379,12 +396,16 @@ const RealMap = forwardRef<RealMapHandle, {
     const activeIds = new Set(cars.map((c) => c.id));
 
     // Si un .glb est manquant/invalide, Mapbox émet un événement 'error'
-    // plutôt que de planter : on l'écoute pour retomber sur l'emoji 🚗 du
-    // véhicule du chauffeur connecté au lieu de le laisser invisible.
-    // (Les pins car3d en échec restent simplement invisibles, plus rares.)
+    // plutôt que de planter : on l'écoute pour retomber sur l'icône stylée
+    // du véhicule concerné (identifié par son URL de modèle) au lieu de le
+    // laisser invisible.
     function onMapError(e: any) {
       const msg = e?.error?.message;
-      if (typeof msg === 'string' && msg.includes(carModelUrl)) setModelFailed(true);
+      if (typeof msg !== 'string') return;
+      const failed = cars.find((c) => msg.includes(c.modelUrl));
+      if (failed) {
+        setFailedModelUrls((s) => (s.has(failed.modelUrl) ? s : new Set(s).add(failed.modelUrl)));
+      }
     }
     map.on('error', onMapError);
 
@@ -435,12 +456,11 @@ const RealMap = forwardRef<RealMapHandle, {
           // SYNCHRONE plutôt que d'émettre l'événement 'error' du style. Sans
           // ce try/catch, cette exception remontait jusqu'à React et faisait
           // planter toute l'application. On se contente de logguer et de
-          // basculer sur le repli emoji (véhicule du chauffeur connecté)
-          // plutôt que de crasher — les pins car3d en échec restent invisibles,
-          // comme documenté dans DIAGNOSTIC.md.
+          // basculer CE véhicule (ego ou pin) sur son repli icône plutôt que
+          // de crasher — plus aucun véhicule ne reste invisible en silence.
           // eslint-disable-next-line no-console
-          console.warn('[RealMap] Échec ajout modèle 3D, repli emoji :', err);
-          if (car.id === 'car-3d-ego') setModelFailed(true);
+          console.warn('[RealMap] Échec ajout modèle 3D, repli icône :', err);
+          setFailedModelUrls((s) => (s.has(car.modelUrl) ? s : new Set(s).add(car.modelUrl)));
         }
       });
     }
@@ -640,6 +660,29 @@ function emojiEl(emoji: string): HTMLElement {
   el.style.filter = 'drop-shadow(0 4px 8px rgba(0,0,0,0.6))';
   el.textContent = emoji;
   return el;
+}
+
+// Repli stylé pour un véhicule (chauffeur connecté ou pin `car3d`) quand son
+// modèle 3D .glb ne peut pas être chargé — badge rond cuivré avec un
+// pictogramme de voiture, plutôt que l'émoji 🚗 brut du système.
+function carIconEl(heading?: number): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.style.width = '30px';
+  wrap.style.height = '30px';
+  wrap.style.borderRadius = '50%';
+  wrap.style.background = '#241a13';
+  wrap.style.border = '1.5px solid #a97a5b';
+  wrap.style.display = 'flex';
+  wrap.style.alignItems = 'center';
+  wrap.style.justifyContent = 'center';
+  wrap.style.boxShadow = '0 3px 8px rgba(0,0,0,0.5)';
+  if (heading != null) wrap.style.transform = `rotate(${heading}deg)`;
+  wrap.innerHTML =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e8c9a8" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M5 11l1.5 -4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11" />' +
+    '<rect x="2.5" y="11" width="19" height="6" rx="1.5" />' +
+    '<circle cx="7" cy="17.5" r="1.5" /><circle cx="17" cy="17.5" r="1.5" /></svg>';
+  return wrap;
 }
 
 function dotEl(dot: { color: string; pulse?: boolean; label?: string }): HTMLElement {
