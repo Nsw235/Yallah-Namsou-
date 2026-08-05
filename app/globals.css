@@ -10,10 +10,12 @@
   --emerald: #35e6a0;
   --danger: #ff5f5f;
   --copper-deep: #1c1512;
+  --copper-deep-glass: rgba(28,21,18,0.62);
   --copper-dark: #6b4a35;
   --copper: #a97a5b;
   --copper-light: #e8c9a8;
   --copper-cream: #f7e6d4;
+  --copper-cream-glass: rgba(247,230,212,0.72);
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
@@ -368,7 +370,12 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
    par une ligne perforée. Élément signature de l'écran passager. */
 .yn-ticket{ position:absolute; left:0; right:0; bottom:0; z-index:30; }
 .yn-ticket-body{
-  background:var(--copper-deep); border:1px solid rgba(169,122,91,0.28); border-bottom:none;
+  /* Verre dépoli plutôt qu'un fond opaque : la carte et la fiche
+     DÉPART/DESTINATION (.route-card, qui peut se retrouver en partie sous
+     ce panneau) restent visibles en transparence au lieu de disparaître
+     complètement derrière un aplat de couleur. */
+  background:var(--copper-deep-glass); border:1px solid rgba(169,122,91,0.28); border-bottom:none;
+  backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%);
   border-radius:26px 26px 0 0; padding:16px 16px 0;
   /* Quand le clavier virtuel réduit l'espace visible (--app-vh rétrécit —
      voir ViewportHeightFix.tsx), ce bloc peut devenir plus haut que l'espace
@@ -381,7 +388,8 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
   overflow-y:auto; -webkit-overflow-scrolling:touch;
 }
 .yn-ticket-stub{
-  background:var(--copper-cream); color:var(--copper-deep); position:relative;
+  background:var(--copper-cream-glass); color:var(--copper-deep); position:relative;
+  backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%);
   padding:6px 14px calc(8px + env(safe-area-inset-bottom,0px));
   border-top:2px dashed rgba(169,122,91,0.55);
 }
