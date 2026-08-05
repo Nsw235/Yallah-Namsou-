@@ -423,7 +423,7 @@ function AdminDashboardInner() {
 
       {nav === 'fleet' && (
         <div className="admin-list-view">
-          <AdminFleetView fleet={fleet} busy={busy} onChanged={refresh} />
+          <AdminFleetView fleet={fleet} drivers={drivers} busy={busy} onChanged={refresh} />
           <div className="driver-card">
             <h2>Courses en cours ({activeTrips.length})</h2>
             {activeTrips.length === 0 && <p className="route-sub">Aucune course en cours actuellement.</p>}
