@@ -27,8 +27,7 @@ export type FleetVehicle = {
 export async function getFleetOverview(): Promise<FleetVehicle[]> {
   const { data: vehicles, error } = await supabase
     .from('vehicles')
-    .select('id, type, plate, brand, model, status, driver_id, passenger_capacity, last_lat, last_lng')
-    .eq('is_active', true);
+    .select('id, type, plate, brand, model, status, driver_id, passenger_capacity, last_lat, last_lng');
   if (error) throw error;
   if (!vehicles || vehicles.length === 0) return [];
 
@@ -202,13 +201,37 @@ export async function updateVehicle(
 }
 
 /**
+ * Ajoute un nouveau véhicule à la flotte, assigné à un chauffeur existant.
+ */
+export async function createVehicle(input: {
+  driver_id: string;
+  type: 'berline' | 'van' | 'suv';
+  plate: string;
+  brand?: string | null;
+  model?: string | null;
+  passenger_capacity?: number;
+}) {
+  const { error } = await supabase.from('vehicles').insert({
+    driver_id: input.driver_id,
+    type: input.type,
+    plate: input.plate,
+    brand: input.brand ?? null,
+    model: input.model ?? null,
+    passenger_capacity: input.passenger_capacity ?? 4,
+    status: 'available',
+  });
+  if (error) throw error;
+}
+
+/**
  * Retire un véhicule de la flotte (retrait "logique" : on ne supprime pas la
- * ligne, car des courses passées peuvent y faire référence). Le véhicule
- * disparaît des vues flotte (getFleetOverview le filtre déjà) et passe hors
- * ligne.
+ * ligne, car des courses passées peuvent y faire référence). On s'appuie sur
+ * la colonne `status` déjà présente en base plutôt que sur une colonne
+ * `is_active` séparée (non déployée sur toutes les instances) : le véhicule
+ * passe hors ligne et n'apparaît plus comme assignable à une course.
  */
 export async function removeVehicle(vehicleId: string) {
-  const { error } = await supabase.from('vehicles').update({ is_active: false, status: 'offline' }).eq('id', vehicleId);
+  const { error } = await supabase.from('vehicles').update({ status: 'offline' }).eq('id', vehicleId);
   if (error) throw error;
 }
 
@@ -332,6 +355,37 @@ export async function adminSetDriverPassword(driverId: string, newPassword: stri
   });
   const body = await res.json();
   if (!res.ok) throw new Error(body?.error ?? 'Échec du changement de mot de passe.');
+}
+
+/**
+ * Crée un nouveau chauffeur (compte auth + profil + fiche chauffeur) via la
+ * route serveur /api/admin/create-driver (clé service_role).
+ */
+export async function adminCreateDriver(input: {
+  fullName: string;
+  phone?: string;
+  email: string;
+  password: string;
+  licenseNumber?: string;
+}): Promise<string> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) throw new Error('Session invalide.');
+
+  const res = await fetch('/api/admin/create-driver', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      fullName: input.fullName,
+      phone: input.phone,
+      email: input.email,
+      password: input.password,
+      licenseNumber: input.licenseNumber,
+    }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body?.error ?? 'Échec de la création du chauffeur.');
+  return body.driverId as string;
 }
 
 /**
