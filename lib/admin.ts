@@ -27,7 +27,8 @@ export type FleetVehicle = {
 export async function getFleetOverview(): Promise<FleetVehicle[]> {
   const { data: vehicles, error } = await supabase
     .from('vehicles')
-    .select('id, type, plate, brand, model, status, driver_id, passenger_capacity, last_lat, last_lng');
+    .select('id, type, plate, brand, model, status, driver_id, passenger_capacity, last_lat, last_lng')
+    .eq('is_active', true);
   if (error) throw error;
   if (!vehicles || vehicles.length === 0) return [];
 
@@ -198,6 +199,88 @@ export async function updateVehicle(
 ) {
   const { error } = await supabase.from('vehicles').update(patch).eq('id', vehicleId);
   if (error) throw error;
+}
+
+/**
+ * Retire un véhicule de la flotte (retrait "logique" : on ne supprime pas la
+ * ligne, car des courses passées peuvent y faire référence). Le véhicule
+ * disparaît des vues flotte (getFleetOverview le filtre déjà) et passe hors
+ * ligne.
+ */
+export async function removeVehicle(vehicleId: string) {
+  const { error } = await supabase.from('vehicles').update({ is_active: false, status: 'offline' }).eq('id', vehicleId);
+  if (error) throw error;
+}
+
+export type VehicleTripHistoryRow = {
+  id: string;
+  pickup_address: string | null;
+  dropoff_address: string | null;
+  status: string;
+  estimated_price: number | null;
+  final_price: number | null;
+  requested_at: string;
+  completed_at: string | null;
+  passenger_name: string | null;
+};
+
+/** Historique des courses effectuées par un véhicule donné (les plus récentes d'abord). */
+export async function getVehicleTripHistory(vehicleId: string, limit = 15): Promise<VehicleTripHistoryRow[]> {
+  const { data: trips, error } = await supabase
+    .from('trips')
+    .select('id, pickup_address, dropoff_address, status, estimated_price, final_price, requested_at, completed_at, passenger_id')
+    .eq('vehicle_id', vehicleId)
+    .order('requested_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  if (!trips || trips.length === 0) return [];
+
+  const passengerIds = Array.from(new Set(trips.map((t) => t.passenger_id).filter(Boolean)));
+  const { data: profiles, error: profilesError } = await supabase
+    .from('profiles')
+    .select('id, full_name')
+    .in('id', passengerIds as string[]);
+  if (profilesError) throw profilesError;
+
+  return trips.map((t) => ({
+    id: t.id,
+    pickup_address: t.pickup_address,
+    dropoff_address: t.dropoff_address,
+    status: t.status,
+    estimated_price: t.estimated_price,
+    final_price: t.final_price,
+    requested_at: t.requested_at,
+    completed_at: t.completed_at,
+    passenger_name: profiles?.find((p) => p.id === t.passenger_id)?.full_name ?? null,
+  }));
+}
+
+/**
+ * Envoie une notification à la flotte. Enregistrée en base (table
+ * fleet_notifications) pour garder une trace et pouvoir la diffuser aux
+ * apps chauffeur (via Realtime/push) dans un second temps.
+ */
+export async function sendFleetNotification(message: string, senderId: string, recipientCount: number) {
+  const { error } = await supabase
+    .from('fleet_notifications')
+    .insert({ message, sent_by: senderId, recipient_count: recipientCount });
+  if (error) throw error;
+}
+
+/**
+ * Planifie une maintenance pour un ou plusieurs véhicules : enregistre la
+ * planification et passe chaque véhicule hors ligne (il ne doit plus
+ * recevoir de courses tant que la maintenance est en cours).
+ */
+export async function scheduleMaintenance(vehicleIds: string[], scheduledDate: string, adminId: string, note?: string) {
+  if (vehicleIds.length === 0) throw new Error('Sélectionnez au moins un véhicule.');
+  const { error: insertError } = await supabase
+    .from('vehicle_maintenance')
+    .insert(vehicleIds.map((vehicle_id) => ({ vehicle_id, scheduled_date: scheduledDate, created_by: adminId, note: note || null })));
+  if (insertError) throw insertError;
+
+  const { error: statusError } = await supabase.from('vehicles').update({ status: 'offline' }).in('id', vehicleIds);
+  if (statusError) throw statusError;
 }
 
 /**
