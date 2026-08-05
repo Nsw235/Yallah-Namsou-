@@ -1,0 +1,29 @@
+:root {
+  --bg: #f8fafc; /* page background */
+  --card-bg: #ffffff; /* card background */
+  --muted: #6b7280; /* secondary text */
+  --accent: #6366f1; /* primary accent */
+  --text: #111827; /* primary text */
+  --radius: 12px;
+}
+
+/* Dark theme overrides */
+[data-theme='dark'] {
+  --bg: #071025;
+  --card-bg: #0b1220;
+  --muted: #9ca3af;
+  --accent: #7c3aed;
+  --text: #e6eef8;
+}
+
+/* Utility helpers for the admin redesign (minimal, complementary to Tailwind) */
+.admin-shell {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.admin-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+}
