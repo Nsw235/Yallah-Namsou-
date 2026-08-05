@@ -624,6 +624,89 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 
 .admin-list-view{ grid-column:2 / span 2; grid-row:1 / span 2; display:flex; flex-direction:column; gap:14px; overflow-y:auto; }
 
+/* ---- FLOTTE : toolbar de filtres, tableau, badges, menu d'actions ---- */
+.admin-toolbar{ display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+.admin-search{
+  flex:1; min-width:180px; background:rgba(169,122,91,0.06); border:1px solid rgba(169,122,91,0.35);
+  border-radius:10px; padding:9px 12px; color:var(--text); font-size:12.5px; font-family:var(--font);
+}
+.admin-search::placeholder{ color:var(--text-dim); }
+.admin-select{
+  background:rgba(169,122,91,0.06); border:1px solid rgba(169,122,91,0.35); border-radius:10px;
+  padding:9px 10px; color:var(--text); font-size:12.5px; font-family:var(--font);
+}
+
+.fleet-table{ border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+.fleet-table-head, .fleet-table-row{
+  display:grid; grid-template-columns:1.8fr 1.5fr 0.8fr 1fr 1.1fr 44px;
+  align-items:center; padding:12px 14px; gap:10px;
+}
+.fleet-table-head{
+  background:rgba(169,122,91,0.08); font-size:10px; letter-spacing:.4px; text-transform:uppercase;
+  color:var(--text-dim); font-weight:700;
+}
+.fleet-table-row{ border-top:1px solid var(--border); position:relative; }
+.fleet-table-row:hover{ background:rgba(255,255,255,0.03); }
+.fleet-cell-main .driver-name{ font-size:13px; }
+.fleet-cell-driver{ display:flex; align-items:center; gap:8px; }
+.mini-avatar{
+  width:26px; height:26px; border-radius:50%; flex:0 0 auto; background-size:cover; background-position:center;
+  background-color:rgba(169,122,91,0.18); border:1px solid rgba(169,122,91,0.35);
+  display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--copper-light);
+}
+.fleet-cell-actions{ display:none; } /* remplacé par le menu ⋯ ci-dessous */
+
+.star-badge{ padding:4px 10px; border-radius:999px; font-size:11px; font-weight:700; display:inline-flex; align-items:center; gap:5px; width:fit-content; }
+.star-badge .bdot{ width:5px; height:5px; border-radius:50%; background:currentColor; }
+.star-badge.status-available{ background:rgba(126,231,135,0.14); color:#7ee787; }
+.star-badge.status-busy{ background:rgba(255,179,92,0.14); color:#ffb35c; }
+.star-badge.status-offline{ background:rgba(255,255,255,0.06); color:var(--text-dim); }
+
+.row-menu-wrap{ position:relative; display:flex; justify-content:flex-end; }
+.dots-btn{
+  width:30px; height:30px; border-radius:9px; background:transparent; border:1px solid transparent;
+  color:var(--text-dim); display:flex; align-items:center; justify-content:center; cursor:pointer;
+}
+.dots-btn:hover{ background:rgba(255,255,255,0.06); border-color:var(--border); }
+.row-dropdown{
+  position:absolute; top:36px; right:0; background:#17191d; border:1px solid var(--border); border-radius:12px;
+  min-width:180px; z-index:30; box-shadow:0 10px 28px rgba(0,0,0,0.5); overflow:hidden;
+}
+.row-dropdown button{
+  width:100%; text-align:left; padding:10px 13px; font-size:12.5px; background:none; border:none;
+  color:var(--text); display:flex; align-items:center; gap:8px; cursor:pointer; font-family:var(--font);
+}
+.row-dropdown button:hover{ background:rgba(255,255,255,0.06); }
+.row-dropdown button.danger{ color:var(--danger); }
+.row-dropdown button:disabled{ opacity:.5; cursor:not-allowed; }
+.row-dropdown hr{ border:none; border-top:1px solid var(--border); margin:0; }
+
+/* Cartes flotte (mobile) */
+.fleet-card-list{ display:flex; flex-direction:column; gap:10px; }
+.fleet-card{ background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:16px; padding:14px; }
+.fleet-card-top{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; gap:8px; }
+.fleet-card-driver{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding-top:10px; border-top:1px solid var(--border); margin-top:10px; }
+
+/* Historique véhicule / listes de sélection dans les modales */
+.modal-list-row{ display:flex; align-items:center; gap:10px; padding:9px 0; border-top:1px solid var(--border); }
+.modal-list-row:first-child{ border-top:none; }
+.modal-list-row input[type="checkbox"]{ width:16px; height:16px; accent-color:var(--copper); }
+
+/* ---- Toasts de confirmation (feedback des actions admin) ---- */
+.toast-stack{ position:fixed; top:16px; right:16px; z-index:300; display:flex; flex-direction:column; gap:8px; }
+.toast-item{
+  background:#1c1c1e; border:1px solid #2e2e30; color:#fff; padding:11px 14px; border-radius:10px;
+  font-size:12.5px; display:flex; align-items:center; gap:9px; min-width:230px; max-width:320px;
+  box-shadow:0 8px 20px rgba(0,0,0,0.4);
+}
+.toast-item svg{ color:#7ee787; flex:0 0 auto; }
+@media (max-width:700px){
+  .fleet-table{ display:none; }
+  .toast-stack{ left:12px; right:12px; top:12px; }
+  .toast-item{ min-width:0; max-width:none; }
+}
+@media (min-width:701px){ .fleet-card-list{ display:none; } }
+
 /* ---- DRIVER : panneau course active façon mobile flottant ---- */
 .driver-trip-shell{ position:relative; min-height:640px; border-radius:26px; overflow:hidden; background:#0d0e10; }
 .driver-trip-shell .real-map{ position:absolute; inset:0; }
