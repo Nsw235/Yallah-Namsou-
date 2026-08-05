@@ -1,13 +1,24 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { FleetVehicle, removeVehicle, updateVehicle, updateVehicleStatus } from '@/lib/admin';
+import { DriverDetail, FleetVehicle, createVehicle, removeVehicle, updateVehicle, updateVehicleStatus } from '@/lib/admin';
 import { useToast } from '@/components/Toast';
 import VehicleHistoryModal from '@/components/admin/VehicleHistoryModal';
 
 const STATUS_LABEL: Record<string, string> = { available: 'En attente', busy: 'En course', offline: 'Hors ligne' };
+const TYPE_LABEL: Record<string, string> = { berline: 'Berline', van: 'Van', suv: 'SUV' };
 
-export default function AdminFleetView({ fleet, busy, onChanged }: { fleet: FleetVehicle[]; busy: boolean; onChanged: () => void }) {
+export default function AdminFleetView({
+  fleet,
+  drivers,
+  busy,
+  onChanged,
+}: {
+  fleet: FleetVehicle[];
+  drivers: DriverDetail[];
+  busy: boolean;
+  onChanged: () => void;
+}) {
   const pushToast = useToast();
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'berline' | 'van' | 'suv'>('all');
@@ -20,6 +31,11 @@ export default function AdminFleetView({ fleet, busy, onChanged }: { fleet: Flee
   const [historyFor, setHistoryFor] = useState<FleetVehicle | null>(null);
   const [removing, setRemoving] = useState<FleetVehicle | null>(null);
   const [removeSaving, setRemoveSaving] = useState(false);
+
+  const [creating, setCreating] = useState(false);
+  const [createDraft, setCreateDraft] = useState({ plate: '', brand: '', model: '', type: 'berline' as 'berline' | 'van' | 'suv', passenger_capacity: 4, driver_id: '' });
+  const [createSaving, setCreateSaving] = useState(false);
+  const [createErr, setCreateErr] = useState<string | null>(null);
 
   useEffect(() => {
     const close = () => setOpenMenu(null);
@@ -79,6 +95,36 @@ export default function AdminFleetView({ fleet, busy, onChanged }: { fleet: Flee
     }
   }
 
+  function openCreate() {
+    setCreateErr(null);
+    setCreateDraft({ plate: '', brand: '', model: '', type: 'berline', passenger_capacity: 4, driver_id: drivers[0]?.id ?? '' });
+    setCreating(true);
+  }
+
+  async function submitCreate() {
+    if (!createDraft.plate.trim()) { setCreateErr('La plaque est requise.'); return; }
+    if (!createDraft.driver_id) { setCreateErr('Sélectionnez un chauffeur.'); return; }
+    setCreateSaving(true);
+    setCreateErr(null);
+    try {
+      await createVehicle({
+        driver_id: createDraft.driver_id,
+        type: createDraft.type,
+        plate: createDraft.plate.trim(),
+        brand: createDraft.brand.trim() || null,
+        model: createDraft.model.trim() || null,
+        passenger_capacity: Number(createDraft.passenger_capacity) || 4,
+      });
+      pushToast(`${createDraft.plate.trim()} — véhicule ajouté à la flotte`);
+      setCreating(false);
+      onChanged();
+    } catch (e: any) {
+      setCreateErr(e?.message ?? "Échec de l'ajout du véhicule.");
+    } finally {
+      setCreateSaving(false);
+    }
+  }
+
   async function confirmRemove() {
     if (!removing) return;
     setRemoveSaving(true);
@@ -97,7 +143,13 @@ export default function AdminFleetView({ fleet, busy, onChanged }: { fleet: Flee
   return (
     <div className="admin-list-view">
       <div className="driver-card">
-        <h2>Flotte de véhicules ({filtered.length}/{fleet.length})</h2>
+        <div className="section-head-row">
+          <div>
+            <h2>Flotte de véhicules ({filtered.length}/{fleet.length})</h2>
+            <p className="route-sub">Véhicules actifs, statut en temps réel, chauffeur assigné.</p>
+          </div>
+          <button className="btn amber btn-inline" onClick={openCreate}>+ Ajouter un véhicule</button>
+        </div>
 
         <div className="admin-toolbar">
           <input className="admin-search" placeholder="Rechercher plaque, marque, chauffeur…" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -256,6 +308,63 @@ export default function AdminFleetView({ fleet, busy, onChanged }: { fleet: Flee
               <button className="btn ghost" onClick={() => setEditing(null)}>Annuler</button>
               <button className="btn amber" disabled={saving} onClick={saveEdit}>
                 {saving ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {creating && (
+        <div className="modal-overlay" onClick={() => setCreating(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Ajouter un véhicule</h3>
+            <div className="field">
+              <label>TYPE</label>
+              <select value={createDraft.type} onChange={(e) => setCreateDraft({ ...createDraft, type: e.target.value as any })}>
+                {Object.entries(TYPE_LABEL).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>PLAQUE D&apos;IMMATRICULATION</label>
+              <input value={createDraft.plate} onChange={(e) => setCreateDraft({ ...createDraft, plate: e.target.value })} placeholder="Ex : 3494629B" />
+            </div>
+            <div className="field-grid-2">
+              <div className="field">
+                <label>MARQUE</label>
+                <input value={createDraft.brand} onChange={(e) => setCreateDraft({ ...createDraft, brand: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>MODÈLE</label>
+                <input value={createDraft.model} onChange={(e) => setCreateDraft({ ...createDraft, model: e.target.value })} />
+              </div>
+            </div>
+            <div className="field">
+              <label>CAPACITÉ (places)</label>
+              <input
+                type="number"
+                min={1}
+                max={9}
+                value={createDraft.passenger_capacity}
+                onChange={(e) => setCreateDraft({ ...createDraft, passenger_capacity: Number(e.target.value) })}
+              />
+            </div>
+            <div className="field">
+              <label>CHAUFFEUR ASSIGNÉ</label>
+              <select value={createDraft.driver_id} onChange={(e) => setCreateDraft({ ...createDraft, driver_id: e.target.value })}>
+                <option value="" disabled>Sélectionner un chauffeur…</option>
+                {drivers.map((d) => (
+                  <option key={d.id} value={d.id}>{d.full_name ?? d.phone ?? d.id}</option>
+                ))}
+              </select>
+              {drivers.length === 0 && <div className="field-hint">Ajoutez d&apos;abord un chauffeur dans l&apos;onglet Chauffeurs.</div>}
+            </div>
+            {createErr && <div className="auth-error">{createErr}</div>}
+            <div className="btn-row">
+              <button className="btn ghost" onClick={() => setCreating(false)}>Annuler</button>
+              <button className="btn amber" disabled={createSaving} onClick={submitCreate}>
+                {createSaving ? 'Ajout…' : 'Ajouter le véhicule'}
               </button>
             </div>
           </div>

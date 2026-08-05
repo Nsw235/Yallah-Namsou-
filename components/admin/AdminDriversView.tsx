@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { formatFCFA } from '@/lib/pricing';
 import {
   DriverDetail,
+  adminCreateDriver,
   adminSetDriverPassword,
   adminUpdateDriverAvatar,
   setDriverValidation,
@@ -41,6 +42,11 @@ export default function AdminDriversView({
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
+  const [creating, setCreating] = useState(false);
+  const [createDraft, setCreateDraft] = useState({ fullName: '', phone: '', email: '', password: '', licenseNumber: '' });
+  const [createSaving, setCreateSaving] = useState(false);
+  const [createErr, setCreateErr] = useState<string | null>(null);
+
   const filtered = drivers.filter((d) => {
     if (!query.trim()) return true;
     const q = query.toLowerCase();
@@ -61,6 +67,41 @@ export default function AdminDriversView({
 
   async function refreshSelected() {
     await onChanged();
+  }
+
+  function openCreate() {
+    setCreateErr(null);
+    setCreateDraft({ fullName: '', phone: '', email: '', password: '', licenseNumber: '' });
+    setCreating(true);
+  }
+
+  async function submitCreate() {
+    if (!createDraft.fullName.trim() || !createDraft.email.trim()) {
+      setCreateErr('Nom complet et email sont requis.');
+      return;
+    }
+    if (createDraft.password.length < 8) {
+      setCreateErr('Mot de passe : 8 caractères minimum.');
+      return;
+    }
+    setCreateSaving(true);
+    setCreateErr(null);
+    try {
+      await adminCreateDriver({
+        fullName: createDraft.fullName.trim(),
+        phone: createDraft.phone.trim() || undefined,
+        email: createDraft.email.trim(),
+        password: createDraft.password,
+        licenseNumber: createDraft.licenseNumber.trim() || undefined,
+      });
+      pushToast(`${createDraft.fullName.trim()} — chauffeur ajouté`);
+      setCreating(false);
+      await onChanged();
+    } catch (e: any) {
+      setCreateErr(e?.message ?? "Échec de la création du chauffeur.");
+    } finally {
+      setCreateSaving(false);
+    }
   }
 
   async function handleValidation(status: 'approved' | 'rejected' | 'suspended') {
@@ -143,7 +184,13 @@ export default function AdminDriversView({
   return (
     <div className="admin-list-view">
       <div className="driver-card">
-        <h2>Chauffeurs ({filtered.length}/{drivers.length})</h2>
+        <div className="section-head-row">
+          <div>
+            <h2>Chauffeurs ({filtered.length}/{drivers.length})</h2>
+            <p className="route-sub">Notes, courses, revenus et statut de validation.</p>
+          </div>
+          <button className="btn amber btn-inline" onClick={openCreate}>+ Ajouter un nouveau chauffeur</button>
+        </div>
         <div className="admin-toolbar">
           <input className="admin-search" placeholder="Rechercher un chauffeur…" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
@@ -182,6 +229,43 @@ export default function AdminDriversView({
           {filtered.length === 0 && <div className="alert-empty">Aucun chauffeur trouvé.</div>}
         </div>
       </div>
+
+      {creating && (
+        <div className="modal-overlay" onClick={() => setCreating(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Ajouter un nouveau chauffeur</h3>
+            <div className="field">
+              <label>NOM COMPLET</label>
+              <input value={createDraft.fullName} onChange={(e) => setCreateDraft({ ...createDraft, fullName: e.target.value })} />
+            </div>
+            <div className="field-grid-2">
+              <div className="field">
+                <label>TÉLÉPHONE</label>
+                <input value={createDraft.phone} onChange={(e) => setCreateDraft({ ...createDraft, phone: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>N° DE PERMIS</label>
+                <input value={createDraft.licenseNumber} onChange={(e) => setCreateDraft({ ...createDraft, licenseNumber: e.target.value })} />
+              </div>
+            </div>
+            <div className="field">
+              <label>EMAIL (identifiant de connexion)</label>
+              <input type="email" value={createDraft.email} onChange={(e) => setCreateDraft({ ...createDraft, email: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>MOT DE PASSE INITIAL</label>
+              <input type="password" placeholder="8 caractères minimum" value={createDraft.password} onChange={(e) => setCreateDraft({ ...createDraft, password: e.target.value })} />
+            </div>
+            {createErr && <div className="auth-error">{createErr}</div>}
+            <div className="btn-row">
+              <button className="btn ghost" onClick={() => setCreating(false)}>Annuler</button>
+              <button className="btn amber" disabled={createSaving} onClick={submitCreate}>
+                {createSaving ? 'Création…' : 'Créer le chauffeur'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selected && (
         <div className="modal-overlay" onClick={() => setSelected(null)}>
