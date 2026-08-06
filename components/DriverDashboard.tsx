@@ -43,7 +43,7 @@ import {
   subscribeToTripChanges,
 } from '@/lib/driver';
 import AuthGate from '@/components/AuthGate';
-import RealMap, { type NavigationStep } from '@/components/RealMap';
+import RealMap, { type NavigationStep, type MapPin } from '@/components/RealMap';
 
 const VEHICLE_TYPES: VehicleType[] = ['berline', 'van', 'suv'];
 type BottomTab = 'home' | 'radar' | 'stats' | 'profil';
@@ -473,12 +473,31 @@ export default function DriverDashboard() {
   const myVehicleType: VehicleType = myVehicle?.type ?? 'berline';
   const carModelUrl = CAR_MODEL_BY_TYPE[myVehicleType];
 
+  // Onglet Radar : un "bonhomme" (avatar + nom + distance) par course en
+  // attente, positionné sur son point de départ. La plus proche (première
+  // du tri) est mise en évidence (contour vert + pulse).
+  const radarPins: MapPin[] =
+    bottomTab === 'radar'
+      ? sortedPending.map((t, i) => ({
+          position: { lat: t.pickup_lat, lng: t.pickup_lng },
+          passenger: {
+            initials: initials(t.passenger_profile?.full_name ?? null),
+            name: t.passenger_profile?.full_name?.split(' ')[0] ?? 'Passager',
+            distanceKm: driverPos ? haversineKm(driverPos.lat, driverPos.lng, t.pickup_lat, t.pickup_lng) : 0,
+            highlight: i === 0,
+          },
+        }))
+      : [];
+
   // Onglet HOME : carte plein écran, épurée. Aucune fenêtre modale
   // d'historique/gains ici — uniquement le suivi de la course en cours.
   const showMap = bottomTab === 'home' || bottomTab === 'radar';
 
   return (
-    <div className="relative flex h-dvh flex-col overflow-hidden bg-[#0d0906]">
+    <div
+      className="relative flex flex-col overflow-hidden bg-[#0d0906]"
+      style={{ height: 'var(--app-vh, 100dvh)' }}
+    >
       <div className="relative flex-1 overflow-hidden">
         {showMap && (
           <div className="absolute inset-0">
@@ -486,7 +505,7 @@ export default function DriverDashboard() {
               pitch={mapPitch}
               buildings3d
               driverPosition={driverPos}
-              pins={[]}
+              pins={radarPins}
               use3dCar={onTrip}
               carModelUrl={carModelUrl}
               overviewZoom={mapOverviewZoom}
@@ -756,7 +775,7 @@ export default function DriverDashboard() {
             `}</style>
 
             <div className="absolute inset-x-0 bottom-0 z-10">
-              <div className="flex gap-2.5 overflow-x-auto px-3 pb-3" style={{ scrollSnapType: 'x mandatory' }}>
+              <div className="flex gap-2.5 overflow-x-auto px-3 pb-2" style={{ scrollSnapType: 'x mandatory' }}>
                 {sortedPending.length === 0 && (
                   <div className="w-full border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c] p-4 text-center text-xs text-[#8a7358]">
                     Aucune course en attente pour le moment.
@@ -768,47 +787,47 @@ export default function DriverDashboard() {
                       className="w-[3px] flex-none"
                       style={{ background: 'repeating-linear-gradient(180deg,#6b4a35 0 4px,transparent 4px 8px)' }}
                     />
-                    <div className={`flex-1 border-[0.5px] border-l-0 p-3 ${i === 0 ? 'border-[#a97a5b] bg-[#241a13]' : 'border-[rgba(169,122,91,0.28)] bg-[#14100c]'}`}>
+                    <div className={`flex-1 border-[0.5px] border-l-0 p-2 ${i === 0 ? 'border-[#a97a5b] bg-[#241a13]' : 'border-[rgba(169,122,91,0.28)] bg-[#14100c]'}`}>
                       {loadingDetails.has(t.id) && (
-                        <div className="mb-1.5 border-[0.5px] border-[#378ADD]/40 bg-[#042C53]/60 px-2 py-1 text-center text-[9px] font-medium text-[#B5D4F4]">
+                        <div className="mb-1 border-[0.5px] border-[#378ADD]/40 bg-[#042C53]/60 px-2 py-0.5 text-center text-[8px] font-medium text-[#B5D4F4]">
                           Nouvelle course · détails en cours de chargement
                         </div>
                       )}
                       <div className="flex items-center justify-between">
-                        <span className="text-[8px] font-medium tracking-wide text-[#8a7358]">
+                        <span className="text-[7.5px] font-medium tracking-wide text-[#8a7358]">
                           MANIFESTE {i === 0 ? '· PLUS PROCHE' : ''}
                         </span>
                         {driverPos && (
-                          <span className="font-mono text-[8px] text-[#8a7358]">
+                          <span className="font-mono text-[7.5px] text-[#8a7358]">
                             {haversineKm(driverPos.lat, driverPos.lng, t.pickup_lat, t.pickup_lng).toFixed(1)} KM
                           </span>
                         )}
                       </div>
-                      <div className="mt-1 truncate text-[11.5px] text-[#f7e6d4]">
+                      <div className="mt-0.5 truncate text-[11px] text-[#f7e6d4]">
                         {t.pickup_address ?? 'Départ'} →{' '}
                         {loadingDetails.has(t.id)
                           ? `${approxZone(t.dropoff_address)} (adresse exacte à venir…)`
                           : t.dropoff_address ?? 'Destination'}
                       </div>
-                      <div className="mt-0.5 text-[10px] text-[#8a7358]">{t.passenger_profile?.full_name ?? 'Passager'} · {VEHICLE_LABELS[t.vehicle_type]}</div>
-                      <div className="mt-1.5 flex items-center justify-between gap-3">
-                        <span className="font-mono text-sm text-[#f7e6d4]">{formatFCFA(t.estimated_price)}</span>
-                        <div className="flex flex-1 gap-2">
+                      <div className="mt-0.5 text-[9.5px] text-[#8a7358]">{t.passenger_profile?.full_name ?? 'Passager'} · {VEHICLE_LABELS[t.vehicle_type]}</div>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <span className="font-mono text-[13px] text-[#f7e6d4]">{formatFCFA(t.estimated_price)}</span>
+                        <div className="flex flex-1 gap-1.5">
                           <button
                             disabled={busy}
                             onClick={() => handleDismiss(t.id)}
                             aria-label="Refuser"
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E24B4A] bg-[#4a1414] py-2 text-[11px] font-medium text-[#F09595] disabled:opacity-50"
+                            className="flex flex-1 items-center justify-center gap-1 rounded-full border border-[#E24B4A] bg-[#4a1414] py-1.5 text-[10px] font-medium text-[#F09595] disabled:opacity-50"
                           >
-                            <span className="text-sm leading-none">✕</span> Refuser
+                            <span className="text-xs leading-none">✕</span> Refuser
                           </button>
                           <button
                             disabled={busy}
                             onClick={() => handleAccept(t)}
                             aria-label="Accepter"
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#639922] bg-[#173404] py-2 text-[11px] font-medium text-[#C0DD97] disabled:opacity-50"
+                            className="flex flex-1 items-center justify-center gap-1 rounded-full border border-[#639922] bg-[#173404] py-1.5 text-[10px] font-medium text-[#C0DD97] disabled:opacity-50"
                           >
-                            <span className="text-sm leading-none">✓</span> Accepter
+                            <span className="text-xs leading-none">✓</span> Accepter
                           </button>
                         </div>
                       </div>
