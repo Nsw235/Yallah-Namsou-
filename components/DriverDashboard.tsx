@@ -15,6 +15,7 @@ import {
   CornerUpRight,
   RotateCcw,
   Flag,
+  Circle,
   ChevronUp,
   Camera,
   Bell,
@@ -787,49 +788,62 @@ export default function DriverDashboard() {
                       className="w-[3px] flex-none"
                       style={{ background: 'repeating-linear-gradient(180deg,#6b4a35 0 4px,transparent 4px 8px)' }}
                     />
-                    <div className={`flex-1 border-[0.5px] border-l-0 p-2 ${i === 0 ? 'border-[#a97a5b] bg-[#241a13]' : 'border-[rgba(169,122,91,0.28)] bg-[#14100c]'}`}>
+                    <div className={`flex-1 border-[0.5px] border-l-0 p-2.5 ${i === 0 ? 'border-[#a97a5b] bg-[#241a13]' : 'border-[rgba(169,122,91,0.28)] bg-[#14100c]'}`}>
                       {loadingDetails.has(t.id) && (
                         <div className="mb-1 border-[0.5px] border-[#378ADD]/40 bg-[#042C53]/60 px-2 py-0.5 text-center text-[8px] font-medium text-[#B5D4F4]">
                           Nouvelle course · détails en cours de chargement
                         </div>
                       )}
-                      <div className="flex items-center justify-between">
-                        <span className="text-[7.5px] font-medium tracking-wide text-[#8a7358]">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-medium tracking-wide text-[#a97a5b]">
                           MANIFESTE {i === 0 ? '· PLUS PROCHE' : ''}
                         </span>
                         {driverPos && (
-                          <span className="font-mono text-[7.5px] text-[#8a7358]">
+                          <span className="ml-auto font-mono text-[9px] text-[#8a7358]">
                             {haversineKm(driverPos.lat, driverPos.lng, t.pickup_lat, t.pickup_lng).toFixed(1)} KM
                           </span>
                         )}
                       </div>
-                      <div className="mt-0.5 truncate text-[11px] text-[#f7e6d4]">
-                        {t.pickup_address ?? 'Départ'} →{' '}
-                        {loadingDetails.has(t.id)
-                          ? `${approxZone(t.dropoff_address)} (adresse exacte à venir…)`
-                          : t.dropoff_address ?? 'Destination'}
-                      </div>
-                      <div className="mt-0.5 text-[9.5px] text-[#8a7358]">{t.passenger_profile?.full_name ?? 'Passager'} · {VEHICLE_LABELS[t.vehicle_type]}</div>
-                      <div className="mt-1 flex items-center justify-between gap-2">
-                        <span className="font-mono text-[13px] text-[#f7e6d4]">{formatFCFA(t.estimated_price)}</span>
-                        <div className="flex flex-1 gap-1.5">
-                          <button
-                            disabled={busy}
-                            onClick={() => handleDismiss(t.id)}
-                            aria-label="Refuser"
-                            className="flex flex-1 items-center justify-center gap-1 rounded-full border border-[#E24B4A] bg-[#4a1414] py-1.5 text-[10px] font-medium text-[#F09595] disabled:opacity-50"
-                          >
-                            <span className="text-xs leading-none">✕</span> Refuser
-                          </button>
-                          <button
-                            disabled={busy}
-                            onClick={() => handleAccept(t)}
-                            aria-label="Accepter"
-                            className="flex flex-1 items-center justify-center gap-1 rounded-full border border-[#639922] bg-[#173404] py-1.5 text-[10px] font-medium text-[#C0DD97] disabled:opacity-50"
-                          >
-                            <span className="text-xs leading-none">✓</span> Accepter
-                          </button>
+
+                      <div className="mt-1.5 flex flex-col gap-[3px]">
+                        <div className="flex items-center gap-1.5">
+                          <Circle size={7} className="shrink-0 fill-[#a97a5b] text-[#a97a5b]" />
+                          <span className="truncate text-[11.5px] leading-tight text-[#f7e6d4]">
+                            {t.pickup_address ?? 'Départ'}
+                          </span>
                         </div>
+                        <div className="flex items-center gap-1.5">
+                          <Flag size={10} className="shrink-0 text-[#8a7358]" />
+                          <span className="truncate text-[11.5px] leading-tight text-[#f7e6d4]">
+                            {loadingDetails.has(t.id)
+                              ? `${approxZone(t.dropoff_address)} (adresse exacte à venir…)`
+                              : t.dropoff_address ?? 'Destination'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-1.5 flex items-center justify-between">
+                        <span className="text-[10.5px] text-[#8a7358]">{t.passenger_profile?.full_name ?? 'Passager'} · {VEHICLE_LABELS[t.vehicle_type]}</span>
+                        <span className="font-mono text-[13px] font-medium text-[#f7e6d4]">{formatFCFA(t.estimated_price)}</span>
+                      </div>
+
+                      <div className="mt-2 flex gap-1.5">
+                        <button
+                          disabled={busy}
+                          onClick={() => handleDismiss(t.id)}
+                          aria-label="Refuser"
+                          className="flex flex-1 items-center justify-center gap-1 rounded-full border border-[#E24B4A] bg-[#3a1010] py-[7px] text-[11px] font-medium text-[#F09595] disabled:opacity-50"
+                        >
+                          <span className="text-xs leading-none">✕</span> Refuser
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() => handleAccept(t)}
+                          aria-label="Accepter"
+                          className="flex flex-1 items-center justify-center gap-1 rounded-full border border-[#639922] bg-[#152e04] py-[7px] text-[11px] font-medium text-[#C0DD97] disabled:opacity-50"
+                        >
+                          <span className="text-xs leading-none">✓</span> Accepter
+                        </button>
                       </div>
                     </div>
                   </div>
