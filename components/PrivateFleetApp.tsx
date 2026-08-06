@@ -18,6 +18,7 @@ import {
   confirmMobilePayment,
   createTrip,
   expireStaleTrips,
+  getActiveTripForPassenger,
   getAvailableVehicles,
   getDriverAndVehicle,
   getPricingRules,
@@ -135,6 +136,35 @@ export default function PrivateFleetApp() {
           return;
         }
         setError(e.message);
+      });
+  }, [session]);
+
+  // Reverrouille l'app sur une course déjà en cours (pending/accepted/
+  // in_progress) au chargement — après un rechargement de page, un crash
+  // d'onglet, ou une réouverture de l'app, le passager ne doit jamais
+  // "perdre" une course en cours et se retrouver sur l'écran de réservation
+  // comme si de rien n'était. Ne s'exécute qu'une fois par session.
+  const restoredActiveTrip = useRef(false);
+  useEffect(() => {
+    if (!session?.user || restoredActiveTrip.current) return;
+    restoredActiveTrip.current = true;
+    getActiveTripForPassenger(session.user.id)
+      .then(async (active) => {
+        if (!active) return;
+        setTrip(active);
+        if (active.status === 'pending') {
+          setStep(3);
+          return;
+        }
+        if (!active.driver_id || !active.vehicle_id) return;
+        const { driver: d, vehicle: v } = await getDriverAndVehicle(active.driver_id, active.vehicle_id);
+        setDriver(d);
+        setVehicleInfo(v);
+        setStep(active.status === 'in_progress' ? 5 : 4);
+      })
+      .catch(() => {
+        // Silencieux : au pire le passager repart de l'écran de réservation,
+        // ce qui reste préférable à un écran bloqué sur une erreur au démarrage.
       });
   }, [session]);
 
@@ -454,7 +484,7 @@ export default function PrivateFleetApp() {
         )}
 
         {step === 5 && driver && trip && (
-          <Screen5 driver={driver} trip={trip} driverPos={driverPos} onMenu={() => setShowMenu(true)} />
+          <Screen5 driver={driver} trip={trip} driverPos={driverPos} />
         )}
 
         {step === 6 && driver && trip && (
@@ -847,7 +877,17 @@ function Screen2({
         pins={carPins}
       />
       <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
-      <RouteCard pickup={pickup} dropoff={dropoff} />
+      <div className="yn-route-compact">
+        <div className="dots">
+          <div className="d start" />
+          <div className="line" />
+          <div className="d end" />
+        </div>
+        <div className="addrs">
+          <div className="a">{pickup.label}</div>
+          <div className="a">{dropoff.label}</div>
+        </div>
+      </div>
       <div className="yn-ticket">
         <div className="yn-ticket-body">
           <div className="veh-hero"><img src={VEHICLE_ICON[vehicle]} alt={VEHICLE_LABELS[vehicle]} className="veh-hero-img" /></div>
@@ -1060,12 +1100,10 @@ function Screen5({
   driver,
   trip,
   driverPos,
-  onMenu,
 }: {
   driver: DriverInfo;
   trip: Trip;
   driverPos: { lat: number; lng: number } | null;
-  onMenu: () => void;
 }) {
   return (
     <div className="screen fade">
@@ -1076,7 +1114,7 @@ function Screen5({
         routeColor="#e8c9a8"
         pins={driverPos ? [{ position: driverPos, car3d: { modelUrl: CAR_MODEL_BY_TYPE[trip.vehicle_type] } }] : []}
       />
-      <Header onMenuClick={onMenu} />
+      <Header locked />
       <div className="title-banner glass">
         <h2>EN ROUTE VERS DESTINATION</h2>
         <div className="sub-route">Le chauffeur vous conduit directement, aucune action requise</div>
