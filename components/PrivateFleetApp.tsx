@@ -237,7 +237,9 @@ export default function PrivateFleetApp() {
       setStep((current) => {
         if (current === 2) {
           setError(
-            e?.message?.includes('row-level security')
+            e?.code === '23505' || e?.message?.includes('trips_one_active_per_passenger')
+              ? 'Vous avez déjà une course en cours. Terminez-la ou annulez-la avant d\'en lancer une nouvelle.'
+              : e?.message?.includes('row-level security')
               ? "La demande n'a pas pu être envoyée, réessayez."
               : e?.message ?? 'Impossible de créer la course.'
           );
