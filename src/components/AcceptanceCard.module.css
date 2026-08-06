@@ -1,0 +1,73 @@
+.bottomSheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  background-color: #1E1915;
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.45);
+  padding: 16px;
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+  box-sizing: border-box;
+  transform: translateY(100%);
+  transition: transform 220ms cubic-bezier(0.2, 0.9, 0.2, 1), opacity 180ms;
+  opacity: 0;
+  z-index: 50;
+  touch-action: manipulation;
+}
+
+.sheetVisible {
+  transform: translateY(0%);
+  opacity: 1;
+}
+
+.sheetHidden {
+  transform: translateY(100%);
+  opacity: 0;
+}
+
+.addressRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.addressIcon {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.addressText {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 15px;
+  line-height: 20px;
+  min-width: 0;
+}
+
+.bottomSheet * {
+  box-sizing: border-box;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Ensure buttons never wrap and are equal width (Tailwind flex-1 applied in JSX) */
+.bottomSheet button {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
