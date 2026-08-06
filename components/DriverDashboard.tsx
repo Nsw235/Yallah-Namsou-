@@ -763,7 +763,7 @@ export default function DriverDashboard() {
                   </div>
                 )}
                 {sortedPending.map((t, i) => (
-                  <div key={t.id} className="flex w-64 flex-none" style={{ scrollSnapAlign: 'start' }}>
+                  <div key={t.id} className="flex w-[calc(100vw-24px)] max-w-[420px] flex-none" style={{ scrollSnapAlign: 'start' }}>
                     <div
                       className="w-[3px] flex-none"
                       style={{ background: 'repeating-linear-gradient(180deg,#6b4a35 0 4px,transparent 4px 8px)' }}
@@ -791,24 +791,24 @@ export default function DriverDashboard() {
                           : t.dropoff_address ?? 'Destination'}
                       </div>
                       <div className="mt-0.5 text-[10px] text-[#8a7358]">{t.passenger_profile?.full_name ?? 'Passager'} · {VEHICLE_LABELS[t.vehicle_type]}</div>
-                      <div className="mt-1.5 flex items-center justify-between">
+                      <div className="mt-1.5 flex items-center justify-between gap-3">
                         <span className="font-mono text-sm text-[#f7e6d4]">{formatFCFA(t.estimated_price)}</span>
-                        <div className="flex gap-2">
+                        <div className="flex flex-1 gap-2">
                           <button
                             disabled={busy}
                             onClick={() => handleDismiss(t.id)}
                             aria-label="Refuser"
-                            className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E24B4A] bg-[#4a1414] text-[#F09595] disabled:opacity-50"
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E24B4A] bg-[#4a1414] py-2 text-[11px] font-medium text-[#F09595] disabled:opacity-50"
                           >
-                            <span className="text-sm leading-none">✕</span>
+                            <span className="text-sm leading-none">✕</span> Refuser
                           </button>
                           <button
                             disabled={busy}
                             onClick={() => handleAccept(t)}
                             aria-label="Accepter"
-                            className="flex h-8 w-8 items-center justify-center rounded-full border border-[#639922] bg-[#173404] text-[#C0DD97] disabled:opacity-50"
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#639922] bg-[#173404] py-2 text-[11px] font-medium text-[#C0DD97] disabled:opacity-50"
                           >
-                            <span className="text-sm leading-none">✓</span>
+                            <span className="text-sm leading-none">✓</span> Accepter
                           </button>
                         </div>
                       </div>

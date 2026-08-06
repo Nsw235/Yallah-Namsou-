@@ -908,6 +908,7 @@ function Screen3({
   return (
     <div className="screen fade">
       <RealMap pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }} pins={carPins} />
+      <div className="yn-search-scrim" />
       <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
       <div className="yn-compass-wrap">
         <div className="yn-compass-ring" />
