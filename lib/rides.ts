@@ -114,6 +114,26 @@ export async function expireStaleTrips() {
   if (error) throw error;
 }
 
+/**
+ * Retrouve la course en cours du passager (pending/accepted/in_progress),
+ * s'il y en a une. Utilisé au chargement de l'app pour reverrouiller
+ * automatiquement l'écran sur cette course après un rafraîchissement de
+ * page, un crash de l'onglet, ou une réouverture de l'app — le passager ne
+ * doit jamais pouvoir "perdre" une course en cours en rechargeant.
+ */
+export async function getActiveTripForPassenger(passengerId: string): Promise<Trip | null> {
+  const { data, error } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('passenger_id', passengerId)
+    .in('status', ['pending', 'accepted', 'in_progress'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as Trip) ?? null;
+}
+
 /** Charge une course par son id (pour rafraîchir l'état après un événement realtime). */
 export async function getTrip(tripId: string): Promise<Trip> {
   const { data, error } = await supabase.from('trips').select('*').eq('id', tripId).single();
