@@ -75,6 +75,12 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
   display:flex; align-items:center; justify-content:center; color:var(--text);
   cursor:pointer;
 }
+.icon-btn.yn-header-locked{
+  cursor:default; color:var(--copper-light);
+  border-color:rgba(232,201,168,0.35);
+  animation:yn-lock-pulse 2.4s ease-in-out infinite;
+}
+@keyframes yn-lock-pulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(232,201,168,0.35); } 50%{ box-shadow:0 0 0 6px rgba(232,201,168,0); } }
 .pill{
   background:var(--panel); border:1px solid var(--border);
   backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
@@ -121,8 +127,8 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 .btn-row{display:flex; gap:10px;}
 .btn-row .btn.cyan, .btn-row .btn.emerald{flex:1;}
 
-.veh-hero{display:flex; justify-content:center; margin-bottom:10px;}
-.veh-hero-img{width:100px; height:auto; filter:drop-shadow(0 8px 18px rgba(0,0,0,0.6)); border-radius:16px;}
+.veh-hero{display:flex; justify-content:center; margin-bottom:6px;}
+.veh-hero-img{width:76px; height:auto; filter:drop-shadow(0 8px 18px rgba(0,0,0,0.6)); border-radius:16px;}
 .confirm-title{text-align:center; font-size:18px; font-weight:800; letter-spacing:.5px; margin-bottom:2px;}
 
 .step-indicator{ display:flex; align-items:center; gap:10px; margin-bottom:16px; }
@@ -350,6 +356,23 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
   color:var(--copper-light); font-size:10.5px; font-weight:700; white-space:nowrap;
   border-left:1px solid var(--border); padding-left:8px; letter-spacing:.2px;
 }
+
+/* Écran 2 (confirmation véhicule) : résumé départ→destination en une seule
+   ligne compacte, toujours visible au-dessus du bandeau véhicule — plus
+   besoin de choisir entre voir le départ OU la destination. */
+.yn-route-compact{
+  position:absolute; top:76px; left:14px; right:14px; z-index:20;
+  background:rgba(10,11,13,0.85); border:1px solid rgba(232,201,168,0.24);
+  backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+  border-radius:16px; padding:11px 14px; display:flex; align-items:center; gap:9px;
+}
+.yn-route-compact .dots{ display:flex; flex-direction:column; align-items:center; gap:3px; flex:0 0 auto; }
+.yn-route-compact .dots .d{ width:7px; height:7px; border-radius:50%; }
+.yn-route-compact .dots .d.start{ background:var(--copper-light); box-shadow:0 0 5px var(--copper-light); }
+.yn-route-compact .dots .d.end{ background:var(--danger); box-shadow:0 0 5px var(--danger); }
+.yn-route-compact .dots .line{ width:1px; height:9px; background:var(--border); }
+.yn-route-compact .addrs{ flex:1; min-width:0; display:flex; flex-direction:column; gap:5px; }
+.yn-route-compact .addrs .a{ font-size:12px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 /* Chemin de progression façon suivi de vol : DÉP · RECH · ATT · ROUTE · ARR */
 .yn-flightpath{
