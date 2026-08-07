@@ -171,43 +171,60 @@ const RealMap = forwardRef<RealMapHandle, {
         const hasBasemapImport = Array.isArray(styleJson?.imports) && styleJson.imports.some((i: any) => i.id === 'basemap');
         hasBasemapImportRef.current = hasBasemapImport;
 
+        // Source/couche du tracé d'itinéraire — créées EN PREMIER et
+        // isolées dans leur propre try/catch : si l'ajout d'une autre
+        // couche plus bas (trafic, etc.) échoue, ça ne doit jamais
+        // empêcher le tracé lui-même d'exister. Avant ce correctif, une
+        // erreur sur la couche trafic interrompait tout le callback et
+        // 'route'/'route-line' n'étaient jamais créées, donc le tracé ne
+        // s'affichait jamais côté passager, sans aucune erreur visible.
+        try {
+          map.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+          map.addLayer({
+            id: 'route-line',
+            type: 'line',
+            source: 'route',
+            ...(hasBasemapImport ? { slot: 'top' } : {}),
+            layout: { 'line-cap': 'round', 'line-join': 'round' },
+            paint: { 'line-width': 4, 'line-color': routeColor, 'line-opacity': 0.9 },
+          });
+        } catch {
+          // Au pire le tracé ne s'affiche pas, mais le reste de la carte
+          // (pins, position chauffeur, etc.) continue de fonctionner.
+        }
+
         // Calque trafic live officiel Mapbox (congestion en temps réel).
         // `slot: 'top'` n'existe que sur les styles Standard (v3) : on ne
         // l'ajoute que si le style personnalisé en dispose, sinon Mapbox GL
         // rejetterait la couche.
-        map.addSource('mapbox-traffic', {
-          type: 'vector',
-          url: 'mapbox://mapbox.mapbox-traffic-v1',
-        });
-        map.addLayer({
-          id: 'traffic',
-          type: 'line',
-          source: 'mapbox-traffic',
-          'source-layer': 'traffic',
-          ...(hasBasemapImport ? { slot: 'top' } : {}),
-          paint: {
-            'line-width': 2.2,
-            'line-color': [
-              'match',
-              ['get', 'congestion'],
-              'low', '#7fbf94',
-              'moderate', '#e8c9a8',
-              'heavy', '#d97b6a',
-              'severe', '#c0392b',
-              'rgba(0,0,0,0)',
-            ],
-          },
-        });
-
-        map.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-        map.addLayer({
-          id: 'route-line',
-          type: 'line',
-          source: 'route',
-          ...(hasBasemapImport ? { slot: 'top' } : {}),
-          layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: { 'line-width': 4, 'line-color': routeColor, 'line-opacity': 0.9 },
-        });
+        try {
+          map.addSource('mapbox-traffic', {
+            type: 'vector',
+            url: 'mapbox://mapbox.mapbox-traffic-v1',
+          });
+          map.addLayer({
+            id: 'traffic',
+            type: 'line',
+            source: 'mapbox-traffic',
+            'source-layer': 'traffic',
+            ...(hasBasemapImport ? { slot: 'top' } : {}),
+            paint: {
+              'line-width': 2.2,
+              'line-color': [
+                'match',
+                ['get', 'congestion'],
+                'low', '#7fbf94',
+                'moderate', '#e8c9a8',
+                'heavy', '#d97b6a',
+                'severe', '#c0392b',
+                'rgba(0,0,0,0)',
+              ],
+            },
+          });
+        } catch {
+          // Le trafic est décoratif — son absence ne doit jamais bloquer
+          // le reste (tracé, pins, position chauffeur).
+        }
 
         // Le toggle 3D natif ne s'applique qu'aux styles Standard. Si le style
         // personnalisé est un style classique, les bâtiments 3D (s'il y en a)
@@ -522,7 +539,26 @@ const RealMap = forwardRef<RealMapHandle, {
         // La carte a pu être détruite (changement d'écran) pendant l'attente
         // de la réponse réseau ci-dessus : `map.getSource` planterait sinon.
         if (mapRemovedRef.current) return;
-        const src = map.getSource('route');
+        let src = map.getSource('route');
+        if (!src) {
+          // Filet de sécurité : la source aurait dû être créée dans
+          // 'style.load', mais si ce callback a échoué avant de l'ajouter
+          // (voir plus haut) ou n'a pas encore eu lieu, on la crée ici
+          // plutôt que de silencieusement abandonner le tracé.
+          try {
+            map.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+            map.addLayer({
+              id: 'route-line',
+              type: 'line',
+              source: 'route',
+              layout: { 'line-cap': 'round', 'line-join': 'round' },
+              paint: { 'line-width': 4, 'line-color': routeColor, 'line-opacity': 0.9 },
+            });
+            src = map.getSource('route');
+          } catch {
+            src = undefined;
+          }
+        }
         if (src) src.setData({ type: 'Feature', properties: {}, geometry });
 
         const totalDistance = data?.routes?.[0]?.distance;
