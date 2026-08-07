@@ -83,6 +83,11 @@ function AdminDashboardInner() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    window.location.href = '/';
+  }
+
   async function refresh() {
     try {
       const [f, t, d, m] = await Promise.all([
@@ -282,7 +287,11 @@ function AdminDashboardInner() {
           </svg>
         </button>
         <h2>{NAV_LABELS[nav]}</h2>
-        <span style={{ width: 42 }} />
+        <button className="admin-burger-btn" onClick={handleLogout} aria-label="Déconnexion">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
       </div>
 
       {mobileNavOpen && <div className="admin-nav-overlay" onClick={() => setMobileNavOpen(false)} />}
@@ -301,6 +310,12 @@ function AdminDashboardInner() {
             <span style={{ whiteSpace: 'pre-line' }}>{item.label}</span>
           </button>
         ))}
+        <button className="admin-nav-item admin-nav-item-logout" onClick={handleLogout} style={{ marginTop: 'auto' }}>
+          <NavIcon>
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+          </NavIcon>
+          <span>Déconnexion</span>
+        </button>
       </div>
 
       {error && (

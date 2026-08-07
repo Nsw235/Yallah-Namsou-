@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
 import { updateMyAvatar, updateMyProfileInfo } from '@/lib/driver';
+import { isPushSupported, enablePushNotifications } from '@/lib/push';
 
 export default function AccountMenu({
   session,
@@ -18,6 +19,7 @@ export default function AccountMenu({
   const [phone, setPhone] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [pushState, setPushState] = useState<'off' | 'enabling' | 'on' | 'unsupported'>('off');
 
   // Vue "menu" (par défaut) ou "édition du profil".
   const [editing, setEditing] = useState(false);
@@ -55,6 +57,16 @@ export default function AccountMenu({
     await supabase.auth.signOut();
     // Pas besoin de setSigningOut(false) / onClose() : onAuthStateChange
     // fait revenir sur AuthGate et démonte ce composant.
+  }
+
+  async function handleEnablePush() {
+    if (!isPushSupported()) {
+      setPushState('unsupported');
+      return;
+    }
+    setPushState('enabling');
+    const result = await enablePushNotifications();
+    setPushState(result.ok ? 'on' : 'off');
   }
 
   async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -136,6 +148,19 @@ export default function AccountMenu({
               <span>Aide et assistance</span>
               <span className="menu-item-arrow">›</span>
             </a>
+
+            <button className="menu-item" onClick={handleEnablePush} disabled={pushState === 'enabling' || pushState === 'on'}>
+              <span>
+                {pushState === 'on'
+                  ? 'Notifications activées'
+                  : pushState === 'enabling'
+                  ? 'Activation…'
+                  : pushState === 'unsupported'
+                  ? "Notifications non dispo (ajoute l'app à l'écran d'accueil)"
+                  : 'Activer les notifications'}
+              </span>
+              {pushState === 'off' && <span className="menu-item-arrow">›</span>}
+            </button>
 
             <button className="btn ghost" style={{ width: '100%', marginTop: 14, color: 'var(--danger)' }} onClick={handleSignOut} disabled={signingOut}>
               {signingOut ? 'Déconnexion…' : 'Se déconnecter'}

@@ -45,6 +45,7 @@ import {
 } from '@/lib/driver';
 import AuthGate from '@/components/AuthGate';
 import RealMap, { type NavigationStep, type MapPin } from '@/components/RealMap';
+import { isPushSupported, enablePushNotifications } from '@/lib/push';
 
 const VEHICLE_TYPES: VehicleType[] = ['berline', 'van', 'suv'];
 type BottomTab = 'home' | 'radar' | 'stats' | 'profil';
@@ -133,6 +134,7 @@ export default function DriverDashboard() {
   const [statsLoaded, setStatsLoaded] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [pushState, setPushState] = useState<'off' | 'enabling' | 'on' | 'unsupported'>('off');
   const [navInfo, setNavInfo] = useState<NavigationStep | null>(null);
   const [tripCardExpanded, setTripCardExpanded] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -262,6 +264,19 @@ export default function DriverDashboard() {
   async function handleSignOut() {
     setSigningOut(true);
     await supabase.auth.signOut();
+  }
+
+  async function handleEnablePush() {
+    if (!isPushSupported()) {
+      setPushState('unsupported');
+      return;
+    }
+    setPushState('enabling');
+    const result = await enablePushNotifications();
+    setPushState(result.ok ? 'on' : 'off');
+    if (!result.ok && result.reason !== 'denied') {
+      setError("Impossible d'activer les notifications pour le moment.");
+    }
   }
 
   // Supabase Realtime (WebSocket `trips`) : actif UNIQUEMENT sur l'onglet
@@ -988,6 +1003,26 @@ export default function DriverDashboard() {
                       </div>
                     ))}
                   </div>
+                )}
+
+                <button
+                  onClick={handleEnablePush}
+                  disabled={pushState === 'enabling' || pushState === 'on'}
+                  className="mt-1 flex w-full items-center justify-center gap-1.5 border-[0.5px] border-[rgba(169,122,91,0.4)] py-2.5 text-[11.5px] text-[#e8c9a8]"
+                >
+                  <Bell size={13} />
+                  {pushState === 'on'
+                    ? 'Notifications activées'
+                    : pushState === 'enabling'
+                    ? 'Activation…'
+                    : pushState === 'unsupported'
+                    ? 'Non disponible sur ce navigateur'
+                    : 'Activer les notifications'}
+                </button>
+                {pushState === 'unsupported' && (
+                  <p className="text-[9.5px] text-[#6b5c48]">
+                    Sur iPhone : ajoute d&apos;abord l&apos;app à l&apos;écran d&apos;accueil (partager → Sur l&apos;écran d&apos;accueil), puis reviens ici.
+                  </p>
                 )}
 
                 <button
