@@ -601,6 +601,9 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 }
 .admin-nav-item svg{ width:20px; height:20px; }
 .admin-nav-item.active{ color:var(--copper-light); background:rgba(169,122,91,0.14); border-color:rgba(169,122,91,0.35); }
+.admin-nav-item-logout{ color:#f09595; }
+.admin-nav-item-logout:hover{ background:rgba(226,75,74,0.12); border-color:rgba(226,75,74,0.3); }
+@media (max-width: 1100px){ .admin-nav-item-logout{ margin-top:0 !important; } }
 
 .admin-main{
   grid-column:2; grid-row:1; position:relative; border-radius:24px; overflow:hidden;
