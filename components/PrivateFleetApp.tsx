@@ -143,29 +143,48 @@ export default function PrivateFleetApp() {
   // in_progress) au chargement — après un rechargement de page, un crash
   // d'onglet, ou une réouverture de l'app, le passager ne doit jamais
   // "perdre" une course en cours et se retrouver sur l'écran de réservation
-  // comme si de rien n'était. Ne s'exécute qu'une fois par session.
+  // comme si de rien n'était.
   const restoredActiveTrip = useRef(false);
+
+  async function restoreActiveTrip(userId: string) {
+    try {
+      const active = await getActiveTripForPassenger(userId);
+      if (!active) return;
+      setTrip(active);
+      if (active.status === 'pending') {
+        setStep(3);
+        return;
+      }
+      if (!active.driver_id || !active.vehicle_id) return;
+      const { driver: d, vehicle: v } = await getDriverAndVehicle(active.driver_id, active.vehicle_id);
+      setDriver(d);
+      setVehicleInfo(v);
+      setStep(active.status === 'in_progress' ? 5 : 4);
+    } catch {
+      // Silencieux : au pire le passager repart de l'écran de réservation,
+      // ce qui reste préférable à un écran bloqué sur une erreur au démarrage.
+    }
+  }
+
   useEffect(() => {
     if (!session?.user || restoredActiveTrip.current) return;
     restoredActiveTrip.current = true;
-    getActiveTripForPassenger(session.user.id)
-      .then(async (active) => {
-        if (!active) return;
-        setTrip(active);
-        if (active.status === 'pending') {
-          setStep(3);
-          return;
-        }
-        if (!active.driver_id || !active.vehicle_id) return;
-        const { driver: d, vehicle: v } = await getDriverAndVehicle(active.driver_id, active.vehicle_id);
-        setDriver(d);
-        setVehicleInfo(v);
-        setStep(active.status === 'in_progress' ? 5 : 4);
-      })
-      .catch(() => {
-        // Silencieux : au pire le passager repart de l'écran de réservation,
-        // ce qui reste préférable à un écran bloqué sur une erreur au démarrage.
-      });
+    restoreActiveTrip(session.user.id);
+  }, [session]);
+
+  // Filet de sécurité iOS Safari : quand la page revient au premier plan
+  // depuis le cache "retour arrière" (bfcache) — bouton retour du
+  // navigateur, changement d'onglet — le DOM affiché peut être un instantané
+  // figé d'avant la création de la course (ex. écran de réservation) même
+  // si une course est bel et bien en cours côté serveur. On revérifie
+  // l'état réel à chaque retour au premier plan de ce type.
+  useEffect(() => {
+    function onPageShow(e: PageTransitionEvent) {
+      if (!e.persisted || !session?.user) return;
+      restoreActiveTrip(session.user.id);
+    }
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
   }, [session]);
 
   // Voitures dispos affichées sur la carte avant même le choix d'une adresse.

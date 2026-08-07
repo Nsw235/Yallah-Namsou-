@@ -45,7 +45,7 @@ import {
 } from '@/lib/driver';
 import AuthGate from '@/components/AuthGate';
 import RealMap, { type NavigationStep, type MapPin } from '@/components/RealMap';
-import { isPushSupported, enablePushNotifications } from '@/lib/push';
+import { isPushSupported, enablePushNotifications, sendPushNotification } from '@/lib/push';
 
 const VEHICLE_TYPES: VehicleType[] = ['berline', 'van', 'suv'];
 type BottomTab = 'home' | 'radar' | 'stats' | 'profil';
@@ -354,6 +354,11 @@ export default function DriverDashboard() {
 
   async function handleArrive() {
     if (!active) return;
+    sendPushNotification([active.passenger_id], 'Votre chauffeur arrive', 'Le chauffeur est en route vers vous.', '/client');
+  }
+
+  async function handleStartTrip() {
+    if (!active) return;
     setBusy(true);
     setError(null);
     try {
@@ -655,8 +660,18 @@ export default function DriverDashboard() {
                       ✕ Annuler
                     </button>
                     <button disabled={busy} onClick={handleArrive} className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[10.5px] text-[#e8c9a8]">
-                      ✓ J&apos;arrive
+                      <Bell size={13} /> Prévenir
                     </button>
+                  </div>
+                  <div className="border-t-[0.5px] border-[rgba(169,122,91,0.2)] p-2.5">
+                    <button
+                      disabled={busy}
+                      onClick={handleStartTrip}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#efd9b8] py-2.5 text-[12px] font-medium text-[#3c2a1a]"
+                    >
+                      Démarrer la course
+                    </button>
+                    <p className="mt-1 text-center text-[9.5px] text-[#6b5c48]">À utiliser une fois le passager à bord</p>
                   </div>
                 </div>
               )}
