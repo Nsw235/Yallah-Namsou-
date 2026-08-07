@@ -77,6 +77,7 @@ export default function PrivateFleetApp() {
   const [vehicleInfo, setVehicleInfo] = useState<VehicleInfo | null>(null);
   const [rating, setRating] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [activeTripBanner, setActiveTripBanner] = useState<Trip | null>(null);
   const [busy, setBusy] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -146,10 +147,23 @@ export default function PrivateFleetApp() {
   // comme si de rien n'était.
   const restoredActiveTrip = useRef(false);
 
+  async function fetchActiveTripBanner(userId: string) {
+    try {
+      const active = await getActiveTripForPassenger(userId);
+      setActiveTripBanner(active);
+    } catch {
+      // silencieux — le bandeau reste simplement absent
+    }
+  }
+
   async function restoreActiveTrip(userId: string) {
     try {
       const active = await getActiveTripForPassenger(userId);
-      if (!active) return;
+      if (!active) {
+        setActiveTripBanner(null);
+        return;
+      }
+      setActiveTripBanner(active);
       setTrip(active);
       if (active.status === 'pending') {
         setStep(3);
@@ -164,6 +178,18 @@ export default function PrivateFleetApp() {
       // Silencieux : au pire le passager repart de l'écran de réservation,
       // ce qui reste préférable à un écran bloqué sur une erreur au démarrage.
     }
+  }
+
+  // Bandeau "Course en cours" (écrans 1 et 2 uniquement) : si jamais le
+  // passager se retrouve malgré tout sur l'écran de réservation avec une
+  // course déjà active — plutôt que de le laisser taper dans le vide et
+  // découvrir le conflit seulement à la confirmation, on l'affiche
+  // proactivement avec un accès direct à sa course. La navigation ne se
+  // fait que sur tap explicite (bouton "Voir"), pas automatiquement, pour
+  // ne pas surprendre un passager qui regardait encore le formulaire.
+  async function goToActiveTrip() {
+    if (!session?.user) return;
+    await restoreActiveTrip(session.user.id);
   }
 
   useEffect(() => {
@@ -220,6 +246,7 @@ export default function PrivateFleetApp() {
     setVehicleInfo(null);
     setRating(0);
     setError(null);
+    setActiveTripBanner(null);
     setPaymentMethod('cash');
     setPaymentPhone(undefined);
     setMobilePaymentConfirmed(false);
@@ -250,18 +277,24 @@ export default function PrivateFleetApp() {
       setTrip(newTrip);
       setStep(3);
     } catch (e: any) {
+      const isActiveTripConflict = e?.code === '23505' || e?.message?.includes('trips_one_active_per_passenger');
       // Une requête en double (relance réseau, double-clic) peut échouer après
       // qu'une autre a déjà réussi et fait avancer l'écran : on n'affiche
       // jamais une erreur obsolète par-dessus un écran déjà passé à l'étape 3.
       setStep((current) => {
         if (current === 2) {
-          setError(
-            e?.code === '23505' || e?.message?.includes('trips_one_active_per_passenger')
-              ? 'Vous avez déjà une course en cours. Terminez-la ou annulez-la avant d\'en lancer une nouvelle.'
-              : e?.message?.includes('row-level security')
-              ? "La demande n'a pas pu être envoyée, réessayez."
-              : e?.message ?? 'Impossible de créer la course.'
-          );
+          if (isActiveTripConflict) {
+            // Le bandeau "Course en cours" (avec accès direct à cette
+            // course) remplace le message d'erreur brut — plus clair et
+            // actionnable qu'un texte d'erreur générique.
+            if (session?.user) fetchActiveTripBanner(session.user.id);
+          } else {
+            setError(
+              e?.message?.includes('row-level security')
+                ? "La demande n'a pas pu être envoyée, réessayez."
+                : e?.message ?? 'Impossible de créer la course.'
+            );
+          }
         }
         return current;
       });
@@ -440,6 +473,10 @@ export default function PrivateFleetApp() {
       <div className="device">
         {error && <div className="top-error">{error}</div>}
 
+        {(step === 1 || step === 2) && activeTripBanner && (
+          <ActiveTripBanner trip={activeTripBanner} onView={goToActiveTrip} />
+        )}
+
         {step === 1 && (
           <Screen1
             vehicle={vehicle}
@@ -558,6 +595,60 @@ const VEHICLE_SUBTITLE: Record<VehicleType, string> = {
   van: '7 places',
   suv: '5 places',
 };
+
+/* ---------------------------------------------------------------------- */
+/* Bandeau "Course en cours" — écrans 1 et 2 uniquement, voir goToActiveTrip */
+/* ---------------------------------------------------------------------- */
+function ActiveTripBanner({ trip, onView }: { trip: Trip; onView: () => void }) {
+  const statusLabel = trip.status === 'pending' ? 'Recherche d\'un chauffeur…' : trip.status === 'in_progress' ? 'En route vers la destination' : 'Le chauffeur arrive';
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: 64,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 40,
+        background: 'rgba(13,9,6,0.55)',
+        display: 'flex',
+        justifyContent: 'center',
+        paddingTop: 8,
+      }}
+    >
+      <div
+        style={{
+          width: 'calc(100% - 24px)',
+          maxWidth: 480,
+          height: 'fit-content',
+          background: '#1c1108',
+          border: '0.5px solid #a97a5b',
+          borderRadius: 14,
+          padding: '12px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+        }}
+      >
+        <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#3b2716', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 16 }}>
+          🚗
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: '#f7e6d4' }}>Course en cours</p>
+          <p style={{ margin: '2px 0 0', fontSize: 10.5, color: '#a89680', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {statusLabel} · {trip.pickup_address ?? 'Départ'} → {trip.dropoff_address ?? 'Destination'}
+          </p>
+        </div>
+        <button
+          onClick={onView}
+          style={{ flexShrink: 0, background: '#efd9b8', color: '#3c2a1a', border: 'none', borderRadius: 999, padding: '8px 12px', fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap' }}
+        >
+          Voir
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function Screen1({
   vehicle,
