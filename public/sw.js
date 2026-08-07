@@ -6,7 +6,7 @@ self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
 self.addEventListener("push", (event) => {
-  let donnees = { titre: "Tchad Connect", corps: "Vous avez une nouvelle notification.", url: "/" };
+  let donnees = { titre: "Yallah Namsou", corps: "Vous avez une nouvelle notification.", url: "/" };
   try {
     donnees = { ...donnees, ...event.data.json() };
   } catch {
@@ -16,8 +16,11 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(donnees.titre, {
       body: donnees.corps,
-      icon: "/icone-192.png",
-      badge: "/icone-192.png",
+      icon: "/logo.png",
+      badge: "/logo.png",
+      // Ignoré par iOS Safari (aucune API de vibration sur iOS, quel que
+      // soit le canal — Notification ou Push) ; pris en compte sur Android.
+      vibrate: [200, 100, 200],
       data: { url: donnees.url || "/" },
     })
   );
