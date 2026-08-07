@@ -7,6 +7,7 @@ import {
   VehicleType,
 } from '@/types/database';
 import { GeoResult } from '@/lib/geocode';
+import { sendPushNotification } from '@/lib/push';
 
 /** Récupère la grille tarifaire (une ligne par type de véhicule). */
 export async function getPricingRules(): Promise<PricingRule[]> {
@@ -91,6 +92,16 @@ export async function createTrip(params: {
     provider_reference: params.paymentPhone ?? null,
   });
   if (paymentError) throw paymentError;
+
+  // Notifie tous les chauffeurs en ligne dont le véhicule correspond au type
+  // demandé — best-effort, ne bloque jamais la création de la course.
+  const { data: availableDrivers } = await supabase
+    .from('vehicles')
+    .select('driver_id')
+    .eq('status', 'available')
+    .eq('type', params.vehicleType);
+  const driverIds = Array.from(new Set((availableDrivers ?? []).map((v) => v.driver_id).filter(Boolean)));
+  sendPushNotification(driverIds, 'Nouvelle course disponible', `${params.pickup.address ?? 'Départ'} → ${params.dropoff.address ?? 'Destination'}`, '/chauffeur');
 
   return trip as Trip;
 }

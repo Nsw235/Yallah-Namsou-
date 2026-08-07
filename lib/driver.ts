@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 import { Trip, VehicleType } from '@/types/database';
+import { sendPushNotification } from '@/lib/push';
 
 export type MyVehicle = {
   id: string;
@@ -157,6 +158,7 @@ export async function acceptTrip(tripId: string, driverId: string, vehicleId: st
   if (!data) return null; // course déjà prise par un autre chauffeur
 
   await setVehicleStatus(vehicleId, 'busy');
+  sendPushNotification([data.passenger_id], 'Chauffeur trouvé', 'Un chauffeur a accepté votre course et arrive.', '/client');
   return data as Trip;
 }
 
@@ -168,6 +170,7 @@ export async function startTrip(tripId: string): Promise<Trip> {
     .select()
     .single();
   if (error) throw error;
+  sendPushNotification([data.passenger_id], 'Départ', 'Votre course a commencé — bon trajet !', '/client');
   return data as Trip;
 }
 

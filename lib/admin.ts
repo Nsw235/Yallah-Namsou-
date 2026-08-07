@@ -57,13 +57,15 @@ export async function updateVehicleStatus(vehicleId: string, status: 'offline' |
 
 /**
  * Écoute en temps réel les changements sur `vehicles` (statut, position GPS)
- * pour que la supervision admin (liste flotte + carte) se mette à jour sans
- * recharger la page.
+ * ET sur `trips` (nouvelle course, changement de statut) pour que la
+ * supervision admin (liste flotte + courses actives + carte) se mette à
+ * jour sans recharger la page, y compris quand aucun véhicule ne bouge.
  */
 export function subscribeToFleetChanges(onChange: () => void): () => void {
   const channel = supabase
     .channel('admin-fleet-realtime')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles' }, () => onChange())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'trips' }, () => onChange())
     .subscribe();
 
   return () => {
