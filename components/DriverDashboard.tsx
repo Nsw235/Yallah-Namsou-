@@ -990,46 +990,93 @@ export default function DriverDashboard() {
               {statsLoading && <div className="py-8 text-center text-xs text-[#8a7358]">Chargement…</div>}
 
               {!statsLoading && stats && (
-                <div className="flex flex-col border-b-[0.5px] border-[rgba(169,122,91,0.28)] pb-1">
+                <div className="flex gap-2">
                   {[
-                    { label: "Aujourd'hui", value: stats.today_earnings, count: stats.today_count },
-                    { label: 'Cette semaine', value: stats.week_earnings, count: stats.week_count },
-                    { label: 'Total', value: stats.total_earnings, count: stats.total_count },
+                    {
+                      label: "AUJOURD'HUI",
+                      value: stats.today_earnings,
+                      count: stats.today_count,
+                      bg: 'linear-gradient(155deg,#173a26,#0f2b1a)',
+                      border: '#2f9e5f',
+                      labelColor: '#8fe0ac',
+                      countColor: '#6b8f78',
+                    },
+                    {
+                      label: 'CETTE SEMAINE',
+                      value: stats.week_earnings,
+                      count: stats.week_count,
+                      bg: 'linear-gradient(155deg,#2a2410,#1c1708)',
+                      border: '#d9a441',
+                      labelColor: '#e8c97a',
+                      countColor: '#a68d5a',
+                    },
+                    {
+                      label: 'TOTAL',
+                      value: stats.total_earnings,
+                      count: stats.total_count,
+                      bg: 'linear-gradient(155deg,#1a2333,#101722)',
+                      border: '#4d9fff',
+                      labelColor: '#9cc4f5',
+                      countColor: '#6f8bb0',
+                    },
                   ].map((c) => (
-                    <div key={c.label} className="flex items-center justify-between border-b-[0.5px] border-[rgba(169,122,91,0.15)] py-2.5">
-                      <div>
-                        <div className="text-[11px] text-[#a89680]">{c.label}</div>
-                        <div className="text-[9.5px] text-[#6b5c48]">{c.count} course{c.count > 1 ? 's' : ''}</div>
+                    <div key={c.label} className="flex-1 rounded-xl border-[0.5px] p-2.5" style={{ background: c.bg, borderColor: c.border }}>
+                      <div className="text-[9px]" style={{ color: c.labelColor }}>{c.label}</div>
+                      <div className="mt-1 font-mono text-[14px] font-semibold text-[#f7e6d4]">{formatFCFA(c.value)}</div>
+                      <div className="mt-0.5 text-[8.5px]" style={{ color: c.countColor }}>
+                        {c.count} course{c.count > 1 ? 's' : ''}
                       </div>
-                      <div className="font-mono text-base text-[#e8c9a8]">{formatFCFA(c.value)}</div>
                     </div>
                   ))}
                 </div>
               )}
 
+              {!statsLoading && stats && stats.total_earnings > 0 && (
+                <div className="mt-2.5">
+                  <div className="flex h-1.5 overflow-hidden rounded-full bg-[#1c1108]">
+                    <div className="h-full" style={{ width: `${Math.min(100, (stats.week_earnings / stats.total_earnings) * 100)}%`, background: '#d9a441' }} />
+                    <div className="h-full flex-1" style={{ background: '#4d9fff' }} />
+                  </div>
+                  <p className="mt-1 text-[8.5px] text-[#6b5c48]">
+                    Cette semaine représente {Math.round((stats.week_earnings / stats.total_earnings) * 100)}% du total
+                  </p>
+                </div>
+              )}
+
               {!statsLoading && (
                 <>
-                  <h3 className="mb-1.5 mt-3 text-[11px] font-medium tracking-wide text-[#e8c9a8]">
-                    Historique des courses ({history.length})
+                  <h3 className="mb-1.5 mt-4 text-[11px] font-medium tracking-wide text-[#e8c9a8]">
+                    Historique ({history.length})
                   </h3>
                   {history.length === 0 ? (
                     <div className="border-[0.5px] border-[rgba(169,122,91,0.2)] p-4 text-center text-xs text-[#8a7358]">
                       Aucune course terminée pour le moment.
                     </div>
                   ) : (
-                    <div className="flex flex-col">
-                      {history.map((t) => (
-                        <div key={t.id} className="border-b-[0.5px] border-[rgba(169,122,91,0.15)] py-2.5">
+                    <div className="flex flex-col gap-2">
+                      {history.map((t, i) => (
+                        <div
+                          key={t.id}
+                          className="rounded-r-[10px] bg-[#14100c] py-2 pl-2.5 pr-2.5"
+                          style={{ borderLeft: `3px solid ${i === 0 ? '#2f9e5f' : '#6b4a35'}` }}
+                        >
                           <div className="flex items-center justify-between">
-                            <span className="font-mono text-[10px] text-[#8a7358]">
+                            <span className="text-[9px] text-[#8a7358]">
                               {t.completed_at ? new Date(t.completed_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
                             </span>
-                            <span className="text-[9.5px] text-[#8a7358]">{VEHICLE_LABELS[t.vehicle_type]}</span>
+                            <span
+                              className="rounded-full px-1.5 py-0.5 text-[8px] font-semibold"
+                              style={i === 0 ? { background: '#173a26', color: '#8fe0ac' } : { background: '#2a2118', color: '#e8c9a8' }}
+                            >
+                              {VEHICLE_LABELS[t.vehicle_type]}
+                            </span>
                           </div>
-                          <div className="mt-1 text-[12px] text-[#f7e6d4]">{t.pickup_address ?? 'Départ'} → {t.dropoff_address ?? 'Destination'}</div>
+                          <div className="mt-1 truncate text-[10.5px] leading-tight text-[#f7e6d4]">
+                            {t.pickup_address ?? 'Départ'} → {t.dropoff_address ?? 'Destination'}
+                          </div>
                           <div className="mt-1 flex items-center justify-between">
-                            <span className="text-[10.5px] text-[#8a7358]">{t.distance_km ? `${t.distance_km.toFixed(1)} km` : ''}</span>
-                            <span className="font-mono text-[12.5px] text-[#e8c9a8]">{formatFCFA(t.final_price)}</span>
+                            <span className="text-[9px] text-[#6b5c48]">{t.distance_km ? `${t.distance_km.toFixed(1)} km` : '—'}</span>
+                            <span className="font-mono text-[12px] font-semibold text-[#8fe0ac]">+{formatFCFA(t.final_price)}</span>
                           </div>
                         </div>
                       ))}
