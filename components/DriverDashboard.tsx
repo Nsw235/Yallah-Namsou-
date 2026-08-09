@@ -137,6 +137,7 @@ export default function DriverDashboard() {
   const [pushState, setPushState] = useState<'off' | 'enabling' | 'on' | 'unsupported'>('off');
   const [navInfo, setNavInfo] = useState<NavigationStep | null>(null);
   const [tripCardExpanded, setTripCardExpanded] = useState(false);
+  const [nearestCardExpanded, setNearestCardExpanded] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
@@ -497,7 +498,15 @@ export default function DriverDashboard() {
   // Onglet Radar : un "bonhomme" (avatar + nom + distance) par course en
   // attente, positionné sur son point de départ. La plus proche (première
   // du tri) est mise en évidence (contour vert + pulse).
-  const radarPins: MapPin[] =
+  // Onglet Home : uniquement la plus proche (les autres restent sur Radar,
+  // pour ne pas surcharger l'écran principal).
+  const nearestPending = sortedPending[0] ?? null;
+
+  useEffect(() => {
+    if (!nearestPending) setNearestCardExpanded(false);
+  }, [nearestPending?.id]);
+
+  const pendingPins: MapPin[] =
     bottomTab === 'radar'
       ? sortedPending.map((t, i) => ({
           position: { lat: t.pickup_lat, lng: t.pickup_lng },
@@ -508,7 +517,20 @@ export default function DriverDashboard() {
             highlight: i === 0,
           },
         }))
-      : [];
+      : bottomTab === 'home' && step === 'available' && nearestPending
+        ? [
+            {
+              position: { lat: nearestPending.pickup_lat, lng: nearestPending.pickup_lng },
+              passenger: {
+                initials: initials(nearestPending.passenger_profile?.full_name ?? null),
+                name: nearestPending.passenger_profile?.full_name?.split(' ')[0] ?? 'Passager',
+                distanceKm: driverPos ? haversineKm(driverPos.lat, driverPos.lng, nearestPending.pickup_lat, nearestPending.pickup_lng) : 0,
+                highlight: true,
+              },
+              onClick: () => setNearestCardExpanded(true),
+            },
+          ]
+        : [];
 
   // Onglet HOME : carte plein écran, épurée. Aucune fenêtre modale
   // d'historique/gains ici — uniquement le suivi de la course en cours.
@@ -526,7 +548,7 @@ export default function DriverDashboard() {
               pitch={mapPitch}
               buildings3d
               driverPosition={driverPos}
-              pins={radarPins}
+              pins={pendingPins}
               use3dCar={onTrip}
               carModelUrl={carModelUrl}
               overviewZoom={mapOverviewZoom}
@@ -608,6 +630,28 @@ export default function DriverDashboard() {
               </div>
             )}
 
+            {/* Alerte "nouvelle course · plus proche" — collapsible, uniquement
+                la plus proche (les autres restent listées sur l'onglet Radar). */}
+            {step === 'available' && online && nearestPending && (
+              <button
+                onClick={() => setNearestCardExpanded((v) => !v)}
+                className="relative z-10 mx-3 mt-2 flex w-[calc(100%-24px)] items-center gap-2.5 rounded-2xl border-[0.5px] border-[#2f9e5f] bg-[rgba(15,43,26,0.92)] px-3 py-2.5 text-left backdrop-blur-sm"
+              >
+                <span className="relative flex h-2 w-2 flex-none">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#5be08a] opacity-60" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-[#5be08a]" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="m-0 text-[10.5px] font-semibold text-[#8fe0ac]">Nouvelle course · plus proche</p>
+                  <p className="m-0 mt-[1px] truncate text-[10px] text-[#c9bba8]">
+                    {nearestPending.pickup_address ?? 'Départ'} → {nearestPending.dropoff_address ?? 'Destination'}
+                    {driverPos ? ` · ${haversineKm(driverPos.lat, driverPos.lng, nearestPending.pickup_lat, nearestPending.pickup_lng).toFixed(1)} km` : ''}
+                  </p>
+                </div>
+                <span className="flex-none font-mono text-[11.5px] text-[#f7e6d4]">{formatFCFA(nearestPending.estimated_price)}</span>
+              </button>
+            )}
+
             {error && (
               <div className="relative z-10 mx-3 mt-2 border-[0.5px] border-[rgba(226,75,74,0.3)] px-3 py-2 text-[11px] text-[#e2807f]">{error}</div>
             )}
@@ -623,6 +667,58 @@ export default function DriverDashboard() {
             )}
 
             <div className="absolute inset-x-0 bottom-0 z-10">
+              {step === 'available' && nearestCardExpanded && nearestPending && (
+                <div className="mx-3 mb-3 border-[0.5px] border-[#2f9e5f] bg-[#0f2b1a]">
+                  <button
+                    onClick={() => setNearestCardExpanded(false)}
+                    className="flex w-full items-center justify-between gap-2 border-b-[0.5px] border-dashed border-[rgba(47,158,95,0.35)] px-3 py-2.5 text-left"
+                  >
+                    <span className="text-[9px] font-medium tracking-wide text-[#8fe0ac]">NOUVELLE COURSE · PLUS PROCHE</span>
+                    <ChevronUp size={13} className="flex-none text-[#8fe0ac]" />
+                  </button>
+                  <div className="p-2.5">
+                    <div className="flex min-w-0 flex-col gap-[3px]">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <Circle size={7} className="shrink-0 fill-[#5be08a] text-[#5be08a]" />
+                        <span className="min-w-0 truncate text-[11.5px] leading-tight text-[#f7e6d4]" style={{ textDecoration: 'none' }}>
+                          {nearestPending.pickup_address ?? 'Départ'}
+                        </span>
+                      </div>
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <Flag size={10} className="shrink-0 text-[#8fe0ac]" />
+                        <span className="min-w-0 truncate text-[11.5px] leading-tight text-[#f7e6d4]" style={{ textDecoration: 'none' }}>
+                          {nearestPending.dropoff_address ?? 'Destination'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-[10.5px] text-[#8fe0ac]/80">
+                        {nearestPending.passenger_profile?.full_name ?? 'Passager'} · {VEHICLE_LABELS[nearestPending.vehicle_type]}
+                      </span>
+                      <span className="flex-none font-mono text-[13px] font-medium text-[#f7e6d4]">{formatFCFA(nearestPending.estimated_price)}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5 p-2.5 pt-0">
+                    <button
+                      disabled={busy}
+                      onClick={() => handleDismiss(nearestPending.id)}
+                      aria-label="Refuser"
+                      className="flex flex-1 items-center justify-center gap-1 rounded-full border border-[#E24B4A] bg-[#3a1010] py-[7px] text-[11px] font-medium text-[#F09595] disabled:opacity-50"
+                    >
+                      <span className="text-xs leading-none">✕</span> Refuser
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() => handleAccept(nearestPending)}
+                      aria-label="Accepter"
+                      className="flex flex-1 items-center justify-center gap-1 rounded-full border border-[#5be08a] bg-[#152e04] py-[7px] text-[11px] font-medium text-[#C0DD97] disabled:opacity-50"
+                    >
+                      <span className="text-xs leading-none">✓</span> Accepter
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {step === 'accepted' && active && (
                 <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c]">
                   <button
@@ -816,16 +912,21 @@ export default function DriverDashboard() {
                   <div key={t.id} className="flex w-[calc(100vw-24px)] max-w-[420px] min-w-0 flex-none" style={{ scrollSnapAlign: 'start' }}>
                     <div
                       className="w-[3px] flex-none"
-                      style={{ background: 'repeating-linear-gradient(180deg,#6b4a35 0 4px,transparent 4px 8px)' }}
+                      style={{
+                        background:
+                          i === 0
+                            ? 'repeating-linear-gradient(180deg,#5be08a 0 4px,transparent 4px 8px)'
+                            : 'repeating-linear-gradient(180deg,#6b4a35 0 4px,transparent 4px 8px)',
+                      }}
                     />
-                    <div className={`min-w-0 flex-1 border-[0.5px] border-l-0 p-2.5 ${i === 0 ? 'border-[#a97a5b] bg-[#241a13]' : 'border-[rgba(169,122,91,0.28)] bg-[#14100c]'}`}>
+                    <div className={`min-w-0 flex-1 border-[0.5px] border-l-0 p-2.5 ${i === 0 ? 'border-[#2f9e5f] bg-[#12241a]' : 'border-[rgba(169,122,91,0.28)] bg-[#14100c]'}`}>
                       {loadingDetails.has(t.id) && (
                         <div className="mb-1 border-[0.5px] border-[#378ADD]/40 bg-[#042C53]/60 px-2 py-0.5 text-center text-[8px] font-medium text-[#B5D4F4]">
                           Nouvelle course · détails en cours de chargement
                         </div>
                       )}
                       <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-medium tracking-wide text-[#a97a5b]">
+                        <span className={`text-[9px] font-medium tracking-wide ${i === 0 ? 'text-[#5be08a]' : 'text-[#a97a5b]'}`}>
                           MANIFESTE {i === 0 ? '· PLUS PROCHE' : ''}
                         </span>
                         {driverPos && (
@@ -1064,8 +1165,11 @@ export default function DriverDashboard() {
         ).map(({ key, label, icon: Icon }) => {
           const activeTab = bottomTab === key;
           return (
-            <button key={key} onClick={() => setBottomTab(key)} aria-label={label} className="flex flex-1 flex-col items-center gap-1 py-1.5">
+            <button key={key} onClick={() => setBottomTab(key)} aria-label={label} className="relative flex flex-1 flex-col items-center gap-1 py-1.5">
               <Icon size={15} color={activeTab ? '#e8c9a8' : '#6b5c48'} />
+              {key === 'radar' && sortedPending.length > 0 && (
+                <span className="absolute right-[27%] top-0.5 h-[7px] w-[7px] rounded-full border border-[#1c1108] bg-[#5be08a]" />
+              )}
               <span className="text-[8.5px]" style={{ color: activeTab ? '#e8c9a8' : '#6b5c48' }}>
                 {label}
               </span>

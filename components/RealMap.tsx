@@ -20,6 +20,8 @@ export type MapPin = {
   /** Petit point coloré (pulsant en option) — léger, pour afficher beaucoup de véhicules
    *  d'un coup (ex: carte de supervision flotte côté admin) sans charger un modèle 3D par pin. */
   dot?: { color: string; pulse?: boolean; label?: string };
+  /** Appelé au tap sur ce pin (ex: ouvrir la fiche de la course correspondante). */
+  onClick?: () => void;
 };
 /** Prochaine manœuvre du guidage virage par virage (voir onNavigationUpdate). */
 export type NavigationStep = {
@@ -110,6 +112,10 @@ const RealMap = forwardRef<RealMapHandle, {
   // quelque chose sur lequel on doit compter ici).
   const mapRemovedRef = useRef(false);
   const markersRef = useRef<Record<string, any>>({});
+  // Handlers de clic par marqueur — dans une ref pour toujours appeler la
+  // version la plus récente (props/callbacks) même si l'élément DOM du
+  // marqueur, lui, n'est créé qu'une seule fois et réutilisé ensuite.
+  const markerClickHandlersRef = useRef<Record<string, (() => void) | undefined>>({});
   const animFrames = useRef<Record<string, number>>({});
   // Le style personnalisé du projet n'est pas un style "Standard" (v3) : il
   // n'a pas d'import "basemap" et ne supporte donc PAS l'option `slot` sur
@@ -320,7 +326,7 @@ const RealMap = forwardRef<RealMapHandle, {
 
     async function render() {
       const mapboxgl = (await import('mapbox-gl')).default;
-      const wanted: Record<string, { pos: LatLng; el: () => HTMLElement }> = {};
+      const wanted: Record<string, { pos: LatLng; el: () => HTMLElement; onClick?: () => void }> = {};
 
       if (pickup) {
         wanted['pickup'] = { pos: pickup, el: () => dropEl('#e8c9a8') };
@@ -337,12 +343,13 @@ const RealMap = forwardRef<RealMapHandle, {
           if (!failedModelUrls.has(url)) return; // rendu en modèle 3D réel, pas en marqueur DOM plat
           // Modèle 3D indisponible pour cette URL : repli sur l'icône stylée
           // plutôt que de laisser ce véhicule invisible.
-          wanted[`pin-${i}`] = { pos: p.position, el: () => carIconEl(p.car3d?.heading) };
+          wanted[`pin-${i}`] = { pos: p.position, el: () => carIconEl(p.car3d?.heading), onClick: p.onClick };
           return;
         }
         wanted[`pin-${i}`] = {
           pos: p.position,
           el: () => (p.passenger ? passengerEl(p.passenger) : p.dot ? dotEl(p.dot) : p.emoji ? emojiEl(p.emoji) : carIconEl()),
+          onClick: p.onClick,
         };
       });
 
@@ -351,13 +358,26 @@ const RealMap = forwardRef<RealMapHandle, {
         if (!wanted[key]) {
           markersRef.current[key].remove();
           delete markersRef.current[key];
+          delete markerClickHandlersRef.current[key];
         }
       });
 
-      Object.entries(wanted).forEach(([key, { pos, el }]) => {
+      Object.entries(wanted).forEach(([key, { pos, el, onClick }]) => {
+        // Toujours la dernière version du callback, y compris pour un
+        // marqueur dont l'élément DOM existe déjà (voir écouteur ci-dessous).
+        markerClickHandlersRef.current[key] = onClick;
+
         const existing = markersRef.current[key];
         if (!existing) {
-          const marker = new mapboxgl.Marker({ element: el() }).setLngLat([pos.lng, pos.lat]).addTo(map);
+          const element = el();
+          if (onClick) {
+            element.style.cursor = 'pointer';
+            element.addEventListener('click', (e) => {
+              e.stopPropagation();
+              markerClickHandlersRef.current[key]?.();
+            });
+          }
+          const marker = new mapboxgl.Marker({ element }).setLngLat([pos.lng, pos.lat]).addTo(map);
           markersRef.current[key] = marker;
           return;
         }
