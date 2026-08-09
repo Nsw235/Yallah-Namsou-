@@ -9,6 +9,14 @@ export const metadata: Metadata = {
   icons: {
     icon: '/logo.png',
   },
+  // Empêche Safari iOS de détecter automatiquement adresses/téléphones dans
+  // le texte et de les transformer en liens soulignés cliquables — casse
+  // sinon la mise en forme des cartes de course (adresses, numéros de prix).
+  formatDetection: {
+    telephone: false,
+    address: false,
+    email: false,
+  },
 };
 
 export const viewport: Viewport = {
