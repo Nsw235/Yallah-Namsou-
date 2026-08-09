@@ -813,12 +813,12 @@ export default function DriverDashboard() {
                   </div>
                 )}
                 {sortedPending.map((t, i) => (
-                  <div key={t.id} className="flex w-[calc(100vw-24px)] max-w-[420px] flex-none" style={{ scrollSnapAlign: 'start' }}>
+                  <div key={t.id} className="flex w-[calc(100vw-24px)] max-w-[420px] min-w-0 flex-none" style={{ scrollSnapAlign: 'start' }}>
                     <div
                       className="w-[3px] flex-none"
                       style={{ background: 'repeating-linear-gradient(180deg,#6b4a35 0 4px,transparent 4px 8px)' }}
                     />
-                    <div className={`flex-1 border-[0.5px] border-l-0 p-2.5 ${i === 0 ? 'border-[#a97a5b] bg-[#241a13]' : 'border-[rgba(169,122,91,0.28)] bg-[#14100c]'}`}>
+                    <div className={`min-w-0 flex-1 border-[0.5px] border-l-0 p-2.5 ${i === 0 ? 'border-[#a97a5b] bg-[#241a13]' : 'border-[rgba(169,122,91,0.28)] bg-[#14100c]'}`}>
                       {loadingDetails.has(t.id) && (
                         <div className="mb-1 border-[0.5px] border-[#378ADD]/40 bg-[#042C53]/60 px-2 py-0.5 text-center text-[8px] font-medium text-[#B5D4F4]">
                           Nouvelle course · détails en cours de chargement
@@ -835,16 +835,16 @@ export default function DriverDashboard() {
                         )}
                       </div>
 
-                      <div className="mt-1.5 flex flex-col gap-[3px]">
-                        <div className="flex items-center gap-1.5">
+                      <div className="mt-1.5 flex min-w-0 flex-col gap-[3px]">
+                        <div className="flex min-w-0 items-center gap-1.5">
                           <Circle size={7} className="shrink-0 fill-[#a97a5b] text-[#a97a5b]" />
-                          <span className="truncate text-[11.5px] leading-tight text-[#f7e6d4]">
+                          <span className="min-w-0 truncate text-[11.5px] leading-tight text-[#f7e6d4]" style={{ textDecoration: 'none' }}>
                             {t.pickup_address ?? 'Départ'}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex min-w-0 items-center gap-1.5">
                           <Flag size={10} className="shrink-0 text-[#8a7358]" />
-                          <span className="truncate text-[11.5px] leading-tight text-[#f7e6d4]">
+                          <span className="min-w-0 truncate text-[11.5px] leading-tight text-[#f7e6d4]" style={{ textDecoration: 'none' }}>
                             {loadingDetails.has(t.id)
                               ? `${approxZone(t.dropoff_address)} (adresse exacte à venir…)`
                               : t.dropoff_address ?? 'Destination'}
@@ -852,9 +852,9 @@ export default function DriverDashboard() {
                         </div>
                       </div>
 
-                      <div className="mt-1.5 flex items-center justify-between">
-                        <span className="text-[10.5px] text-[#8a7358]">{t.passenger_profile?.full_name ?? 'Passager'} · {VEHICLE_LABELS[t.vehicle_type]}</span>
-                        <span className="font-mono text-[13px] font-medium text-[#f7e6d4]">{formatFCFA(t.estimated_price)}</span>
+                      <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2">
+                        <span className="min-w-0 truncate text-[10.5px] text-[#8a7358]">{t.passenger_profile?.full_name ?? 'Passager'} · {VEHICLE_LABELS[t.vehicle_type]}</span>
+                        <span className="flex-none font-mono text-[13px] font-medium text-[#f7e6d4]">{formatFCFA(t.estimated_price)}</span>
                       </div>
 
                       <div className="mt-2 flex gap-1.5">
