@@ -502,10 +502,6 @@ export default function DriverDashboard() {
   // pour ne pas surcharger l'écran principal).
   const nearestPending = sortedPending[0] ?? null;
 
-  useEffect(() => {
-    if (!nearestPending) setNearestCardExpanded(false);
-  }, [nearestPending?.id]);
-
   const pendingPins: MapPin[] =
     bottomTab === 'radar'
       ? sortedPending.map((t, i) => ({
