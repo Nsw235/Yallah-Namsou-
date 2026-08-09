@@ -540,7 +540,63 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
   display:flex; flex-direction:column; gap:16px;
   min-height:100vh; background:var(--bg); color:var(--text);
 }
-.driver-card{
+/* ------------------------------------------------------------------ */
+/* Admin v2 — écrans denses, orientés mobile (listes en lignes fines   */
+/* plutôt que cartes empilées), inspirés d'une vraie console pro.      */
+/* ------------------------------------------------------------------ */
+.adm2-section{ padding:13px 14px 10px; border-bottom:0.5px solid #1e1a14; }
+.adm2-section-title{ margin:0; font-size:13px; font-weight:600; color:#ece6d9; }
+.adm2-eyebrow{ margin:0 0 8px; font-size:10px; font-weight:600; color:#8a8171; letter-spacing:.02em; text-transform:uppercase; }
+.adm2-row-header{ display:flex; align-items:center; justify-content:space-between; padding:12px 14px 6px; }
+
+.adm2-search{ margin-top:9px; display:flex; align-items:center; gap:6px; background:#14100c; border:0.5px solid #241f18; border-radius:7px; padding:7px 9px; }
+.adm2-search input{ flex:1; min-width:0; background:transparent; border:none; outline:none; font-size:11px; color:#ece6d9; }
+.adm2-search input::placeholder{ color:#736a5a; }
+
+.adm2-chips{ margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; }
+.adm2-chip{ font-size:9px; color:#8a8171; border:0.5px solid #241f18; border-radius:5px; padding:4px 8px; background:transparent; }
+.adm2-chip.active{ font-weight:600; color:#3c2a1a; background:#e8c9a8; border-color:#e8c9a8; }
+
+.adm2-btn-primary{ display:flex; align-items:center; gap:4px; font-size:9.5px; font-weight:600; color:#3c2a1a; background:#e8c9a8; border:none; border-radius:6px; padding:6px 10px; white-space:nowrap; }
+
+.adm2-list{ padding:0 14px; }
+.adm2-row{ display:flex; align-items:center; gap:9px; padding:9px 0; border-bottom:0.5px solid #1a1712; cursor:pointer; background:none; border-left:none; border-right:none; border-top:none; width:100%; text-align:left; }
+.adm2-row:last-child{ border-bottom:none; }
+.adm2-row-title{ margin:0; font-size:10.5px; color:#ece6d9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.adm2-row-sub{ margin:1px 0 0; font-size:9px; color:#736a5a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.adm2-row-dot{ width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.adm2-row-chevron{ font-size:13px; color:#5a5147; flex-shrink:0; }
+
+.adm2-avatar{ width:28px; height:28px; border-radius:50%; font-size:10px; font-weight:600; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:#1e2e22; color:#8fbfa0; }
+.adm2-avatar.pending{ background:#2a2410; color:#e8c97a; }
+.adm2-avatar.off{ background:#1a1712; color:#8a8171; }
+
+.adm2-badge{ font-size:8px; font-weight:600; border-radius:4px; padding:2px 6px; flex-shrink:0; white-space:nowrap; }
+.adm2-badge-green{ color:#8fbfa0; background:#0e1f14; }
+.adm2-badge-amber{ color:#e8c97a; background:#241f14; }
+.adm2-badge-gray{ color:#a89680; background:#1a1712; }
+.adm2-badge-red{ color:#e2807f; background:#2a1414; }
+
+.adm2-kpi-grid{ display:grid; grid-template-columns:1fr 1fr; gap:1px; background:#1a1712; margin-top:12px; }
+.adm2-kpi-cell{ background:#0f0d0a; padding:9px 12px; }
+.adm2-kpi-cell-label{ margin:0; font-size:9px; color:#8a8171; letter-spacing:.02em; }
+.adm2-kpi-cell-value{ display:flex; align-items:baseline; gap:5px; margin-top:2px; }
+.adm2-kpi-cell-value .n{ font-family:var(--font-mono); font-size:15px; font-weight:600; color:#ece6d9; }
+.adm2-kpi-cell-value .t{ font-size:9px; }
+.adm2-trend-up{ color:#5a9c6f; }
+.adm2-trend-down{ color:#c9645f; }
+
+.adm2-hero{ padding:12px 14px 0; }
+.adm2-hero-top{ display:flex; align-items:flex-end; justify-content:space-between; }
+.adm2-hero-label{ margin:0; font-size:9px; color:#8a8171; letter-spacing:.03em; }
+.adm2-hero-value{ margin:2px 0 0; font-family:var(--font-mono); font-size:22px; font-weight:600; color:#ece6d9; letter-spacing:-0.02em; }
+.adm2-hero-value .unit{ font-size:12px; font-weight:500; color:#8a8171; }
+.adm2-hero-delta{ font-size:10px; font-weight:600; padding-bottom:3px; }
+
+.adm2-empty{ padding:16px 14px; text-align:center; font-size:10.5px; color:#736a5a; }
+
+.adm2-toggle-row{ display:flex; align-items:center; gap:9px; padding:8px 0; border-bottom:0.5px solid #1a1712; }
+.adm2-toggle-row:last-child{ border-bottom:none; }
   background:var(--copper-deep); border:1px solid rgba(169,122,91,0.25);
   border-radius:18px; padding:20px 22px;
 }
