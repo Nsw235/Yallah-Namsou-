@@ -325,135 +325,141 @@ function AdminDashboardInner() {
       )}
 
       {(nav === 'dashboard' || nav === 'map') && (
-        <>
-          <div className="admin-main">
-            <div className="admin-main-head">
-              <h2>Carte interactive de la ville</h2>
-              <div className="admin-status-banner">
-                <span className="dot" />
-                Supervision Totale de la Ville — N&apos;Djamena — {dateStr} — {timeStr}
+        <div>
+          <div className="adm2-section" style={{ borderBottom: 'none' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <p className="adm2-section-title">Vue d&apos;ensemble</p>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, fontWeight: 600, color: '#5a9c6f', background: '#0e1f14', borderRadius: 4, padding: '3px 6px' }}>
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#5a9c6f' }} />LIVE
+              </span>
+            </div>
+            <p style={{ margin: '2px 0 0', fontSize: 9, color: '#736a5a' }}>N&apos;Djamena — {dateStr} — {timeStr}</p>
+          </div>
+
+          <div style={{ position: 'relative', height: 200 }}>
+            <RealMap pitch={0} buildings3d={false} showRoute={false} pins={fleetPins} overviewZoom={12.3} />
+            <div style={{ position: 'absolute', bottom: 8, left: 8, right: 8, display: 'flex', gap: 6, pointerEvents: 'none' }}>
+              <span style={{ flex: 1, fontSize: 8.5, fontWeight: 600, color: '#8fbfa0', background: 'rgba(14,31,20,0.9)', borderRadius: 5, padding: '4px 7px', textAlign: 'center' }}>
+                {availableVehicles.length} attente
+              </span>
+              <span style={{ flex: 1, fontSize: 8.5, fontWeight: 600, color: '#9cc4f5', background: 'rgba(16,23,34,0.9)', borderRadius: 5, padding: '4px 7px', textAlign: 'center' }}>
+                {busyVehicles.length} en course
+              </span>
+              <span style={{ flex: 1, fontSize: 8.5, fontWeight: 600, color: '#a89680', background: 'rgba(26,23,18,0.9)', borderRadius: 5, padding: '4px 7px', textAlign: 'center' }}>
+                {offlineVehicles.length} hors ligne
+              </span>
+            </div>
+          </div>
+
+          <div className="adm2-hero" style={{ paddingTop: 12 }}>
+            <div className="adm2-hero-top">
+              <div>
+                <p className="adm2-hero-label">REVENUS · AUJOURD&apos;HUI</p>
+                <p className="adm2-hero-value">
+                  {metrics ? formatFCFA(metrics.revenueToday).replace(' FCFA', '') : '—'} <span className="unit">FCFA</span>
+                </p>
               </div>
             </div>
-            <div className="admin-map-wrap">
-              <RealMap pitch={0} buildings3d={false} showRoute={false} pins={fleetPins} overviewZoom={12.3} />
-              <div className="admin-map-overlay">
-                <span className="heatmap-label">
-                  {fleetPins.length} véhicule{fleetPins.length !== 1 ? 's' : ''} géolocalisé{fleetPins.length !== 1 ? 's' : ''} en direct
+          </div>
+
+          <div className="adm2-kpi-grid">
+            <div className="adm2-kpi-cell">
+              <p className="adm2-kpi-cell-label">OCCUPATION</p>
+              <div className="adm2-kpi-cell-value">
+                <span className="n">{occupancyRate}%</span>
+                <span className="t" style={{ color: '#736a5a' }}>{busyVehicles.length}/{online.length} en ligne</span>
+              </div>
+            </div>
+            <div className="adm2-kpi-cell">
+              <p className="adm2-kpi-cell-label">ANNULATION</p>
+              <div className="adm2-kpi-cell-value">
+                <span className="n">{metrics ? metrics.cancellationRate : 0}%</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="adm2-row-header">
+            <p className="adm2-section-title" style={{ fontSize: 11 }}>Répartition de la flotte</p>
+            <span style={{ fontSize: 9, color: '#736a5a' }}>{fleet.length} véhicule{fleet.length > 1 ? 's' : ''}</span>
+          </div>
+          <div style={{ padding: '0 14px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {byType.map((b) => (
+              <div key={b.type} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 66, fontSize: 10, color: '#c9c2b3', flexShrink: 0 }}>
+                  {b.type === 'berline' ? 'Berline' : b.type === 'van' ? 'Van' : 'SUV'}
                 </span>
-                <div className="vehicle-positions">
-                  <div className="veh-pos-row"><span className="veh-pos-dot" style={{ background: '#35e6a0' }} />En attente · {availableVehicles.length}</div>
-                  <div className="veh-pos-row"><span className="veh-pos-dot" style={{ background: '#35d4ff' }} />En course · {busyVehicles.length}</div>
-                  <div className="veh-pos-row"><span className="veh-pos-dot" style={{ background: '#8a7a6b' }} />Hors ligne · {offlineVehicles.length}</div>
+                <div style={{ flex: 1, height: 5, borderRadius: 3, background: '#1a1712', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${b.pct}%`, background: typeColors[b.type] }} />
                 </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="admin-side">
-            <div className="admin-panel">
-              <h3>État de la Flotte</h3>
-              <div className="fleet-bars">
-                {[
-                  { v: fleet.length, l: 'Total\nVéhicules' },
-                  { v: online.length, l: 'En\nLigne' },
-                  { v: busyVehicles.length, l: 'En\nCourse' },
-                  { v: availableVehicles.length, l: 'En\nAttente' },
-                  { v: offlineVehicles.length, l: 'Indis-\nponible' },
-                ].map((b, i) => {
-                  const max = Math.max(fleet.length, 1);
-                  return (
-                    <div key={i} className="fleet-bar-col">
-                      <div className="fleet-bar-val">{b.v}</div>
-                      <div className="fleet-bar" style={{ height: `${Math.max(6, (b.v / max) * 100)}%` }} />
-                      <div className="fleet-bar-lbl" style={{ whiteSpace: 'pre-line' }}>{b.l}</div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="donut-row">
-                <div className="donut" style={{ background: fleet.length ? donutGradient : 'rgba(255,255,255,0.08)' }} />
-                <div className="donut-legend">
-                  {byType.map((b) => (
-                    <div key={b.type} className="li">
-                      <span className="sw" style={{ background: typeColors[b.type] }} />
-                      {b.pct}% {b.type === 'berline' ? 'Berline' : b.type === 'van' ? 'Vana' : 'Er SUV'}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="admin-panel">
-              <h3>Performance Clé</h3>
-              <div className="kpi-row">
-                <div className="kpi-box">
-                  <div className="kpi-label">TAUX D&apos;OCCUPATION</div>
-                  <div className="kpi-value up">{occupancyRate}%</div>
-                </div>
-                <div className="kpi-box">
-                  <div className="kpi-label">REVENUS (Temps réel)</div>
-                  <div className="kpi-value">{metrics ? formatFCFA(metrics.revenueToday) : '—'}</div>
-                </div>
-                <div className="kpi-box">
-                  <div className="kpi-label">TAUX D&apos;ANNULATION</div>
-                  <div className="kpi-value down">{metrics ? metrics.cancellationRate : 0}%</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="admin-panel">
-              <h3>Alertes et Incidents</h3>
-              <button
-                className="alert-filter"
-                onClick={() => setAlertFilter((f) => (f === 'all' ? 'crit' : f === 'crit' ? 'warn' : 'all'))}
-              >
-                ⚙ {alertFilter === 'all' ? 'Toutes les alertes' : alertFilter === 'crit' ? 'Critiques uniquement' : 'Avertissements uniquement'}
-              </button>
-              <div className="alert-list">
-                {visibleAlerts.length === 0 && <div className="alert-empty">Aucune alerte actuellement.</div>}
-                {visibleAlerts.map((a, i) => (
-                  <div key={i} className="alert-row">
-                    <span className={`adot ${a.level}`} />
-                    <div className="atext">
-                      <b>{a.title}</b>
-                      <span>{a.sub}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="admin-actions">
-            <h3>Actions Administratives</h3>
-            <div className="admin-actions-grid">
-              <button className="admin-action-btn" onClick={() => setNav('settings')}>GESTION DES TARIFS</button>
-              <button className="admin-action-btn" onClick={() => setActionModal('notif')}>NOTIFICATION FLOTTE</button>
-              <button className="admin-action-btn" onClick={() => setActionModal('maint')}>MAINTENANCE VÉHICULES</button>
-              <button className="admin-action-btn" onClick={() => setActionModal('call')}>APPELS OPÉRATEURS</button>
-            </div>
-          </div>
-        </>
-      )}
-
-      {nav === 'fleet' && (
-        <div className="admin-list-view">
-          <AdminFleetView fleet={fleet} drivers={drivers} busy={busy} onChanged={refresh} />
-          <div className="driver-card">
-            <h2>Courses en cours ({activeTrips.length})</h2>
-            {activeTrips.length === 0 && <p className="route-sub">Aucune course en cours actuellement.</p>}
-            {activeTrips.map((t) => (
-              <div key={t.id} className="driver-list-row">
-                <div>
-                  <div className="driver-name">{t.pickup_address} → {t.dropoff_address}</div>
-                  <div className="route-sub">
-                    {t.passenger_name ?? 'Passager'} avec {t.driver_name ?? 'chauffeur'} · {t.vehicle_type.toUpperCase()} · {formatFCFA(t.estimated_price)}
-                  </div>
-                </div>
-                <span className="star-badge">{t.status}</span>
+                <span style={{ width: 30, fontSize: 9, fontFamily: 'var(--font-mono)', color: '#8a8171', textAlign: 'right', flexShrink: 0 }}>{b.pct}%</span>
               </div>
             ))}
           </div>
+
+          <div className="adm2-row-header">
+            <p className="adm2-section-title" style={{ fontSize: 11 }}>Alertes</p>
+            <button
+              onClick={() => setAlertFilter((f) => (f === 'all' ? 'crit' : f === 'crit' ? 'warn' : 'all'))}
+              style={{ fontSize: 9, color: '#8a8171', background: 'none', border: 'none' }}
+            >
+              {alertFilter === 'all' ? 'Toutes' : alertFilter === 'crit' ? 'Critiques' : 'Avertissements'} ⌄
+            </button>
+          </div>
+          <div className="adm2-list" style={{ paddingBottom: 8 }}>
+            {visibleAlerts.length === 0 && <div className="adm2-empty">Aucune alerte actuellement.</div>}
+            {visibleAlerts.map((a, i) => (
+              <div key={i} className="adm2-toggle-row">
+                <span className="adm2-row-dot" style={{ background: a.level === 'crit' ? '#c9645f' : '#d9a441' }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p className="adm2-row-title">{a.title}</p>
+                  <p className="adm2-row-sub">{a.sub}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="adm2-row-header" style={{ paddingBottom: 8 }}>
+            <p className="adm2-section-title" style={{ fontSize: 11 }}>Actions</p>
+          </div>
+          <div style={{ padding: '0 14px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <button className="adm2-row" style={{ border: '0.5px solid #241f18', borderRadius: 8, justifyContent: 'center' }} onClick={() => setNav('settings')}>
+              <span style={{ fontSize: 10, color: '#c9c2b3' }}>Gestion des tarifs</span>
+            </button>
+            <button className="adm2-row" style={{ border: '0.5px solid #241f18', borderRadius: 8, justifyContent: 'center' }} onClick={() => setActionModal('notif')}>
+              <span style={{ fontSize: 10, color: '#c9c2b3' }}>Notification flotte</span>
+            </button>
+            <button className="adm2-row" style={{ border: '0.5px solid #241f18', borderRadius: 8, justifyContent: 'center' }} onClick={() => setActionModal('maint')}>
+              <span style={{ fontSize: 10, color: '#c9c2b3' }}>Maintenance</span>
+            </button>
+            <button className="adm2-row" style={{ border: '0.5px solid #241f18', borderRadius: 8, justifyContent: 'center' }} onClick={() => setActionModal('call')}>
+              <span style={{ fontSize: 10, color: '#c9c2b3' }}>Appels opérateurs</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {nav === 'fleet' && (
+        <div>
+          <AdminFleetView fleet={fleet} drivers={drivers} busy={busy} onChanged={refresh} />
+          <div className="adm2-row-header" style={{ borderTop: '0.5px solid #1a1712' }}>
+            <p className="adm2-section-title" style={{ fontSize: 11 }}>Courses en cours ({activeTrips.length})</p>
+          </div>
+          {activeTrips.length === 0 ? (
+            <div className="adm2-empty">Aucune course en cours actuellement.</div>
+          ) : (
+            <div className="adm2-list" style={{ paddingBottom: 12 }}>
+              {activeTrips.map((t) => (
+                <div key={t.id} className="adm2-row" style={{ cursor: 'default' }}>
+                  <span className="adm2-row-dot" style={{ background: t.status === 'in_progress' ? '#5a9c6f' : '#d9a441' }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p className="adm2-row-title">{t.pickup_address} → {t.dropoff_address}</p>
+                    <p className="adm2-row-sub">{t.passenger_name ?? 'Passager'} avec {t.driver_name ?? 'chauffeur'} · {t.vehicle_type.toUpperCase()}</p>
+                  </div>
+                  <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: '#8a8171', flexShrink: 0 }}>{formatFCFA(t.estimated_price)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
