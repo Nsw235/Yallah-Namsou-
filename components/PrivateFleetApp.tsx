@@ -500,6 +500,7 @@ export default function PrivateFleetApp() {
             availableVehicles={availableVehicles}
             sheetExpanded={sheetExpanded}
             onExpandSheet={() => setSheetExpanded(true)}
+            onCollapseSheet={() => setSheetExpanded(false)}
           />
         )}
 
@@ -671,6 +672,7 @@ function Screen1({
   availableVehicles,
   sheetExpanded,
   onExpandSheet,
+  onCollapseSheet,
 }: {
   vehicle: VehicleType;
   onSelect: (v: VehicleType) => void;
@@ -686,6 +688,7 @@ function Screen1({
   availableVehicles: AvailableVehicle[];
   sheetExpanded: boolean;
   onExpandSheet: () => void;
+  onCollapseSheet: () => void;
 }) {
   const types: { key: VehicleType; icon: string }[] = [
     { key: 'berline', icon: '/icon_berline.png' },
@@ -751,6 +754,9 @@ function Screen1({
       ) : (
         <div className="yn-ticket">
           <div className="yn-ticket-body">
+            <div className="yn-sheet-handle" onClick={onCollapseSheet} role="button" aria-label="Fermer">
+              <div className="yn-sheet-handle-bar" />
+            </div>
             <div className="yn-addr-group">
               <AddressField label="DÉPART" icon="dot" placeholder="D'où partez-vous ?" value={pickup} onChange={onPickupChange} />
               <AddressField label="DESTINATION" icon="pin" placeholder="Où allez-vous ?" value={dropoff} onChange={onDropoffChange} last />
@@ -1051,8 +1057,8 @@ function Screen2({
             <div className="yn-stub-code">TCHAD<br />N&apos;Djamena</div>
           </div>
           <div className="yn-stub-dash" />
-          <button className="yn-stub-btn" onClick={onConfirm} disabled={busy}>
-            {busy ? 'CONFIRMATION…' : 'ÉMETTRE LE LAISSEZ-PASSER'}
+          <button className="yn-stub-btn yn-stub-btn-confirm" onClick={onConfirm} disabled={busy}>
+            {busy ? 'CONFIRMATION…' : 'VALIDER LA COURSE'}
           </button>
         </div>
       </div>
