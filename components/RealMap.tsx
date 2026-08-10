@@ -20,6 +20,10 @@ export type MapPin = {
   /** Petit point coloré (pulsant en option) — léger, pour afficher beaucoup de véhicules
    *  d'un coup (ex: carte de supervision flotte côté admin) sans charger un modèle 3D par pin. */
   dot?: { color: string; pulse?: boolean; label?: string };
+  /** Icône véhicule à plat (PNG) — vue de dessus/profil, sans les coûts et risques
+   *  d'affichage d'un modèle 3D (chargement GLB, éclairage, échelle). Utilisée pour les
+   *  vues avec plusieurs véhicules à la fois (flotte admin, véhicules dispo passager). */
+  icon?: { url: string; ringColor?: string; label?: string };
   /** Appelé au tap sur ce pin (ex: ouvrir la fiche de la course correspondante). */
   onClick?: () => void;
 };
@@ -348,7 +352,7 @@ const RealMap = forwardRef<RealMapHandle, {
         }
         wanted[`pin-${i}`] = {
           pos: p.position,
-          el: () => (p.passenger ? passengerEl(p.passenger) : p.dot ? dotEl(p.dot) : p.emoji ? emojiEl(p.emoji) : carIconEl()),
+          el: () => (p.icon ? iconEl(p.icon) : p.passenger ? passengerEl(p.passenger) : p.dot ? dotEl(p.dot) : p.emoji ? emojiEl(p.emoji) : carIconEl()),
           onClick: p.onClick,
         };
       });
@@ -790,6 +794,56 @@ function dotEl(dot: { color: string; pulse?: boolean; label?: string }): HTMLEle
     style.textContent =
       '@keyframes yn-dot-pulse{0%{transform:scale(1);opacity:.45}100%{transform:scale(2.6);opacity:0}}';
     document.head.appendChild(style);
+  }
+
+  return wrap;
+}
+
+function iconEl(icon: { url: string; ringColor?: string; label?: string }): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.style.position = 'relative';
+  wrap.style.width = '38px';
+  wrap.style.height = '38px';
+  wrap.style.display = 'flex';
+  wrap.style.alignItems = 'center';
+  wrap.style.justifyContent = 'center';
+
+  const badge = document.createElement('div');
+  badge.style.width = '36px';
+  badge.style.height = '36px';
+  badge.style.borderRadius = '50%';
+  badge.style.background = 'rgba(20,16,12,0.92)';
+  badge.style.border = `2px solid ${icon.ringColor ?? '#a97a5b'}`;
+  badge.style.boxShadow = '0 2px 8px rgba(0,0,0,0.45)';
+  badge.style.display = 'flex';
+  badge.style.alignItems = 'center';
+  badge.style.justifyContent = 'center';
+  badge.style.overflow = 'hidden';
+
+  const img = document.createElement('img');
+  img.src = icon.url;
+  img.alt = '';
+  img.style.width = '86%';
+  img.style.height = '86%';
+  img.style.objectFit = 'contain';
+  badge.appendChild(img);
+  wrap.appendChild(badge);
+
+  if (icon.label) {
+    const tag = document.createElement('div');
+    tag.textContent = icon.label;
+    tag.style.position = 'absolute';
+    tag.style.top = '40px';
+    tag.style.left = '50%';
+    tag.style.transform = 'translateX(-50%)';
+    tag.style.fontSize = '9px';
+    tag.style.fontWeight = '700';
+    tag.style.color = '#f2f3f5';
+    tag.style.background = 'rgba(10,11,13,0.8)';
+    tag.style.padding = '1px 5px';
+    tag.style.borderRadius = '6px';
+    tag.style.whiteSpace = 'nowrap';
+    wrap.appendChild(tag);
   }
 
   return wrap;

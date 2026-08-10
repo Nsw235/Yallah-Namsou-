@@ -42,12 +42,18 @@ type Step = 1 | 2 | 3 | 4 | 5 | 6;
 /** Convertit la liste des véhicules en ligne (dispo) en pins 3D pour la carte :
  *  utilisé sur les écrans 1, 2 et 3 pour que le passager voie en permanence
  *  les chauffeurs connectés autour de lui, dès qu'ils passent en ligne. */
+const VEHICLE_ICON_BY_TYPE: Record<VehicleType, string> = {
+  berline: '/vehicle-icons/berline.png',
+  suv: '/vehicle-icons/suv.png',
+  van: '/vehicle-icons/van.png',
+};
+
 function vehiclesToCarPins(availableVehicles: AvailableVehicle[]) {
   return availableVehicles
     .filter((v) => v.last_lat != null && v.last_lng != null)
     .map((v) => ({
       position: { lat: v.last_lat as number, lng: v.last_lng as number },
-      car3d: { modelUrl: CAR_MODEL_BY_TYPE[v.type] },
+      icon: { url: VEHICLE_ICON_BY_TYPE[v.type], ringColor: '#a97a5b' },
     }));
 }
 

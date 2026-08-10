@@ -209,13 +209,18 @@ function AdminDashboardInner() {
     busy: '#35d4ff',
     offline: '#8a7a6b',
   };
+  const VEHICLE_ICON: Record<FleetVehicle['type'], string> = {
+    berline: '/vehicle-icons/berline.png',
+    suv: '/vehicle-icons/suv.png',
+    van: '/vehicle-icons/van.png',
+  };
   const fleetPins = fleet
     .filter((v) => v.status !== 'offline' && v.last_lat != null && v.last_lng != null)
     .map((v) => ({
       position: { lat: v.last_lat as number, lng: v.last_lng as number },
-      dot: {
-        color: STATUS_DOT_COLOR[v.status],
-        pulse: v.status === 'busy',
+      icon: {
+        url: VEHICLE_ICON[v.type],
+        ringColor: STATUS_DOT_COLOR[v.status],
         label: v.plate,
       },
     }));
