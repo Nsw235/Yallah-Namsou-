@@ -821,6 +821,28 @@ function AddressField({
   // rognait purement et simplement la liste, la rendant invisible.
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
+  // Ferme la liste dès qu'on clique/touche en dehors du champ, ou qu'on
+  // appuie sur Échap — c'était le bug signalé : la liste de suggestions
+  // s'ouvrait à la saisie mais ne se refermait jamais si on ne cliquait
+  // pas explicitement sur une suggestion (pas de blur, pas de clic-extérieur).
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (rowRef.current && !rowRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (value) return;
     if (query.trim().length < 3) {
@@ -1136,12 +1158,20 @@ function Screen4({
 }) {
   // Texte "communiqué" au passager sur le temps d'arrivée du chauffeur,
   // recalculé en temps réel à partir de l'itinéraire trafic (RealMap → onRouteInfo).
+  const etaMinutes = driverEtaSeconds != null ? Math.max(0, Math.round(driverEtaSeconds / 60)) : null;
   const etaLabel =
     driverEtaSeconds != null
       ? driverEtaSeconds < 60
         ? "Arrive à l'instant"
-        : `Arrive dans ${Math.round(driverEtaSeconds / 60)} min`
-      : 'Localisation du chauffeur…';
+        : `${etaMinutes} min`
+      : '…';
+  // Anneau de progression : 100% de la circonférence à 15 min ou plus, se
+  // vide au fur et à mesure que le chauffeur se rapproche (retour visuel
+  // continu en plus du chiffre, plus lisible d'un coup d'œil).
+  const RING_R = 46;
+  const RING_C = 2 * Math.PI * RING_R;
+  const etaRatio = driverEtaSeconds != null ? Math.min(1, driverEtaSeconds / (15 * 60)) : 1;
+  const ringOffset = RING_C * (1 - etaRatio);
 
   return (
     <div className="screen fade">
@@ -1160,22 +1190,37 @@ function Screen4({
         ]}
       />
       <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
-      <div className="title-banner glass">
-        <h2>CHAUFFEUR EN ROUTE</h2>
-        <div className="sub-route">📍 {trip.pickup_address} → {trip.dropoff_address}</div>
+
+      <div className="eta-hero">
+        <div className="eta-ring">
+          <svg width="104" height="104">
+            <circle className="track" cx="52" cy="52" r={RING_R} />
+            <circle
+              className="bar"
+              cx="52" cy="52" r={RING_R}
+              strokeDasharray={RING_C}
+              strokeDashoffset={ringOffset}
+            />
+          </svg>
+          <div className="eta-num">
+            <span className="n">{etaLabel}</span>
+            {driverEtaSeconds != null && driverEtaSeconds >= 60 && <span className="u">MIN</span>}
+          </div>
+        </div>
+        <div className="eta-label">Votre chauffeur arrive</div>
+        <div className="eta-sub">{driver.full_name ?? 'Le chauffeur'} approche de votre position</div>
       </div>
+
       <div className="yn-ticket">
         <div className="yn-ticket-body">
           <div className="driver-row">
-            <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
+            <div className="avatar-ring yn-avatar-ring-pulse"><div className="av">🧑🏾‍✈️</div></div>
             <div className="driver-info">
               <div className="driver-name">{driver.full_name ?? 'Chauffeur'}</div>
-              <div className="driver-eta">
-                Le chauffeur arrive vers votre position de départ
-                <span className="eta-badge">⏱ {etaLabel}</span>
-              </div>
               <div className="driver-meta">
                 <span className="star-badge">{Number(driver.rating_avg).toFixed(1)} ★</span>
+                <span>·</span>
+                <span>{vehicleInfo.model ?? vehicleInfo.brand}</span>
               </div>
             </div>
             <div>
@@ -1183,15 +1228,26 @@ function Screen4({
                 <div className="plate-top">TCHAD</div>
                 <div className="plate-body">{vehicleInfo.plate}</div>
               </div>
-              <div className="car-model">{vehicleInfo.model ?? vehicleInfo.brand}</div>
             </div>
           </div>
-          <button
-            className="btn ghost"
-            onClick={() => alert(`Appel vers ${driver.full_name ?? 'le chauffeur'} (${driver.phone ?? 'numéro indisponible'})`)}
-          >
-            📞 APPELER
-          </button>
+
+          <div className="yn-actions-row">
+            <button
+              className="yn-act-btn"
+              onClick={() => alert(`Appel vers ${driver.full_name ?? 'le chauffeur'} (${driver.phone ?? 'numéro indisponible'})`)}
+            >
+              <span className="ic">📞</span>Appeler
+            </button>
+            <button className="yn-act-btn" onClick={() => alert('La messagerie in-app arrive bientôt.')}>
+              <span className="ic">💬</span>Message
+            </button>
+            <button className="yn-act-btn" onClick={() => alert('Lien de suivi copié (fonctionnalité à venir).')}>
+              <span className="ic">📍</span>Partager
+            </button>
+            <button className="yn-act-btn danger" onClick={() => alert("L'annulation n'est plus possible : un chauffeur est déjà en route. Contactez-le directement si besoin.")}>
+              <span className="ic">✕</span>Annuler
+            </button>
+          </div>
         </div>
         <div className="yn-ticket-stub">
           <div className="yn-stub-row">
@@ -1223,6 +1279,14 @@ function Screen5({
   trip: Trip;
   driverPos: { lat: number; lng: number } | null;
 }) {
+  // Progression estimée du trajet : distance parcourue depuis le départ
+  // rapportée à la distance totale départ→arrivée, à partir de la position
+  // GPS live du chauffeur. Purement indicatif (ligne droite, pas de suivi
+  // de route réelle), mais donne un repère visuel continu au passager.
+  const totalKm = haversineKm(trip.pickup_lat, trip.pickup_lng, trip.dropoff_lat, trip.dropoff_lng);
+  const doneKm = driverPos ? haversineKm(trip.pickup_lat, trip.pickup_lng, driverPos.lat, driverPos.lng) : 0;
+  const progressPct = totalKm > 0 ? Math.min(96, Math.max(4, Math.round((doneKm / totalKm) * 100))) : 8;
+
   return (
     <div className="screen fade">
       <RealMap
@@ -1249,16 +1313,13 @@ function Screen5({
             </div>
             <div className="driver-name">{formatFCFA(trip.estimated_price)}</div>
           </div>
-          <div className="trip-timeline">
-            <div className="route-line">
-              <div className="route-dot start done" />
-              <div className="route-dash" />
-              <div className="route-dot end active" />
-            </div>
-            <div className="trip-timeline-labels">
-              <div><div className="route-sub" style={{ margin: 0 }}>{trip.pickup_address}</div></div>
-              <div><div className="route-addr" style={{ fontSize: 13 }}>{trip.dropoff_address}</div></div>
-            </div>
+
+          <div className="yn-progress-track">
+            <div className="yn-progress-fill" style={{ width: `${progressPct}%` }} />
+          </div>
+          <div className="yn-timeline-labels">
+            <span><b>Départ</b><br />{trip.pickup_address}</span>
+            <span className="end"><b>Arrivée</b><br />{trip.dropoff_address}</span>
           </div>
         </div>
         <div className="yn-ticket-stub">
@@ -1308,8 +1369,31 @@ function Screen6({
         pins={[{ position: { lat: trip.dropoff_lat, lng: trip.dropoff_lng }, emoji: '🏁' }]}
       />
       <Header onMenuClick={onMenu} />
-      <div className="title-banner glass"><h2>COURSE TERMINÉE</h2></div>
-      <div className="yn-ticket">
+
+      <div className="yn-done-hero">
+        <div className="yn-check-wrap">
+          <div className="yn-check-circle">
+            <svg viewBox="0 0 24 24"><path d="M4 12.5 L9.5 18 L20 6" /></svg>
+          </div>
+          {['38%', '48%', '58%', '44%', '62%'].map((left, i) => (
+            <span
+              key={i}
+              className="yn-confetti"
+              style={{
+                left,
+                background: [
+                  'var(--copper-light)', 'var(--copper)', 'var(--copper-cream)', 'var(--danger)', 'var(--copper-light)',
+                ][i],
+                animationDelay: `${0.5 + i * 0.06}s`,
+              }}
+            />
+          ))}
+        </div>
+        <div className="yn-done-title">Vous êtes arrivé !</div>
+        <div className="yn-done-sub">Merci d&apos;avoir voyagé avec Yalla Nimshi</div>
+      </div>
+
+      <div className="yn-ticket" style={{ top: 230 }}>
         <div className="yn-ticket-body">
           <div className="driver-row">
             <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
