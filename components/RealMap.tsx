@@ -70,6 +70,10 @@ const RealMap = forwardRef<RealMapHandle, {
   driverPosition?: LatLng | null;
   showRoute?: boolean;
   routeColor?: string;
+  /** Active un tracé "vivant" : glow doux sous la ligne + chevrons lumineux
+   *  qui défilent en continu vers la destination, au lieu d'un simple trait
+   *  statique. Prévu pour les vues caméra inclinées (trajet en cours). */
+  routeFlow?: boolean;
   pins?: MapPin[];
   /** Inclinaison de la caméra (0 = vue du dessus, ~55-60 = look isométrique 3D). */
   pitch?: number;
@@ -96,6 +100,7 @@ const RealMap = forwardRef<RealMapHandle, {
   driverPosition,
   showRoute = false,
   routeColor = '#e8c9a8',
+  routeFlow = false,
   pins = [],
   pitch = 0,
   buildings3d = false,
@@ -190,6 +195,17 @@ const RealMap = forwardRef<RealMapHandle, {
         // s'affichait jamais côté passager, sans aucune erreur visible.
         try {
           map.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+          // Halo doux sous le tracé : donne de l'épaisseur/lumière au trait
+          // sans dépendre d'un style Mapbox particulier (line-blur marche
+          // sur tous les styles vecteur classiques ou Standard).
+          map.addLayer({
+            id: 'route-line-glow',
+            type: 'line',
+            source: 'route',
+            ...(hasBasemapImport ? { slot: 'top' } : {}),
+            layout: { 'line-cap': 'round', 'line-join': 'round' },
+            paint: { 'line-width': 14, 'line-color': routeColor, 'line-opacity': 0.18, 'line-blur': 6 },
+          });
           map.addLayer({
             id: 'route-line',
             type: 'line',
@@ -197,6 +213,23 @@ const RealMap = forwardRef<RealMapHandle, {
             ...(hasBasemapImport ? { slot: 'top' } : {}),
             layout: { 'line-cap': 'round', 'line-join': 'round' },
             paint: { 'line-width': 4, 'line-color': routeColor, 'line-opacity': 0.9 },
+          });
+          // Chevrons lumineux qui défilent vers la destination (voir l'effect
+          // d'animation dédié plus bas) — n'existe que quand `routeFlow` est
+          // activé, mais la couche est toujours créée pour simplifier le
+          // toggle (opacité à 0 sinon).
+          map.addLayer({
+            id: 'route-line-flow',
+            type: 'line',
+            source: 'route',
+            ...(hasBasemapImport ? { slot: 'top' } : {}),
+            layout: { 'line-cap': 'round', 'line-join': 'round' },
+            paint: {
+              'line-width': 3,
+              'line-color': '#f7e6d4',
+              'line-opacity': routeFlow ? 0.95 : 0,
+              'line-dasharray': [0, 4, 3],
+            },
           });
         } catch {
           // Au pire le tracé ne s'affiche pas, mais le reste de la carte
@@ -263,6 +296,42 @@ const RealMap = forwardRef<RealMapHandle, {
       mapRef.current = null;
     };
   }, []);
+
+  // Anime les chevrons du tracé "vivant" (voir routeFlow) : on fait défiler
+  // un motif de tirets vers l'avant en boucle, ce qui donne l'impression
+  // d'un flux lumineux continu vers la destination plutôt qu'une ligne
+  // statique. On (re)lit `mapRef.current` à chaque tick plutôt qu'une fois
+  // au montage de l'effect, car la carte peut ne pas encore exister quand
+  // `routeFlow` passe à true juste après un changement d'écran.
+  useEffect(() => {
+    const dashSteps = [
+      [0, 4, 3],
+      [0.5, 4, 2.5],
+      [1, 4, 2],
+      [1.5, 4, 1.5],
+      [2, 4, 1],
+      [2.5, 4, 0.5],
+      [3, 4, 0],
+      [0, 0.5, 3, 3.5],
+    ];
+    let step = 0;
+    const id = window.setInterval(() => {
+      const map = mapRef.current;
+      if (!map || mapRemovedRef.current) return;
+      try {
+        if (!map.getLayer('route-line-flow')) return;
+        map.setPaintProperty('route-line-flow', 'line-opacity', routeFlow ? 0.95 : 0);
+        if (routeFlow) {
+          step = (step + 1) % dashSteps.length;
+          map.setPaintProperty('route-line-flow', 'line-dasharray', dashSteps[step]);
+        }
+      } catch {
+        // La couche peut ne pas exister si le style est encore en train de
+        // charger — on retentera au prochain tick, rien de bloquant.
+      }
+    }, 60);
+    return () => window.clearInterval(id);
+  }, [routeFlow]);
 
   // Force Mapbox GL à recalculer/redimensionner son canvas WebGL dès que son
   // conteneur change de taille (ex: clavier virtuel qui s'ouvre sur mobile —
@@ -572,11 +641,30 @@ const RealMap = forwardRef<RealMapHandle, {
           try {
             map.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
             map.addLayer({
+              id: 'route-line-glow',
+              type: 'line',
+              source: 'route',
+              layout: { 'line-cap': 'round', 'line-join': 'round' },
+              paint: { 'line-width': 14, 'line-color': routeColor, 'line-opacity': 0.18, 'line-blur': 6 },
+            });
+            map.addLayer({
               id: 'route-line',
               type: 'line',
               source: 'route',
               layout: { 'line-cap': 'round', 'line-join': 'round' },
               paint: { 'line-width': 4, 'line-color': routeColor, 'line-opacity': 0.9 },
+            });
+            map.addLayer({
+              id: 'route-line-flow',
+              type: 'line',
+              source: 'route',
+              layout: { 'line-cap': 'round', 'line-join': 'round' },
+              paint: {
+                'line-width': 3,
+                'line-color': '#f7e6d4',
+                'line-opacity': routeFlow ? 0.95 : 0,
+                'line-dasharray': [0, 4, 3],
+              },
             });
             src = map.getSource('route');
           } catch {

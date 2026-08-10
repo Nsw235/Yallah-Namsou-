@@ -557,6 +557,7 @@ export default function DriverDashboard() {
                     : undefined
               }
               showRoute={step === 'accepted' || step === 'in_progress'}
+              routeFlow={onTrip}
               routeColor="#4d9fff"
               onNavigationUpdate={onTrip ? setNavInfo : undefined}
             />

@@ -1368,7 +1368,10 @@ function Screen5({
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
         dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
         driverPosition={driverPos}
+        pitch={75}
+        buildings3d
         showRoute
+        routeFlow
         routeColor="#e8c9a8"
         onRouteInfo={setRouteInfo}
         pins={driverPos ? [{ position: driverPos, car3d: { modelUrl: CAR_MODEL_BY_TYPE[trip.vehicle_type] } }] : []}
