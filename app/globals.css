@@ -427,27 +427,6 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 .yn-stub-dash{ border-top:1px dashed rgba(28,21,18,0.25); margin:4px 0; }
 .yn-stub-btn{ width:100%; border:none; border-radius:11px; padding:8px; font-size:11px; font-weight:800; letter-spacing:.3px; background:var(--copper-deep); color:var(--copper-cream); cursor:pointer; }
 .yn-stub-btn:disabled{ opacity:.5; }
-
-/* Bouton de validation finale de la course (écran 2) : vert + légère
-   surbrillance pulsée, pour un retour visuel net au tap — contraste
-   volontaire avec le cuivre utilisé partout ailleurs sur ce billet. */
-.yn-stub-btn-confirm{
-  background:#1fae5c; color:#eafff2;
-  box-shadow:0 0 0 0 rgba(31,174,92,0.55), 0 2px 10px rgba(31,174,92,0.35);
-  animation:yn-confirm-glow 1.8s ease-in-out infinite;
-}
-.yn-stub-btn-confirm:disabled{ animation:none; box-shadow:none; }
-@keyframes yn-confirm-glow{
-  0%, 100%{ box-shadow:0 0 0 0 rgba(31,174,92,0.45), 0 2px 10px rgba(31,174,92,0.35); }
-  50%{ box-shadow:0 0 0 7px rgba(31,174,92,0), 0 2px 14px rgba(31,174,92,0.55); }
-}
-
-/* Poignée de fermeture du billet déplié (écran 1) : un tap referme le
-   formulaire d'adresses et rend la carte au premier plan, sans réinitialiser
-   la course en préparation (adresses/véhicule restent en mémoire). */
-.yn-sheet-handle{ display:flex; justify-content:center; padding:2px 0 10px; cursor:pointer; }
-.yn-sheet-handle-bar{ width:36px; height:4px; border-radius:99px; background:rgba(232,201,168,0.35); }
-.yn-sheet-handle:active .yn-sheet-handle-bar{ background:rgba(232,201,168,0.6); }
 .yn-used{
   position:absolute; top:6px; right:12px; border:1.5px solid rgba(255,95,95,0.55); color:rgba(200,60,60,0.75);
   font-size:9.5px; font-weight:800; padding:2px 8px; letter-spacing:1px;
@@ -1075,3 +1054,66 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 
 .yn-stamp{ position:absolute; top:-4px; right:14px; border:2px solid rgba(232,201,168,0.55); color:var(--copper-light); font-size:10px; font-weight:900; letter-spacing:1.5px; padding:4px 8px; border-radius:6px; transform:rotate(-14deg); animation:yn-stamp-in .4s .6s cubic-bezier(.3,1.4,.6,1) both; }
 @keyframes yn-stamp-in{ from{ opacity:0; transform:rotate(-14deg) scale(2);} to{ opacity:1; transform:rotate(-14deg) scale(1);} }
+
+/* ---------- Messages rotatifs (recherche / trajet) ---------- */
+.yn-rotating-msg{ display:block; animation:yn-msg-swap .4s ease both; }
+@keyframes yn-msg-swap{ from{ opacity:0; transform:translateY(4px);} to{ opacity:1; transform:translateY(0);} }
+
+/* ---------- Écran 4 : aperçu de trajet qui se dessine ---------- */
+.yn-mini-route{ position:absolute; left:0; right:0; bottom:14px; display:flex; flex-direction:column; align-items:center; gap:2px; padding:0 24px; }
+.yn-mini-route-label{ font-size:10px; color:var(--copper-dark); letter-spacing:.3px; }
+
+/* ---------- Écran 5 : expérience de trajet ---------- */
+.yn-journey-sky{ position:absolute; inset:0; z-index:1; pointer-events:none; opacity:.55; mix-blend-mode:soft-light; }
+.yn-journey-milestone{
+  position:absolute; top:66px; left:16px; right:16px; z-index:12;
+  background:rgba(23,16,10,0.88); border:0.5px solid rgba(232,201,168,0.4); border-radius:14px;
+  padding:10px 14px; text-align:center; font-size:11px; color:var(--copper-cream);
+}
+.yn-journey-stats{ position:absolute; top:118px; left:16px; right:16px; z-index:12; display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.yn-journey-stat{ background:rgba(20,14,9,0.85); border:0.5px solid rgba(169,122,91,0.3); border-radius:12px; padding:8px 4px; text-align:center; }
+.yn-journey-stat .v{ font-size:14px; color:var(--copper-cream); font-weight:600; }
+.yn-journey-stat .l{ font-size:9px; color:var(--text-dim); margin-top:1px; }
+
+/* ---------- Écran 6 : récap voyage ---------- */
+.yn-recap-row{ display:flex; align-items:center; gap:10px; margin-bottom:12px; padding-bottom:12px; border-bottom:1px dashed rgba(169,122,91,0.25); }
+.yn-recap-route{ flex:none; }
+.yn-recap-figures{ display:flex; gap:16px; }
+.yn-recap-figures div{ font-size:11px; color:var(--text-dim); }
+.yn-recap-figures span{ display:block; font-size:16px; font-weight:700; color:var(--copper-cream); }
+
+/* ---------- Panneau course chauffeur (accepted / in_progress) ---------- */
+.yn-trip-panel{
+  position:relative; border-radius:22px; overflow:hidden;
+  background:linear-gradient(165deg,rgba(28,21,18,0.97),rgba(13,9,6,0.98));
+  border:1px solid rgba(169,122,91,0.32);
+  box-shadow:0 -8px 30px rgba(0,0,0,0.45), 0 0 0 1px rgba(0,0,0,0.2);
+  animation:yn-panel-in .38s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes yn-panel-in{ from{ opacity:0; transform:translateY(22px) scale(0.98);} to{ opacity:1; transform:translateY(0) scale(1);} }
+
+.yn-panel-glow{ position:absolute; inset:-40% -20% auto -20%; height:70%; pointer-events:none;
+  background:radial-gradient(closest-side,rgba(169,122,91,0.16),transparent 70%); }
+
+.yn-live-dot{ position:relative; display:inline-flex; width:7px; height:7px; border-radius:50%; background:var(--copper-light); flex:none; }
+.yn-live-dot::after{ content:''; position:absolute; inset:-5px; border-radius:50%; border:1px solid var(--copper-light); animation:yn-live-ping 1.8s ease-out infinite; }
+@keyframes yn-live-ping{ 0%{ transform:scale(0.5); opacity:0.9;} 100%{ transform:scale(2.1); opacity:0;} }
+
+.yn-route-rail{ position:relative; width:16px; flex:none; display:flex; flex-direction:column; align-items:center; }
+.yn-route-rail .line{ width:1.5px; flex:1; margin:3px 0; background:linear-gradient(180deg,var(--copper),rgba(169,122,91,0.2)); position:relative; overflow:hidden; }
+.yn-route-rail .line.active::before{ content:''; position:absolute; left:-2px; right:-2px; height:14px; top:-14px;
+  background:linear-gradient(180deg,transparent,var(--copper-light),transparent); animation:yn-rail-flow 1.6s linear infinite; }
+@keyframes yn-rail-flow{ from{ top:-14px;} to{ top:100%; } }
+
+.yn-cta{ position:relative; overflow:hidden; }
+.yn-cta::after{ content:''; position:absolute; inset:0; background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,0.35) 45%,transparent 60%);
+  transform:translateX(-120%); animation:yn-cta-sheen 2.8s ease-in-out infinite; }
+@keyframes yn-cta-sheen{ 0%,55%{ transform:translateX(-120%);} 100%{ transform:translateX(120%);} }
+.yn-cta:active{ transform:scale(0.97); }
+
+.yn-progress-steps{ display:flex; gap:5px; }
+.yn-progress-steps span{ flex:1; height:3px; border-radius:3px; background:rgba(169,122,91,0.22); overflow:hidden; }
+.yn-progress-steps span i{ display:block; height:100%; width:0%; background:linear-gradient(90deg,var(--copper),var(--copper-light)); transition:width .6s cubic-bezier(.4,0,.2,1); }
+.yn-progress-steps span.done i{ width:100%; }
+.yn-progress-steps span.current i{ width:60%; animation:yn-step-breathe 1.6s ease-in-out infinite; }
+@keyframes yn-step-breathe{ 0%,100%{ width:45%;} 50%{ width:75%;} }
