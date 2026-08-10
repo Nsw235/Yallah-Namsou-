@@ -138,7 +138,7 @@ export async function getActiveTripForPassenger(passengerId: string): Promise<Tr
     .select('*')
     .eq('passenger_id', passengerId)
     .in('status', ['pending', 'accepted', 'in_progress'])
-    .order('created_at', { ascending: false })
+    .order('requested_at', { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) throw error;
