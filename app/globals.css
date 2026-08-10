@@ -429,8 +429,10 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 .yn-stub-btn:disabled{ opacity:.5; }
 .yn-used{
   position:absolute; top:6px; right:12px; border:1.5px solid rgba(255,95,95,0.55); color:rgba(200,60,60,0.75);
-  font-size:9.5px; font-weight:800; padding:2px 8px; transform:rotate(-9deg); letter-spacing:1px;
+  font-size:9.5px; font-weight:800; padding:2px 8px; letter-spacing:1px;
+  animation:yn-stamp-in .4s .6s cubic-bezier(.3,1.4,.6,1) both;
 }
+@keyframes yn-stamp-in{ from{ opacity:0; transform:rotate(-9deg) scale(2);} to{ opacity:1; transform:rotate(-9deg) scale(1);} }
 
 /* Départ + Destination fusionnés dans un seul bloc à bordure fine,
    séparés par un simple trait — remplace les deux .field empilés. */
@@ -1003,3 +1005,52 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
   .admin-actions-grid{ grid-template-columns:1fr 1fr; }
   .vehicles{ gap:6px; }
 }
+
+/* ---------------------------------------------------------------------- */
+/* Écrans passager 4/5/6 — refonte animée (attente / en course / terminée) */
+/* ---------------------------------------------------------------------- */
+.eta-hero{ position:absolute; top:150px; left:0; right:0; z-index:20; display:flex; flex-direction:column; align-items:center; animation:yn-slide-down .5s cubic-bezier(.2,.8,.2,1); pointer-events:none; }
+@keyframes yn-slide-down{ from{ opacity:0; transform:translateY(-14px);} to{ opacity:1; transform:translateY(0);} }
+.eta-ring{ width:104px; height:104px; position:relative; margin-bottom:6px; }
+.eta-ring svg{ transform:rotate(-90deg); }
+.eta-ring circle{ fill:none; stroke-width:5; }
+.eta-ring .track{ stroke:rgba(255,255,255,0.1); }
+.eta-ring .bar{ stroke:var(--copper-light); stroke-linecap:round; filter:drop-shadow(0 0 6px rgba(232,201,168,0.55)); transition:stroke-dashoffset 1s linear; }
+.eta-num{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.eta-num .n{ font-size:24px; font-weight:800; letter-spacing:-.5px; }
+.eta-num .u{ font-size:9px; color:var(--text-dim); font-weight:700; letter-spacing:1px; margin-top:-2px; }
+.eta-label{ font-size:12.5px; font-weight:800; color:var(--copper-light); letter-spacing:.3px; }
+.eta-sub{ font-size:11px; color:var(--text-dim); margin-top:2px; }
+
+.yn-actions-row{ display:flex; gap:8px; margin:2px 0 12px; }
+.yn-act-btn{ flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:14px; padding:10px 0; font-size:10px; font-weight:700; color:var(--text-dim); cursor:pointer; transition:transform .15s ease, background .15s ease; }
+.yn-act-btn:active{ transform:scale(.94); background:rgba(255,255,255,0.09); }
+.yn-act-btn .ic{ font-size:16px; }
+.yn-act-btn.danger{ color:var(--danger); }
+
+.yn-progress-track{ position:relative; height:5px; border-radius:4px; background:rgba(255,255,255,0.08); margin:16px 0 10px; overflow:hidden; }
+.yn-progress-fill{ position:absolute; inset:0 auto 0 0; width:0%; background:linear-gradient(90deg,var(--copper),var(--copper-light)); border-radius:4px; box-shadow:0 0 10px rgba(232,201,168,0.5); transition:width 1.2s ease; }
+.yn-timeline-labels{ display:flex; justify-content:space-between; font-size:10.5px; color:var(--text-dim); gap:12px; }
+.yn-timeline-labels b{ color:var(--text); font-weight:700; }
+.yn-timeline-labels span{ display:block; }
+.yn-timeline-labels .end{ text-align:right; }
+
+.yn-avatar-ring-pulse{ animation:yn-ring-glow 2.6s ease-in-out infinite; }
+@keyframes yn-ring-glow{ 0%,100%{ filter:drop-shadow(0 0 0 rgba(169,122,91,0)); } 50%{ filter:drop-shadow(0 0 10px rgba(169,122,91,0.55)); } }
+
+.yn-done-hero{ position:absolute; top:70px; left:0; right:0; z-index:15; display:flex; flex-direction:column; align-items:center; gap:12px; }
+.yn-check-wrap{ width:96px; height:96px; border-radius:50%; background:radial-gradient(circle,rgba(169,122,91,0.18),transparent 70%); display:flex; align-items:center; justify-content:center; position:relative; }
+.yn-check-circle{ width:76px; height:76px; border-radius:50%; background:linear-gradient(180deg,var(--copper-light),var(--copper)); display:flex; align-items:center; justify-content:center; box-shadow:0 0 30px rgba(169,122,91,0.65); animation:yn-pop-in .55s cubic-bezier(.34,1.56,.64,1); }
+@keyframes yn-pop-in{ 0%{ transform:scale(0); opacity:0;} 70%{ transform:scale(1.15);} 100%{ transform:scale(1); opacity:1;} }
+.yn-check-circle svg{ width:34px; height:34px; }
+.yn-check-circle path{ fill:none; stroke:#241a13; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:40; stroke-dashoffset:40; animation:yn-draw-check .4s .45s ease forwards; }
+@keyframes yn-draw-check{ to{ stroke-dashoffset:0; } }
+.yn-done-title{ font-size:19px; font-weight:800; letter-spacing:.3px; animation:yn-fade-up .5s .3s both; }
+.yn-done-sub{ font-size:12px; color:var(--text-dim); animation:yn-fade-up .5s .4s both; }
+@keyframes yn-fade-up{ from{ opacity:0; transform:translateY(10px);} to{ opacity:1; transform:translateY(0);} }
+
+.yn-confetti{ position:absolute; top:36px; width:6px; height:10px; opacity:0; animation:yn-confetti-fall 1.8s ease-in forwards; pointer-events:none; }
+@keyframes yn-confetti-fall{ 0%{ opacity:1; transform:translateY(0) rotate(0deg);} 100%{ opacity:0; transform:translateY(220px) rotate(360deg);} }
+
+.yn-stamp{ position:absolute; top:-4px; right:14px; border:2px solid rgba(232,201,168,0.55); color:var(--copper-light); font-size:10px; font-weight:900; letter-spacing:1.5px; padding:4px 8px; border-radius:6px; transform:rotate(-14deg); animation:yn-stamp-in .4s .6s cubic-bezier(.3,1.4,.6,1) both; }
+@keyframes yn-stamp-in{ from{ opacity:0; transform:rotate(-14deg) scale(2);} to{ opacity:1; transform:rotate(-14deg) scale(1);} }
