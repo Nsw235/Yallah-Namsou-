@@ -500,7 +500,6 @@ export default function PrivateFleetApp() {
             availableVehicles={availableVehicles}
             sheetExpanded={sheetExpanded}
             onExpandSheet={() => setSheetExpanded(true)}
-            onCollapseSheet={() => setSheetExpanded(false)}
           />
         )}
 
@@ -672,7 +671,6 @@ function Screen1({
   availableVehicles,
   sheetExpanded,
   onExpandSheet,
-  onCollapseSheet,
 }: {
   vehicle: VehicleType;
   onSelect: (v: VehicleType) => void;
@@ -688,7 +686,6 @@ function Screen1({
   availableVehicles: AvailableVehicle[];
   sheetExpanded: boolean;
   onExpandSheet: () => void;
-  onCollapseSheet: () => void;
 }) {
   const types: { key: VehicleType; icon: string }[] = [
     { key: 'berline', icon: '/icon_berline.png' },
@@ -754,9 +751,6 @@ function Screen1({
       ) : (
         <div className="yn-ticket">
           <div className="yn-ticket-body">
-            <div className="yn-sheet-handle" onClick={onCollapseSheet} role="button" aria-label="Fermer">
-              <div className="yn-sheet-handle-bar" />
-            </div>
             <div className="yn-addr-group">
               <AddressField label="DÉPART" icon="dot" placeholder="D'où partez-vous ?" value={pickup} onChange={onPickupChange} />
               <AddressField label="DESTINATION" icon="pin" placeholder="Où allez-vous ?" value={dropoff} onChange={onDropoffChange} last />
@@ -1057,8 +1051,8 @@ function Screen2({
             <div className="yn-stub-code">TCHAD<br />N&apos;Djamena</div>
           </div>
           <div className="yn-stub-dash" />
-          <button className="yn-stub-btn yn-stub-btn-confirm" onClick={onConfirm} disabled={busy}>
-            {busy ? 'CONFIRMATION…' : 'VALIDER LA COURSE'}
+          <button className="yn-stub-btn" onClick={onConfirm} disabled={busy}>
+            {busy ? 'CONFIRMATION…' : 'ÉMETTRE LE LAISSEZ-PASSER'}
           </button>
         </div>
       </div>
@@ -1069,6 +1063,16 @@ function Screen2({
 /* ---------------------------------------------------------------------- */
 /* ÉCRAN 3 — Recherche d'un chauffeur (diffusion temps réel)               */
 /* ---------------------------------------------------------------------- */
+/* Messages qui tournent pendant la recherche d'un chauffeur, pour donner
+   une impression de progression même quand rien de concret n'est encore
+   arrivé côté serveur. */
+const SEARCH_ROTATING_MESSAGES = [
+  'On explore les chauffeurs autour de vous…',
+  'Diffusion de votre demande en cours…',
+  'On vous trouve la meilleure option…',
+  'Ça ne devrait plus tarder…',
+];
+
 function Screen3({
   trip,
   busy,
@@ -1091,6 +1095,14 @@ function Screen3({
   const mm = secondsLeft != null ? Math.floor(secondsLeft / 60) : null;
   const ss = secondsLeft != null ? secondsLeft % 60 : null;
   const carPins = vehiclesToCarPins(availableVehicles);
+  const [msgIndex, setMsgIndex] = useState(0);
+
+  useEffect(() => {
+    if (notice) return;
+    const id = window.setInterval(() => setMsgIndex((i) => (i + 1) % SEARCH_ROTATING_MESSAGES.length), 2800);
+    return () => window.clearInterval(id);
+  }, [notice]);
+
   return (
     <div className="screen fade">
       <RealMap pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }} pins={carPins} />
@@ -1107,10 +1119,8 @@ function Screen3({
       </div>
       <div className="yn-compass-label">
         {notice ? notice.toUpperCase() : "RECHERCHE D'UN CHAUFFEUR"}
-        <span>
-          {notice
-            ? 'Merci de patienter…'
-            : `Diffusion aux ${VEHICLE_LABELS[trip.vehicle_type]} disponibles`}
+        <span key={msgIndex} className="yn-rotating-msg">
+          {notice ? 'Merci de patienter…' : SEARCH_ROTATING_MESSAGES[msgIndex]}
         </span>
         {!notice && secondsLeft != null && mm != null && ss != null && (
           <span style={{ display: 'block', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
@@ -1269,6 +1279,22 @@ function Screen4({
           </div>
         </div>
       </div>
+
+      <div className="yn-mini-route">
+        <svg width="100%" height="34" viewBox="0 0 280 34" preserveAspectRatio="none">
+          <path d="M6,28 Q90,4 150,20 T274,8" stroke="rgba(232,201,168,0.18)" strokeWidth="2" fill="none" />
+          <path
+            d="M6,28 Q90,4 150,20 T274,8"
+            stroke="#e8944a"
+            strokeWidth="2"
+            fill="none"
+            strokeDasharray="400"
+            strokeDashoffset={400 * (1 - (1 - etaRatio))}
+            style={{ transition: 'stroke-dashoffset 1s linear' }}
+          />
+        </svg>
+        <div className="yn-mini-route-label">Le chauffeur trace sa route vers vous</div>
+      </div>
     </div>
   );
 }
@@ -1276,6 +1302,15 @@ function Screen4({
 /* ---------------------------------------------------------------------- */
 /* ÉCRAN 5 — En course                                                    */
 /* ---------------------------------------------------------------------- */
+/* Petits messages qui rythment le trajet, façon "on vous raconte le
+   voyage" plutôt qu'un écran figé — tournent toutes les quelques secondes. */
+const JOURNEY_MESSAGES = [
+  'Installez-vous, on s\'occupe du reste',
+  'Le chauffeur connaît bien cette route',
+  'Presque à mi-chemin',
+  'Trajet suivi en direct, aucune action requise',
+];
+
 function Screen5({
   driver,
   trip,
@@ -1293,20 +1328,75 @@ function Screen5({
   const doneKm = driverPos ? haversineKm(trip.pickup_lat, trip.pickup_lng, driverPos.lat, driverPos.lng) : 0;
   const progressPct = totalKm > 0 ? Math.min(96, Math.max(4, Math.round((doneKm / totalKm) * 100))) : 8;
 
+  // Itinéraire trafic temps réel restant (chauffeur → destination), pour
+  // afficher une distance/ETA qui bouge vraiment pendant le trajet.
+  const [routeInfo, setRouteInfo] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null);
+  const remainingKm = routeInfo ? routeInfo.distanceMeters / 1000 : Math.max(0.3, totalKm - doneKm);
+  const remainingMin = routeInfo ? Math.max(1, Math.round(routeInfo.durationSeconds / 60)) : null;
+  const speedKmh = routeInfo && routeInfo.durationSeconds > 0 ? (routeInfo.distanceMeters / 1000) / (routeInfo.durationSeconds / 3600) : null;
+  const trafficLabel = speedKmh == null ? '—' : speedKmh > 32 ? 'Fluide' : speedKmh > 16 ? 'Modéré' : 'Dense';
+  const trafficColor = speedKmh == null ? '#a89680' : speedKmh > 32 ? '#8fe0ac' : speedKmh > 16 ? '#e8c9a8' : '#e2807f';
+
+  // Heure d'arrivée estimée, recalculée à chaque mise à jour d'itinéraire.
+  const arrivalLabel = useMemo(() => {
+    const base = remainingMin != null ? Date.now() + remainingMin * 60000 : null;
+    if (!base) return null;
+    return new Date(base).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  }, [remainingMin]);
+
+  // Ciel qui suit l'heure de la journée : chaud au lever/coucher, plus
+  // sombre la nuit — simple habillage visuel, purement décoratif.
+  const hour = new Date().getHours();
+  const sky =
+    hour >= 6 && hour < 11
+      ? 'linear-gradient(200deg,#3a2a44 0%,#5a3a2a 35%,#2a1a10 65%,#0d0906 100%)'
+      : hour >= 11 && hour < 17
+        ? 'linear-gradient(200deg,#2a3244 0%,#3a2a1c 35%,#1c1108 65%,#0d0906 100%)'
+        : hour >= 17 && hour < 20
+          ? 'linear-gradient(200deg,#2a1a34 0%,#3a2418 35%,#1c1108 65%,#0d0906 100%)'
+          : 'linear-gradient(200deg,#141018 0%,#1c1108 45%,#0d0906 100%)';
+
+  const [msgIndex, setMsgIndex] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setMsgIndex((i) => (i + 1) % JOURNEY_MESSAGES.length), 7000);
+    return () => window.clearInterval(id);
+  }, []);
+
   return (
     <div className="screen fade">
       <RealMap
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
         dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
+        driverPosition={driverPos}
         showRoute
         routeColor="#e8c9a8"
+        onRouteInfo={setRouteInfo}
         pins={driverPos ? [{ position: driverPos, car3d: { modelUrl: CAR_MODEL_BY_TYPE[trip.vehicle_type] } }] : []}
       />
+      <div className="yn-journey-sky" style={{ background: sky }} />
       <Header locked />
-      <div className="title-banner glass">
-        <h2>EN ROUTE VERS DESTINATION</h2>
-        <div className="sub-route">Le chauffeur vous conduit directement, aucune action requise</div>
+
+      <div className="yn-journey-milestone">
+        <span key={msgIndex} className="yn-rotating-msg">
+          {doneKm > 0.3 ? `${JOURNEY_MESSAGES[msgIndex]} · ${doneKm.toFixed(1)} km parcourus` : JOURNEY_MESSAGES[msgIndex]}
+        </span>
       </div>
+
+      <div className="yn-journey-stats">
+        <div className="yn-journey-stat">
+          <div className="v">{remainingKm.toFixed(1)} km</div>
+          <div className="l">restants</div>
+        </div>
+        <div className="yn-journey-stat">
+          <div className="v">{remainingMin != null ? `${remainingMin} min` : '…'}</div>
+          <div className="l">{arrivalLabel ? `arrivée ${arrivalLabel}` : 'estimées'}</div>
+        </div>
+        <div className="yn-journey-stat">
+          <div className="v" style={{ color: trafficColor }}>{trafficLabel}</div>
+          <div className="l">trafic</div>
+        </div>
+      </div>
+
       <div className="yn-ticket">
         <div className="yn-ticket-body">
           <div className="driver-row">
@@ -1365,6 +1455,12 @@ function Screen6({
   onMenu: () => void;
 }) {
   const isMobileMoney = paymentMethod === 'airtel_money' || paymentMethod === 'moov_money';
+  const durationMin =
+    trip.started_at && trip.completed_at
+      ? Math.max(1, Math.round((new Date(trip.completed_at).getTime() - new Date(trip.started_at).getTime()) / 60000))
+      : null;
+  const km = trip.distance_km ?? haversineKm(trip.pickup_lat, trip.pickup_lng, trip.dropoff_lat, trip.dropoff_lng);
+
   return (
     <div className="screen fade">
       <RealMap
@@ -1401,6 +1497,18 @@ function Screen6({
 
       <div className="yn-ticket" style={{ top: 230 }}>
         <div className="yn-ticket-body">
+          <div className="yn-recap-row">
+            <svg className="yn-recap-route" width="64" height="34" viewBox="0 0 64 34">
+              <path d="M4,28 Q28,6 34,18 T60,6" stroke="var(--copper)" strokeWidth="2" fill="none" />
+              <circle cx="4" cy="28" r="3" fill="#5be08a" />
+              <circle cx="60" cy="6" r="3" fill="var(--copper-light)" />
+            </svg>
+            <div className="yn-recap-figures">
+              <div><span>{km.toFixed(1)}</span> km</div>
+              <div><span>{durationMin ?? '—'}</span> min</div>
+            </div>
+          </div>
+
           <div className="driver-row">
             <div className="avatar-ring"><div className="av">🧑🏾‍✈️</div></div>
             <div className="driver-info">

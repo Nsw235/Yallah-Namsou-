@@ -716,97 +716,37 @@ export default function DriverDashboard() {
               )}
 
               {step === 'accepted' && active && (
-                <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)] bg-[#14100c]">
-                  <button
-                    onClick={() => setTripCardExpanded((v) => !v)}
-                    className="flex w-full items-center justify-between gap-2 border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] px-3 py-2.5 text-left"
-                  >
-                    <span className="text-[9px] font-medium tracking-wide text-[#e8c9a8]">EN ROUTE VERS LE PASSAGER</span>
-                    <ChevronUp size={13} className={`flex-none text-[#8a7358] transition-transform ${tripCardExpanded ? '' : 'rotate-180'}`} />
-                  </button>
-                  {!tripCardExpanded && (
-                    <div className="flex items-center justify-between px-3 py-2.5">
-                      <span className="truncate text-[11.5px] text-[#f7e6d4]">{active.pickup_address ?? 'Adresse de prise en charge'}</span>
-                      <span className="ml-2 flex-none font-mono text-[13px] text-[#f7e6d4]">{formatFCFA(active.estimated_price)}</span>
-                    </div>
-                  )}
-                  {tripCardExpanded && (
-                    <div className="px-3 py-2.5">
-                      <TripCardBody trip={active} passengerName={passengerContact?.full_name ?? null} showDestinationLabel="Destination" />
-                      {passengerContact?.phone && (
-                        <a
-                          href={`tel:${passengerContact.phone}`}
-                          className="mt-2 flex items-center justify-center gap-1.5 border-[0.5px] border-[rgba(169,122,91,0.28)] py-2 text-[10.5px] text-[#e8c9a8]"
-                        >
-                          Contacter · {passengerContact.phone}
-                        </a>
-                      )}
-                    </div>
-                  )}
-                  <div className="flex border-t-[0.5px] border-[rgba(169,122,91,0.2)]">
-                    <button
-                      disabled={busy}
-                      onClick={handleCancel}
-                      className="flex flex-1 items-center justify-center gap-1.5 border-r-[0.5px] border-[rgba(169,122,91,0.2)] py-2.5 text-[10.5px] text-[#e2807f]"
-                    >
-                      ✕ Annuler
-                    </button>
-                    <button disabled={busy} onClick={handleArrive} className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[10.5px] text-[#e8c9a8]">
-                      <Bell size={13} /> Prévenir
-                    </button>
-                  </div>
-                  <div className="border-t-[0.5px] border-[rgba(169,122,91,0.2)] p-2.5">
-                    <button
-                      disabled={busy}
-                      onClick={handleStartTrip}
-                      className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#efd9b8] py-2.5 text-[12px] font-medium text-[#3c2a1a]"
-                    >
-                      Démarrer la course
-                    </button>
-                    <p className="mt-1 text-center text-[9.5px] text-[#6b5c48]">À utiliser une fois le passager à bord</p>
-                  </div>
-                </div>
+                <DriverTripPanel
+                  phase="accepted"
+                  trip={active}
+                  passengerName={passengerContact?.full_name ?? null}
+                  passengerPhone={passengerContact?.phone ?? null}
+                  expanded={tripCardExpanded}
+                  onToggleExpand={() => setTripCardExpanded((v) => !v)}
+                  busy={busy}
+                  onCancel={handleCancel}
+                  onArrive={handleArrive}
+                  onStart={handleStartTrip}
+                  onFinish={handleFinish}
+                  onOpenMaps={openExternalNavigation}
+                />
               )}
 
               {step === 'in_progress' && active && (
-                <div className="mx-3 mb-3 border-[0.5px] border-[rgba(169,122,91,0.28)]">
-                  <div className="bg-[#14100c]">
-                    <button
-                      onClick={() => setTripCardExpanded((v) => !v)}
-                      className="flex w-full items-center justify-between gap-2 border-b-[0.5px] border-dashed border-[rgba(169,122,91,0.3)] px-3 py-2.5 text-left"
-                    >
-                      <span className="text-[9px] font-medium tracking-wide text-[#e8c9a8]">
-                        AVEC {(passengerContact?.full_name ?? 'LA CLIENTE').toUpperCase()}
-                      </span>
-                      <ChevronUp size={13} className={`flex-none text-[#8a7358] transition-transform ${tripCardExpanded ? '' : 'rotate-180'}`} />
-                    </button>
-                    {!tripCardExpanded && (
-                      <div className="flex items-center justify-between px-3 py-2.5">
-                        <span className="truncate text-[11.5px] text-[#f7e6d4]">→ {active.dropoff_address ?? 'Destination'}</span>
-                        <span className="ml-2 flex-none font-mono text-[13px] text-[#f7e6d4]">{formatFCFA(active.estimated_price)}</span>
-                      </div>
-                    )}
-                    {tripCardExpanded && (
-                      <div className="px-3 py-2.5">
-                        <TripCardBody trip={active} passengerName={passengerContact?.full_name ?? null} showDestinationLabel="Destination" />
-                        {passengerContact?.phone && (
-                          <a
-                            href={`tel:${passengerContact.phone}`}
-                            className="mt-2 flex items-center justify-center gap-1.5 border-[0.5px] border-[rgba(169,122,91,0.28)] py-2 text-[10.5px] text-[#e8c9a8]"
-                          >
-                            Contacter · {passengerContact.phone}
-                          </a>
-                        )}
-                        <button onClick={openExternalNavigation} className="mt-2 w-full text-center text-[10px] text-[#8a7358] underline">
-                          Ouvrir dans Maps (secours hors-ligne)
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  <button disabled={busy} onClick={handleFinish} className="w-full bg-[#efd9b8] py-3 text-[12.5px] font-medium text-[#3c2a1a]">
-                    Terminer la course
-                  </button>
-                </div>
+                <DriverTripPanel
+                  phase="in_progress"
+                  trip={active}
+                  passengerName={passengerContact?.full_name ?? null}
+                  passengerPhone={passengerContact?.phone ?? null}
+                  expanded={tripCardExpanded}
+                  onToggleExpand={() => setTripCardExpanded((v) => !v)}
+                  busy={busy}
+                  onCancel={handleCancel}
+                  onArrive={handleArrive}
+                  onStart={handleStartTrip}
+                  onFinish={handleFinish}
+                  onOpenMaps={openExternalNavigation}
+                />
               )}
 
               {step === 'summary' && summaryTrip && (
@@ -1220,6 +1160,155 @@ export default function DriverDashboard() {
           );
         })}
       </nav>
+    </div>
+  );
+}
+
+function DriverTripPanel({
+  phase,
+  trip,
+  passengerName,
+  passengerPhone,
+  expanded,
+  onToggleExpand,
+  busy,
+  onCancel,
+  onArrive,
+  onStart,
+  onFinish,
+  onOpenMaps,
+}: {
+  phase: 'accepted' | 'in_progress';
+  trip: Trip;
+  passengerName: string | null;
+  passengerPhone: string | null;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  busy: boolean;
+  onCancel: () => void;
+  onArrive: () => void;
+  onStart: () => void;
+  onFinish: () => void;
+  onOpenMaps: () => void;
+}) {
+  const goingToPickup = phase === 'accepted';
+
+  return (
+    <div className="yn-trip-panel mx-3 mb-3">
+      <div className="yn-panel-glow" />
+
+      <div className="relative px-3.5 pt-3.5">
+        <div className="yn-progress-steps">
+          <span className={goingToPickup ? 'current' : 'done'}>
+            <i />
+          </span>
+          <span className={goingToPickup ? '' : 'current'}>
+            <i />
+          </span>
+        </div>
+
+        <button onClick={onToggleExpand} className="mt-3 flex w-full items-center justify-between gap-2 text-left">
+          <span className="flex items-center gap-1.5">
+            <span className="yn-live-dot" />
+            <span className="text-[9.5px] font-semibold tracking-[0.14em] text-[#e8c9a8]">
+              {goingToPickup ? 'EN ROUTE VERS LE PASSAGER' : `AVEC ${(passengerName ?? 'LA CLIENTE').toUpperCase()}`}
+            </span>
+          </span>
+          <ChevronUp size={13} className={`flex-none text-[#8a7358] transition-transform duration-300 ${expanded ? '' : 'rotate-180'}`} />
+        </button>
+
+        <div className="mt-3 flex items-center gap-2.5">
+          <div
+            className="yn-avatar-ring-pulse flex h-9 w-9 flex-none items-center justify-center rounded-full border-[1.5px] text-[10.5px] font-medium"
+            style={{ borderColor: 'var(--copper)', color: 'var(--copper-light)' }}
+          >
+            {initials(passengerName)}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[12.5px] text-[#f7e6d4]">{passengerName ?? 'Passager'}</div>
+            <div className="text-[10px] text-[#8a7358]">{VEHICLE_LABELS[trip.vehicle_type]}</div>
+          </div>
+          <span className="flex-none font-mono text-[14px] font-medium text-[#f7e6d4]">{formatFCFA(trip.estimated_price)}</span>
+          {passengerPhone && (
+            <a
+              href={`tel:${passengerPhone}`}
+              aria-label="Appeler le passager"
+              className="flex h-8 w-8 flex-none items-center justify-center rounded-full border-[0.5px] border-[rgba(169,122,91,0.4)] text-[#e8c9a8]"
+            >
+              <Bell size={13} />
+            </a>
+          )}
+        </div>
+
+        {expanded && (
+          <div className="mt-3.5 flex items-stretch pb-1">
+            <div className="yn-route-rail">
+              <Circle size={8} className="shrink-0 fill-[#5be08a] text-[#5be08a]" />
+              <div className={`line ${goingToPickup ? 'active' : ''}`} />
+              <Flag size={11} className="shrink-0 text-[#e8944a]" />
+            </div>
+            <div className="ml-2.5 flex flex-1 flex-col justify-between py-[1px]">
+              <div>
+                <div className="text-[11px] leading-tight text-[#a89680]">Prise en charge</div>
+                <div className="truncate text-[12px] leading-tight text-[#f7e6d4]">{trip.pickup_address ?? 'Départ'}</div>
+              </div>
+              <div className="mt-3">
+                <div className="text-[11px] leading-tight text-[#a89680]">Destination</div>
+                <div className="truncate text-[12px] leading-tight text-[#f7e6d4]">{trip.dropoff_address ?? 'Destination'}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {expanded && !goingToPickup && (
+          <button onClick={onOpenMaps} className="mb-1 w-full text-center text-[10px] text-[#8a7358] underline">
+            Ouvrir dans Maps (secours hors-ligne)
+          </button>
+        )}
+      </div>
+
+      {goingToPickup ? (
+        <>
+          <div className="relative mt-3 flex border-t-[0.5px] border-[rgba(169,122,91,0.2)]">
+            <button
+              disabled={busy}
+              onClick={onCancel}
+              className="flex flex-1 items-center justify-center gap-1.5 border-r-[0.5px] border-[rgba(169,122,91,0.2)] py-2.5 text-[10.5px] text-[#e2807f] transition-opacity active:opacity-60"
+            >
+              ✕ Annuler
+            </button>
+            <button
+              disabled={busy}
+              onClick={onArrive}
+              className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[10.5px] text-[#e8c9a8] transition-opacity active:opacity-60"
+            >
+              <Bell size={13} /> Prévenir
+            </button>
+          </div>
+          <div className="border-t-[0.5px] border-[rgba(169,122,91,0.2)] p-2.5">
+            <button
+              disabled={busy}
+              onClick={onStart}
+              className="yn-cta flex w-full items-center justify-center gap-1.5 rounded-xl py-3 text-[12.5px] font-semibold text-[#3c2a1a] transition-transform"
+              style={{ background: 'linear-gradient(180deg,var(--copper-light),var(--copper))' }}
+            >
+              Démarrer la course
+            </button>
+            <p className="mt-1.5 text-center text-[9.5px] text-[#6b5c48]">À utiliser une fois le passager à bord</p>
+          </div>
+        </>
+      ) : (
+        <div className="border-t-[0.5px] border-[rgba(169,122,91,0.2)] p-2.5">
+          <button
+            disabled={busy}
+            onClick={onFinish}
+            className="yn-cta flex w-full items-center justify-center gap-1.5 rounded-xl py-3 text-[12.5px] font-semibold text-[#3c2a1a] transition-transform"
+            style={{ background: 'linear-gradient(180deg,var(--copper-light),var(--copper))' }}
+          >
+            Terminer la course
+          </button>
+        </div>
+      )}
     </div>
   );
 }
