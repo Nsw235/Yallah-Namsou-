@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
+import { Phone, MessageCircle, Share2, X } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { PaymentMethod, PricingRule, Trip, VehicleType } from '@/types/database';
 import {
@@ -1238,14 +1239,9 @@ function Screen4({
         dropoff={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
         driverPosition={driverPos ?? undefined}
         showRoute
-        routeColor="#e8c9a8"
+        routeFlow
+        routeColor="#e8944a"
         onRouteInfo={(info) => onEtaChange(info ? info.durationSeconds : null)}
-        pins={[
-          {
-            position: driverPos ?? { lat: trip.pickup_lat, lng: trip.pickup_lng },
-            car3d: { modelUrl: CAR_MODEL_BY_TYPE[trip.vehicle_type] },
-          },
-        ]}
       />
       <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
 
@@ -1283,7 +1279,12 @@ function Screen4({
             </div>
             <div>
               <div className="plate">
-                <div className="plate-top">TCHAD</div>
+                <div className="plate-top">
+                  <span className="plate-flag" aria-hidden="true">
+                    <span className="s1" /><span className="s2" /><span className="s3" />
+                  </span>
+                  TCHAD
+                </div>
                 <div className="plate-body">{vehicleInfo.plate}</div>
               </div>
             </div>
@@ -1292,21 +1293,21 @@ function Screen4({
           <div className="yn-actions-row">
             {hasPhone ? (
               <a className="yn-act-btn" href={`tel:${driver.phone}`}>
-                <span className="ic">📞</span>Appeler
+                <span className="ic"><Phone size={15} strokeWidth={1.8} /></span>Appeler
               </a>
             ) : (
               <button className="yn-act-btn" onClick={() => pushToast(`Numéro de ${driverLabel} indisponible pour le moment`)}>
-                <span className="ic">📞</span>Appeler
+                <span className="ic"><Phone size={15} strokeWidth={1.8} /></span>Appeler
               </button>
             )}
             <button className="yn-act-btn" onClick={() => setShowChat(true)}>
-              <span className="ic">💬</span>Message
+              <span className="ic"><MessageCircle size={15} strokeWidth={1.8} /></span>Message
             </button>
             <button className="yn-act-btn" onClick={handleShare}>
-              <span className="ic">📍</span>Partager
+              <span className="ic"><Share2 size={15} strokeWidth={1.8} /></span>Partager
             </button>
             <button className="yn-act-btn danger" onClick={() => pushToast("L'annulation n'est plus possible : un chauffeur est déjà en route. Contactez-le directement si besoin.")}>
-              <span className="ic">✕</span>Annuler
+              <span className="ic"><X size={15} strokeWidth={1.8} /></span>Annuler
             </button>
           </div>
         </div>
@@ -1431,9 +1432,10 @@ function Screen5({
         buildings3d
         showRoute
         routeFlow
-        routeColor="#e8c9a8"
+        routeColor="#e8944a"
         onRouteInfo={setRouteInfo}
-        pins={driverPos ? [{ position: driverPos, car3d: { modelUrl: CAR_MODEL_BY_TYPE[trip.vehicle_type] } }] : []}
+        use3dCar
+        carModelUrl={CAR_MODEL_BY_TYPE[trip.vehicle_type]}
       />
       <div className="yn-journey-sky" style={{ background: sky }} />
       <Header locked />

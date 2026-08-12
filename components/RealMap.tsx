@@ -217,7 +217,7 @@ const RealMap = forwardRef<RealMapHandle, {
             source: 'route',
             ...(hasBasemapImport ? { slot: 'top' } : {}),
             layout: { 'line-cap': 'round', 'line-join': 'round' },
-            paint: { 'line-width': 14, 'line-color': routeColor, 'line-opacity': 0.18, 'line-blur': 6 },
+            paint: { 'line-width': 20, 'line-color': routeColor, 'line-opacity': 0.28, 'line-blur': 7 },
           });
           map.addLayer({
             id: 'route-line',
@@ -225,7 +225,7 @@ const RealMap = forwardRef<RealMapHandle, {
             source: 'route',
             ...(hasBasemapImport ? { slot: 'top' } : {}),
             layout: { 'line-cap': 'round', 'line-join': 'round' },
-            paint: { 'line-width': 4, 'line-color': routeColor, 'line-opacity': 0.9 },
+            paint: { 'line-width': 5.5, 'line-color': routeColor, 'line-opacity': 0.95 },
           });
           // Chevrons lumineux qui défilent vers la destination (voir l'effect
           // d'animation dédié plus bas) — n'existe que quand `routeFlow` est
@@ -238,7 +238,7 @@ const RealMap = forwardRef<RealMapHandle, {
             ...(hasBasemapImport ? { slot: 'top' } : {}),
             layout: { 'line-cap': 'round', 'line-join': 'round' },
             paint: {
-              'line-width': 3,
+              'line-width': 4.5,
               'line-color': '#f7e6d4',
               'line-opacity': routeFlow ? 0.95 : 0,
               'line-dasharray': [0, 4, 3],
@@ -646,14 +646,14 @@ const RealMap = forwardRef<RealMapHandle, {
             type: 'line',
             source: 'route',
             layout: { 'line-cap': 'round', 'line-join': 'round' },
-            paint: { 'line-width': 14, 'line-color': routeColor, 'line-opacity': 0.18, 'line-blur': 6 },
+            paint: { 'line-width': 20, 'line-color': routeColor, 'line-opacity': 0.28, 'line-blur': 7 },
           });
           map!.addLayer({
             id: 'route-line',
             type: 'line',
             source: 'route',
             layout: { 'line-cap': 'round', 'line-join': 'round' },
-            paint: { 'line-width': 4, 'line-color': routeColor, 'line-opacity': 0.9 },
+            paint: { 'line-width': 5.5, 'line-color': routeColor, 'line-opacity': 0.95 },
           });
           map!.addLayer({
             id: 'route-line-flow',
@@ -661,7 +661,7 @@ const RealMap = forwardRef<RealMapHandle, {
             source: 'route',
             layout: { 'line-cap': 'round', 'line-join': 'round' },
             paint: {
-              'line-width': 3,
+              'line-width': 4.5,
               'line-color': '#f7e6d4',
               'line-opacity': routeFlow ? 0.95 : 0,
               'line-dasharray': [0, 4, 3],
@@ -850,23 +850,53 @@ function emojiEl(emoji: string): HTMLElement {
 // modèle 3D .glb ne peut pas être chargé — badge rond cuivré avec un
 // pictogramme de voiture, plutôt que l'émoji 🚗 brut du système.
 function carIconEl(heading?: number): HTMLElement {
+  const outer = document.createElement('div');
+  outer.style.position = 'relative';
+  outer.style.width = '40px';
+  outer.style.height = '40px';
+  outer.style.display = 'flex';
+  outer.style.alignItems = 'center';
+  outer.style.justifyContent = 'center';
+
+  const ring = document.createElement('div');
+  ring.style.position = 'absolute';
+  ring.style.inset = '0';
+  ring.style.borderRadius = '50%';
+  ring.style.background = '#e8944a';
+  ring.style.opacity = '0.3';
+  ring.style.animation = 'yn-dot-pulse 1.8s ease-out infinite';
+  outer.appendChild(ring);
+
   const wrap = document.createElement('div');
+  wrap.style.position = 'relative';
   wrap.style.width = '30px';
   wrap.style.height = '30px';
   wrap.style.borderRadius = '50%';
   wrap.style.background = '#241a13';
-  wrap.style.border = '1.5px solid #a97a5b';
+  wrap.style.border = '1.5px solid #e8944a';
   wrap.style.display = 'flex';
   wrap.style.alignItems = 'center';
   wrap.style.justifyContent = 'center';
   wrap.style.boxShadow = '0 3px 8px rgba(0,0,0,0.5)';
   if (heading != null) wrap.style.transform = `rotate(${heading}deg)`;
   wrap.innerHTML =
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e8c9a8" stroke-width="2" ' +
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f7d199" stroke-width="2" ' +
     'stroke-linecap="round" stroke-linejoin="round"><path d="M5 11l1.5 -4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11" />' +
     '<rect x="2.5" y="11" width="19" height="6" rx="1.5" />' +
     '<circle cx="7" cy="17.5" r="1.5" /><circle cx="17" cy="17.5" r="1.5" /></svg>';
-  return wrap;
+  outer.appendChild(wrap);
+
+  // Réutilise le keyframe 'yn-dot-pulse' (voir dotEl) : un seul <style> injecté
+  // pour toute la carte, peu importe combien de marqueurs pulsent.
+  if (!document.getElementById('yn-dot-pulse-style')) {
+    const style = document.createElement('style');
+    style.id = 'yn-dot-pulse-style';
+    style.textContent =
+      '@keyframes yn-dot-pulse{0%{transform:scale(1);opacity:.45}100%{transform:scale(2.6);opacity:0}}';
+    document.head.appendChild(style);
+  }
+
+  return outer;
 }
 
 function dotEl(dot: { color: string; pulse?: boolean; label?: string }): HTMLElement {
