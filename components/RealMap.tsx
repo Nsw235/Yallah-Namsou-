@@ -38,6 +38,19 @@ export type NavigationStep = {
 // Centre par défaut : N'Djamena, Tchad.
 const DEFAULT_CENTER: LatLng = { lat: 12.1348, lng: 15.0557 };
 
+// Distance à vol d'oiseau (km) — utilisée uniquement pour estimer une durée
+// de secours quand l'API Directions est indisponible (token manquant, hors-ligne…).
+function haversineKmLocal(a: LatLng, b: LatLng): number {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
 
 // Style Mapbox personnalisé (créé dans Mapbox Studio par l'utilisateur).
@@ -618,59 +631,98 @@ const RealMap = forwardRef<RealMapHandle, {
       return;
     }
 
+    // Filet de sécurité : la source/les calques auraient dû être créés dans
+    // 'style.load', mais si ce callback a échoué avant de les ajouter (voir
+    // plus haut) ou n'a pas encore eu lieu, on les crée ici plutôt que de
+    // silencieusement abandonner le tracé — utilisé aussi bien pour
+    // l'itinéraire réel que pour le trait de secours ci-dessous.
+    function ensureRouteLayers() {
+      let src = map!.getSource('route');
+      if (!src) {
+        try {
+          map!.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+          map!.addLayer({
+            id: 'route-line-glow',
+            type: 'line',
+            source: 'route',
+            layout: { 'line-cap': 'round', 'line-join': 'round' },
+            paint: { 'line-width': 14, 'line-color': routeColor, 'line-opacity': 0.18, 'line-blur': 6 },
+          });
+          map!.addLayer({
+            id: 'route-line',
+            type: 'line',
+            source: 'route',
+            layout: { 'line-cap': 'round', 'line-join': 'round' },
+            paint: { 'line-width': 4, 'line-color': routeColor, 'line-opacity': 0.9 },
+          });
+          map!.addLayer({
+            id: 'route-line-flow',
+            type: 'line',
+            source: 'route',
+            layout: { 'line-cap': 'round', 'line-join': 'round' },
+            paint: {
+              'line-width': 3,
+              'line-color': '#f7e6d4',
+              'line-opacity': routeFlow ? 0.95 : 0,
+              'line-dasharray': [0, 4, 3],
+            },
+          });
+          src = map!.getSource('route');
+        } catch {
+          src = undefined;
+        }
+      }
+      return src;
+    }
+
+    // Trait direct départ → arrivée : utilisé chaque fois que l'itinéraire
+    // réel (Mapbox Directions) n'est pas disponible, pour que le passager
+    // voie TOUJOURS un tracé plutôt qu'une carte vide (ex: token Mapbox
+    // manquant, API indisponible, hors-ligne, réponse sans géométrie…).
+    function drawFallbackLine() {
+      if (mapRemovedRef.current) return;
+      const src = ensureRouteLayers();
+      if (src) {
+        src.setData({
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [routeStart!.lng, routeStart!.lat],
+              [dropoff!.lng, dropoff!.lat],
+            ],
+          },
+        });
+      }
+      // Estimation grossière (vitesse moyenne 28 km/h en ville) pour que
+      // l'ETA affichée à l'écran ne reste jamais bloquée sur "…".
+      const distanceMeters = haversineKmLocal(routeStart!, dropoff!) * 1000;
+      const durationSeconds = (distanceMeters / 1000 / 28) * 3600;
+      onRouteInfo?.({ distanceMeters, durationSeconds });
+      onNavigationUpdate?.(null);
+    }
+
     async function drawRoute() {
       const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${routeStart!.lng},${routeStart!.lat};${dropoff!.lng},${dropoff!.lat}?geometries=geojson&overview=full&steps=true&language=fr&access_token=${MAPBOX_TOKEN}`;
       try {
+        if (!MAPBOX_TOKEN) {
+          // Pas de token configuré : inutile d'appeler l'API, on trace
+          // directement le trait de secours.
+          drawFallbackLine();
+          return;
+        }
         const res = await fetch(url);
         const data = await res.json();
         const geometry = data?.routes?.[0]?.geometry;
-        if (!geometry) {
-          onNavigationUpdate?.(null);
-          onRouteInfo?.(null);
+        if (!res.ok || !geometry) {
+          drawFallbackLine();
           return;
         }
         // La carte a pu être détruite (changement d'écran) pendant l'attente
         // de la réponse réseau ci-dessus : `map.getSource` planterait sinon.
         if (mapRemovedRef.current) return;
-        let src = map.getSource('route');
-        if (!src) {
-          // Filet de sécurité : la source aurait dû être créée dans
-          // 'style.load', mais si ce callback a échoué avant de l'ajouter
-          // (voir plus haut) ou n'a pas encore eu lieu, on la crée ici
-          // plutôt que de silencieusement abandonner le tracé.
-          try {
-            map.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-            map.addLayer({
-              id: 'route-line-glow',
-              type: 'line',
-              source: 'route',
-              layout: { 'line-cap': 'round', 'line-join': 'round' },
-              paint: { 'line-width': 14, 'line-color': routeColor, 'line-opacity': 0.18, 'line-blur': 6 },
-            });
-            map.addLayer({
-              id: 'route-line',
-              type: 'line',
-              source: 'route',
-              layout: { 'line-cap': 'round', 'line-join': 'round' },
-              paint: { 'line-width': 4, 'line-color': routeColor, 'line-opacity': 0.9 },
-            });
-            map.addLayer({
-              id: 'route-line-flow',
-              type: 'line',
-              source: 'route',
-              layout: { 'line-cap': 'round', 'line-join': 'round' },
-              paint: {
-                'line-width': 3,
-                'line-color': '#f7e6d4',
-                'line-opacity': routeFlow ? 0.95 : 0,
-                'line-dasharray': [0, 4, 3],
-              },
-            });
-            src = map.getSource('route');
-          } catch {
-            src = undefined;
-          }
-        }
+        const src = ensureRouteLayers();
         if (src) src.setData({ type: 'Feature', properties: {}, geometry });
 
         const totalDistance = data?.routes?.[0]?.distance;
@@ -700,24 +752,8 @@ const RealMap = forwardRef<RealMapHandle, {
           onNavigationUpdate?.(null);
         }
       } catch {
-        // Hors-ligne : trait direct départ → arrivée en secours.
-        onNavigationUpdate?.(null);
-        onRouteInfo?.(null);
-        if (mapRemovedRef.current) return;
-        const src = map.getSource('route');
-        if (src) {
-          src.setData({
-            type: 'Feature',
-            properties: {},
-            geometry: {
-              type: 'LineString',
-              coordinates: [
-                [routeStart!.lng, routeStart!.lat],
-                [dropoff!.lng, dropoff!.lat],
-              ],
-            },
-          });
-        }
+        // Hors-ligne ou erreur réseau : trait direct départ → arrivée en secours.
+        drawFallbackLine();
       }
     }
 

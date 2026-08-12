@@ -36,6 +36,7 @@ import RealMap from '@/components/RealMap';
 import HistoryModal from '@/components/HistoryModal';
 import PaymentModal from '@/components/PaymentModal';
 import AccountMenu from '@/components/AccountMenu';
+import { ToastProvider, useToast } from '@/components/Toast';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -71,7 +72,18 @@ type VehicleInfo = {
   model: string | null;
 };
 
+/** Point d'entrée : fournit le contexte Toast (utilisé pour les retours
+ *  d'action — appel, message, partage — à la place des alert() natifs,
+ *  moins intrusifs et plus cohérents avec le reste de l'app). */
 export default function PrivateFleetApp() {
+  return (
+    <ToastProvider>
+      <PrivateFleetAppScreens />
+    </ToastProvider>
+  );
+}
+
+function PrivateFleetAppScreens() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [step, setStep] = useState<Step>(1);
   const [pricingRules, setPricingRules] = useState<PricingRule[]>([]);
@@ -1172,6 +1184,31 @@ function Screen4({
   driverEtaSeconds: number | null;
   onEtaChange: (seconds: number | null) => void;
 }) {
+  const pushToast = useToast();
+  const driverLabel = driver.full_name ?? 'le chauffeur';
+  const hasPhone = Boolean(driver.phone);
+  // Lien de suivi partageable : la page actuelle (course en cours), avec
+  // repli presse-papiers si l'API Web Share n'est pas disponible (desktop,
+  // navigateurs plus anciens).
+  async function handleShare() {
+    const shareData = {
+      title: 'Yalla Nimshi — suivi de trajet',
+      text: `Je suis en route avec ${driverLabel} (${vehicleInfo.plate}). Suivez mon trajet :`,
+      url: typeof window !== 'undefined' ? window.location.href : '',
+    };
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share(shareData);
+      } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(`${shareData.text} ${shareData.url}`);
+        pushToast('Lien de suivi copié dans le presse-papiers');
+      } else {
+        pushToast("Le partage n'est pas disponible sur ce navigateur");
+      }
+    } catch {
+      // L'utilisateur a annulé la boîte de partage native : rien à faire.
+    }
+  }
   // Texte "communiqué" au passager sur le temps d'arrivée du chauffeur,
   // recalculé en temps réel à partir de l'itinéraire trafic (RealMap → onRouteInfo).
   const etaMinutes = driverEtaSeconds != null ? Math.max(0, Math.round(driverEtaSeconds / 60)) : null;
@@ -1248,19 +1285,31 @@ function Screen4({
           </div>
 
           <div className="yn-actions-row">
-            <button
-              className="yn-act-btn"
-              onClick={() => alert(`Appel vers ${driver.full_name ?? 'le chauffeur'} (${driver.phone ?? 'numéro indisponible'})`)}
-            >
-              <span className="ic">📞</span>Appeler
-            </button>
-            <button className="yn-act-btn" onClick={() => alert('La messagerie in-app arrive bientôt.')}>
-              <span className="ic">💬</span>Message
-            </button>
-            <button className="yn-act-btn" onClick={() => alert('Lien de suivi copié (fonctionnalité à venir).')}>
+            {hasPhone ? (
+              <a className="yn-act-btn" href={`tel:${driver.phone}`}>
+                <span className="ic">📞</span>Appeler
+              </a>
+            ) : (
+              <button className="yn-act-btn" onClick={() => pushToast(`Numéro de ${driverLabel} indisponible pour le moment`)}>
+                <span className="ic">📞</span>Appeler
+              </button>
+            )}
+            {hasPhone ? (
+              <a
+                className="yn-act-btn"
+                href={`sms:${driver.phone}${/iPhone|iPad|iPod/.test(typeof navigator !== 'undefined' ? navigator.userAgent : '') ? '&' : '?'}body=${encodeURIComponent(`Bonjour ${driverLabel}, c'est votre passager Yalla Nimshi.`)}`}
+              >
+                <span className="ic">💬</span>Message
+              </a>
+            ) : (
+              <button className="yn-act-btn" onClick={() => pushToast(`Numéro de ${driverLabel} indisponible pour le moment`)}>
+                <span className="ic">💬</span>Message
+              </button>
+            )}
+            <button className="yn-act-btn" onClick={handleShare}>
               <span className="ic">📍</span>Partager
             </button>
-            <button className="yn-act-btn danger" onClick={() => alert("L'annulation n'est plus possible : un chauffeur est déjà en route. Contactez-le directement si besoin.")}>
+            <button className="yn-act-btn danger" onClick={() => pushToast("L'annulation n'est plus possible : un chauffeur est déjà en route. Contactez-le directement si besoin.")}>
               <span className="ic">✕</span>Annuler
             </button>
           </div>
