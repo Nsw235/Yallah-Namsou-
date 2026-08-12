@@ -88,6 +88,18 @@ export interface Rating {
   created_at: string;
 }
 
+export type TripMessageSenderRole = 'passenger' | 'driver';
+
+export interface TripMessage {
+  id: string;
+  trip_id: string;
+  sender_id: string;
+  sender_role: TripMessageSenderRole;
+  body: string;
+  created_at: string;
+}
+
+
 // Vue enrichie utilisée par l'UI pour afficher le chauffeur d'une course
 export interface TripWithDriver extends Trip {
   driver_profile?: Pick<Profile, 'full_name' | 'phone'> | null;
