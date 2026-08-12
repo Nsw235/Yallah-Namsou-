@@ -3,6 +3,8 @@ import {
   PaymentMethod,
   PricingRule,
   Trip,
+  TripMessage,
+  TripMessageSenderRole,
   TripWithDriver,
   VehicleType,
 } from '@/types/database';
@@ -275,4 +277,64 @@ export async function getTripHistory(passengerId: string): Promise<TripWithDrive
     results.push({ ...trip, driver_profile: profile, vehicle_info: vehicle });
   }
   return results;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Messagerie in-app (course active)                                        */
+/* ------------------------------------------------------------------------ */
+
+/** Historique des messages échangés sur une course, du plus ancien au plus récent. */
+export async function getTripMessages(tripId: string): Promise<TripMessage[]> {
+  const { data, error } = await supabase
+    .from('trip_messages')
+    .select('*')
+    .eq('trip_id', tripId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as TripMessage[];
+}
+
+/**
+ * Envoie un message in-app sur la course. `senderRole` doit correspondre au
+ * rôle réel de l'expéditeur sur cette course précise (vérifié aussi côté
+ * base par la policy RLS trip_messages_insert_participants).
+ */
+export async function sendTripMessage(
+  tripId: string,
+  senderId: string,
+  senderRole: TripMessageSenderRole,
+  body: string
+): Promise<TripMessage> {
+  const trimmed = body.trim();
+  if (!trimmed) throw new Error('Message vide.');
+  const { data, error } = await supabase
+    .from('trip_messages')
+    .insert({ trip_id: tripId, sender_id: senderId, sender_role: senderRole, body: trimmed })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as TripMessage;
+}
+
+/**
+ * Écoute en temps réel les nouveaux messages d'une course — utilisée des
+ * deux côtés (passager et chauffeur) pour afficher la conversation en
+ * direct sans recharger, sur le même principe que subscribeToTrip.
+ */
+export function subscribeToTripMessages(
+  tripId: string,
+  onMessage: (message: TripMessage) => void
+): () => void {
+  const channel = supabase
+    .channel(`trip-messages-${tripId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'trip_messages', filter: `trip_id=eq.${tripId}` },
+      (payload) => onMessage(payload.new as TripMessage)
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
