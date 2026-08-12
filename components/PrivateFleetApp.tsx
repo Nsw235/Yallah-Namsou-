@@ -36,6 +36,7 @@ import RealMap from '@/components/RealMap';
 import HistoryModal from '@/components/HistoryModal';
 import PaymentModal from '@/components/PaymentModal';
 import AccountMenu from '@/components/AccountMenu';
+import ChatModal from '@/components/ChatModal';
 import { ToastProvider, useToast } from '@/components/Toast';
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
@@ -552,6 +553,7 @@ function PrivateFleetAppScreens() {
             busy={busy}
             paymentMethod={paymentMethod}
             driverPos={driverPos}
+            passengerId={session.user.id}
             onOptions={() => setShowHistory(true)}
             onMenu={() => setShowMenu(true)}
             driverEtaSeconds={driverEtaSeconds}
@@ -560,7 +562,7 @@ function PrivateFleetAppScreens() {
         )}
 
         {step === 5 && driver && trip && (
-          <Screen5 driver={driver} trip={trip} driverPos={driverPos} />
+          <Screen5 driver={driver} trip={trip} driverPos={driverPos} passengerId={session.user.id} />
         )}
 
         {step === 6 && driver && trip && (
@@ -1168,6 +1170,7 @@ function Screen4({
   busy,
   paymentMethod,
   driverPos,
+  passengerId,
   onOptions,
   onMenu,
   driverEtaSeconds,
@@ -1179,12 +1182,14 @@ function Screen4({
   busy: boolean;
   paymentMethod: PaymentMethod;
   driverPos: { lat: number; lng: number } | null;
+  passengerId: string;
   onOptions: () => void;
   onMenu: () => void;
   driverEtaSeconds: number | null;
   onEtaChange: (seconds: number | null) => void;
 }) {
   const pushToast = useToast();
+  const [showChat, setShowChat] = useState(false);
   const driverLabel = driver.full_name ?? 'le chauffeur';
   const hasPhone = Boolean(driver.phone);
   // Lien de suivi partageable : la page actuelle (course en cours), avec
@@ -1294,18 +1299,9 @@ function Screen4({
                 <span className="ic">📞</span>Appeler
               </button>
             )}
-            {hasPhone ? (
-              <a
-                className="yn-act-btn"
-                href={`sms:${driver.phone}${/iPhone|iPad|iPod/.test(typeof navigator !== 'undefined' ? navigator.userAgent : '') ? '&' : '?'}body=${encodeURIComponent(`Bonjour ${driverLabel}, c'est votre passager Yalla Nimshi.`)}`}
-              >
-                <span className="ic">💬</span>Message
-              </a>
-            ) : (
-              <button className="yn-act-btn" onClick={() => pushToast(`Numéro de ${driverLabel} indisponible pour le moment`)}>
-                <span className="ic">💬</span>Message
-              </button>
-            )}
+            <button className="yn-act-btn" onClick={() => setShowChat(true)}>
+              <span className="ic">💬</span>Message
+            </button>
             <button className="yn-act-btn" onClick={handleShare}>
               <span className="ic">📍</span>Partager
             </button>
@@ -1344,6 +1340,17 @@ function Screen4({
         </svg>
         <div className="yn-mini-route-label">Le chauffeur trace sa route vers vous</div>
       </div>
+
+      {showChat && (
+        <ChatModal
+          tripId={trip.id}
+          currentUserId={passengerId}
+          myRole="passenger"
+          otherPartyName={driverLabel}
+          otherPartyPhone={driver.phone}
+          onClose={() => setShowChat(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1364,11 +1371,14 @@ function Screen5({
   driver,
   trip,
   driverPos,
+  passengerId,
 }: {
   driver: DriverInfo;
   trip: Trip;
   driverPos: { lat: number; lng: number } | null;
+  passengerId: string;
 }) {
+  const [showChat, setShowChat] = useState(false);
   // Progression estimée du trajet : distance parcourue depuis le départ
   // rapportée à la distance totale départ→arrivée, à partir de la position
   // GPS live du chauffeur. Purement indicatif (ligne droite, pas de suivi
@@ -1459,6 +1469,13 @@ function Screen5({
                 <span className="star-badge">{Number(driver.rating_avg).toFixed(1)} ★</span>
               </div>
             </div>
+            <button
+              className="yn-chat-fab"
+              onClick={() => setShowChat(true)}
+              aria-label="Envoyer un message au chauffeur"
+            >
+              💬
+            </button>
             <div className="driver-name">{formatFCFA(trip.estimated_price)}</div>
           </div>
 
@@ -1476,6 +1493,17 @@ function Screen5({
           </div>
         </div>
       </div>
+
+      {showChat && (
+        <ChatModal
+          tripId={trip.id}
+          currentUserId={passengerId}
+          myRole="passenger"
+          otherPartyName={driver.full_name ?? 'le chauffeur'}
+          otherPartyPhone={driver.phone}
+          onClose={() => setShowChat(false)}
+        />
+      )}
     </div>
   );
 }

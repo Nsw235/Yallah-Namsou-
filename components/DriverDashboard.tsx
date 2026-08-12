@@ -19,8 +19,11 @@ import {
   ChevronUp,
   Camera,
   Bell,
+  MessageCircle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
+import ChatModal from '@/components/ChatModal';
+import { ToastProvider } from '@/components/Toast';
 import { Trip, VehicleType } from '@/types/database';
 import { CAR_MODEL_BY_TYPE, formatFCFA, haversineKm, VEHICLE_LABELS } from '@/lib/pricing';
 import {
@@ -106,7 +109,17 @@ function formatDistance(meters: number): string {
   return `${Math.max(10, Math.round(meters / 10) * 10)} m`;
 }
 
+/** Point d'entrée : fournit le contexte Toast, utilisé par la messagerie
+ *  in-app (ChatModal) pour les retours d'erreur d'envoi. */
 export default function DriverDashboard() {
+  return (
+    <ToastProvider>
+      <DriverDashboardScreens />
+    </ToastProvider>
+  );
+}
+
+function DriverDashboardScreens() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [profile, setProfile] = useState<MyDriverProfile | null>(null);
   const [vehicles, setVehicles] = useState<MyVehicle[]>([]);
@@ -720,6 +733,7 @@ export default function DriverDashboard() {
                 <DriverTripPanel
                   phase="accepted"
                   trip={active}
+                  driverId={session?.user?.id ?? ''}
                   passengerName={passengerContact?.full_name ?? null}
                   passengerPhone={passengerContact?.phone ?? null}
                   expanded={tripCardExpanded}
@@ -737,6 +751,7 @@ export default function DriverDashboard() {
                 <DriverTripPanel
                   phase="in_progress"
                   trip={active}
+                  driverId={session?.user?.id ?? ''}
                   passengerName={passengerContact?.full_name ?? null}
                   passengerPhone={passengerContact?.phone ?? null}
                   expanded={tripCardExpanded}
@@ -1168,6 +1183,7 @@ export default function DriverDashboard() {
 function DriverTripPanel({
   phase,
   trip,
+  driverId,
   passengerName,
   passengerPhone,
   expanded,
@@ -1181,6 +1197,7 @@ function DriverTripPanel({
 }: {
   phase: 'accepted' | 'in_progress';
   trip: Trip;
+  driverId: string;
   passengerName: string | null;
   passengerPhone: string | null;
   expanded: boolean;
@@ -1193,6 +1210,7 @@ function DriverTripPanel({
   onOpenMaps: () => void;
 }) {
   const goingToPickup = phase === 'accepted';
+  const [showChat, setShowChat] = useState(false);
 
   return (
     <div className="yn-trip-panel mx-3 mb-3">
@@ -1239,7 +1257,25 @@ function DriverTripPanel({
               <Bell size={13} />
             </a>
           )}
+          <button
+            onClick={() => setShowChat(true)}
+            aria-label="Envoyer un message au passager"
+            className="flex h-8 w-8 flex-none items-center justify-center rounded-full border-[0.5px] border-[rgba(169,122,91,0.4)] text-[#e8c9a8]"
+          >
+            <MessageCircle size={13} />
+          </button>
         </div>
+
+        {showChat && (
+          <ChatModal
+            tripId={trip.id}
+            currentUserId={driverId}
+            myRole="driver"
+            otherPartyName={passengerName ?? 'le passager'}
+            otherPartyPhone={passengerPhone}
+            onClose={() => setShowChat(false)}
+          />
+        )}
 
         {expanded && (
           <div className="mt-3.5 flex items-stretch pb-1">
