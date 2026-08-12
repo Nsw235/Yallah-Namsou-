@@ -1023,7 +1023,7 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 .eta-sub{ font-size:11px; color:var(--text-dim); margin-top:2px; }
 
 .yn-actions-row{ display:flex; gap:8px; margin:2px 0 12px; }
-.yn-act-btn{ flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:14px; padding:10px 0; font-size:10px; font-weight:700; color:var(--text-dim); cursor:pointer; transition:transform .15s ease, background .15s ease; }
+.yn-act-btn{ flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:14px; padding:10px 0; font-size:10px; font-weight:700; color:var(--text-dim); cursor:pointer; transition:transform .15s ease, background .15s ease; text-decoration:none; }
 .yn-act-btn:active{ transform:scale(.94); background:rgba(255,255,255,0.09); }
 .yn-act-btn .ic{ font-size:16px; }
 .yn-act-btn.danger{ color:var(--danger); }
