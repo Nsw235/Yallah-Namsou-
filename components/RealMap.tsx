@@ -400,10 +400,24 @@ const RealMap = forwardRef<RealMapHandle, {
     const map = mapRef.current;
     if (!map) return;
 
+    // Points "de référence" du trajet (pickup/dropoff) : c'est sur eux que
+    // la caméra doit toujours cadrer. La position GPS réelle du chauffeur
+    // n'est ajoutée que si elle est plausible — sinon (test depuis un pays
+    // différent du trajet démo, dérive GPS, VPN...) elle forcerait un zoom
+    // arrière massif pour englober un point à des milliers de km, jusqu'à
+    // afficher le globe entier. Rayon large (300 km) pour ne jamais
+    // masquer un vrai déplacement en ville, tout en filtrant ces aberrations.
+    const refPoints: LatLng[] = [pickup, dropoff].filter((p): p is LatLng => !!p);
+    const OUTLIER_KM = 300;
+    const isPlausible =
+      !driverPosition ||
+      refPoints.length === 0 ||
+      refPoints.some((p) => haversineKmLocal(p, driverPosition) <= OUTLIER_KM);
+
     const coords: [number, number][] = [];
     if (pickup) coords.push([pickup.lng, pickup.lat]);
     if (dropoff) coords.push([dropoff.lng, dropoff.lat]);
-    if (driverPosition) coords.push([driverPosition.lng, driverPosition.lat]);
+    if (driverPosition && isPlausible) coords.push([driverPosition.lng, driverPosition.lat]);
     pins.forEach((p) => coords.push([p.position.lng, p.position.lat]));
 
     if (coords.length === 1) {

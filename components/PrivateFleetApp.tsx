@@ -1246,23 +1246,27 @@ function Screen4({
       <Header onMenuClick={onMenu} onOptionsClick={onOptions} />
 
       <div className="eta-hero">
-        <div className="eta-ring">
-          <svg width="104" height="104">
-            <circle className="track" cx="52" cy="52" r={RING_R} />
-            <circle
-              className="bar"
-              cx="52" cy="52" r={RING_R}
-              strokeDasharray={RING_C}
-              strokeDashoffset={ringOffset}
-            />
-          </svg>
-          <div className="eta-num">
-            <span className="n">{etaLabel}</span>
-            {driverEtaSeconds != null && driverEtaSeconds >= 60 && <span className="u">MIN</span>}
+        <div className="eta-backdrop">
+          <div className="eta-ring">
+            <svg width="104" height="104">
+              <circle className="track" cx="52" cy="52" r={RING_R} />
+              <circle
+                className="bar"
+                cx="52" cy="52" r={RING_R}
+                strokeDasharray={RING_C}
+                strokeDashoffset={ringOffset}
+              />
+            </svg>
+            <div className="eta-num">
+              <span className="n">{etaLabel}</span>
+              {driverEtaSeconds != null && driverEtaSeconds >= 60 && <span className="u">MIN</span>}
+            </div>
           </div>
         </div>
-        <div className="eta-label">Votre chauffeur arrive</div>
-        <div className="eta-sub">{driver.full_name ?? 'Le chauffeur'} approche de votre position</div>
+        <div className="eta-backdrop">
+          <div className="eta-label">Votre chauffeur arrive</div>
+          <div className="eta-sub">{driver.full_name ?? 'Le chauffeur'} approche de votre position</div>
+        </div>
       </div>
 
       <div className="yn-ticket">

@@ -20,6 +20,8 @@ import {
   Camera,
   Bell,
   MessageCircle,
+  Phone,
+  Navigation,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import ChatModal from '@/components/ChatModal';
@@ -556,7 +558,12 @@ function DriverDashboardScreens() {
             <RealMap
               pitch={mapPitch}
               buildings3d
-              driverPosition={driverPos}
+              driverPosition={
+                driverPos ??
+                (step === 'in_progress' && displayTrip
+                  ? { lat: displayTrip.pickup_lat, lng: displayTrip.pickup_lng }
+                  : null)
+              }
               pins={pendingPins}
               use3dCar={onTrip}
               carModelUrl={carModelUrl}
@@ -1254,7 +1261,7 @@ function DriverTripPanel({
               aria-label="Appeler le passager"
               className="flex h-8 w-8 flex-none items-center justify-center rounded-full border-[0.5px] border-[rgba(169,122,91,0.4)] text-[#e8c9a8]"
             >
-              <Bell size={13} />
+              <Phone size={13} />
             </a>
           )}
           <button
@@ -1306,7 +1313,16 @@ function DriverTripPanel({
 
       {goingToPickup ? (
         <>
-          <div className="relative mt-3 flex border-t-[0.5px] border-[rgba(169,122,91,0.2)]">
+          <div className="mt-3 border-t-[0.5px] border-[rgba(169,122,91,0.2)] p-2.5">
+            <button
+              disabled={busy}
+              onClick={onArrive}
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl border-[0.5px] border-[rgba(169,122,91,0.4)] py-2.5 text-[12px] font-semibold text-[#e8c9a8] transition-transform active:scale-[0.98]"
+            >
+              <Navigation size={14} /> Je suis en route
+            </button>
+          </div>
+          <div className="flex border-t-[0.5px] border-[rgba(169,122,91,0.2)]">
             <button
               disabled={busy}
               onClick={onCancel}
@@ -1317,9 +1333,10 @@ function DriverTripPanel({
             <button
               disabled={busy}
               onClick={onArrive}
-              className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[10.5px] text-[#e8c9a8] transition-opacity active:opacity-60"
+              aria-label="Renvoyer la notification au passager"
+              className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-[10.5px] text-[#8a7358] transition-opacity active:opacity-60"
             >
-              <Bell size={13} /> Prévenir
+              <Bell size={12} /> Reprévenir
             </button>
           </div>
           <div className="border-t-[0.5px] border-[rgba(169,122,91,0.2)] p-2.5">
