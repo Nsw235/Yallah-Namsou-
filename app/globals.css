@@ -1041,18 +1041,19 @@ svg.overlay{position:absolute; inset:0; width:100%; height:100%; pointer-events:
 /* ---------------------------------------------------------------------- */
 /* Écrans passager 4/5/6 — refonte animée (attente / en course / terminée) */
 /* ---------------------------------------------------------------------- */
-.eta-hero{ position:absolute; top:150px; left:0; right:0; z-index:20; display:flex; flex-direction:column; align-items:center; animation:yn-slide-down .5s cubic-bezier(.2,.8,.2,1); pointer-events:none; }
+.eta-hero{ position:absolute; top:150px; left:0; right:0; z-index:20; display:flex; flex-direction:column; align-items:center; gap:10px; animation:yn-slide-down .5s cubic-bezier(.2,.8,.2,1); pointer-events:none; }
 @keyframes yn-slide-down{ from{ opacity:0; transform:translateY(-14px);} to{ opacity:1; transform:translateY(0);} }
-.eta-ring{ width:104px; height:104px; position:relative; margin-bottom:6px; }
+.eta-backdrop{ background:rgba(10,9,7,0.78); backdrop-filter:blur(6px); border-radius:18px; padding:10px 16px; display:flex; flex-direction:column; align-items:center; }
+.eta-ring{ width:104px; height:104px; position:relative; }
 .eta-ring svg{ transform:rotate(-90deg); }
 .eta-ring circle{ fill:none; stroke-width:5; }
-.eta-ring .track{ stroke:rgba(255,255,255,0.1); }
+.eta-ring .track{ stroke:rgba(255,255,255,0.14); }
 .eta-ring .bar{ stroke:var(--copper-light); stroke-linecap:round; filter:drop-shadow(0 0 6px rgba(232,201,168,0.55)); transition:stroke-dashoffset 1s linear; }
 .eta-num{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
-.eta-num .n{ font-size:24px; font-weight:800; letter-spacing:-.5px; }
+.eta-num .n{ font-size:22px; font-weight:800; letter-spacing:-.5px; color:#ffb35c; }
 .eta-num .u{ font-size:9px; color:var(--text-dim); font-weight:700; letter-spacing:1px; margin-top:-2px; }
-.eta-label{ font-size:12.5px; font-weight:800; color:var(--copper-light); letter-spacing:.3px; }
-.eta-sub{ font-size:11px; color:var(--text-dim); margin-top:2px; }
+.eta-label{ font-size:12.5px; font-weight:800; color:#f7e6d4; letter-spacing:.3px; }
+.eta-sub{ font-size:11px; color:#e8c9a8; margin-top:2px; }
 
 .yn-actions-row{ display:flex; gap:8px; margin:2px 0 12px; }
 .yn-act-btn{ flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:14px; padding:9px 0; font-size:10px; font-weight:700; color:var(--text-dim); cursor:pointer; transition:transform .15s ease, background .15s ease; text-decoration:none; }
