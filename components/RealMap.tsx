@@ -158,6 +158,19 @@ const RealMap = forwardRef<RealMapHandle, {
   // aucun filet de sécurité et disparaissaient silencieusement en cas
   // d'échec (voir DIAGNOSTIC.md).
   const [failedModelUrls, setFailedModelUrls] = useState<Set<string>>(new Set());
+  // Bascule à `true` une fois le style de la carte réellement chargé.
+  // CRITIQUE : les effets qui dessinent le tracé et les marqueurs dépendent
+  // des coordonnées (pickup/dropoff/driverPosition), qui sur certains écrans
+  // (ex: "chauffeur arrive") ne changent qu'une seule fois, voire jamais,
+  // après le montage. Sur une connexion lente, ce changement unique peut
+  // survenir AVANT que mapbox-gl ait fini de charger (import dynamique +
+  // création de la carte + chargement du style prennent parfois plusieurs
+  // secondes en 4G) : l'effet s'exécute alors avec `mapRef.current` encore
+  // `null`, ne dessine rien, et — comme les refs ne déclenchent pas de
+  // nouveau rendu — ne serait jamais réexécuté. Ce state, lui, force un
+  // nouveau rendu dès que la carte est réellement prête, garantissant que
+  // le tracé et les marqueurs finissent toujours par s'afficher.
+  const [mapReady, setMapReady] = useState(false);
   useEffect(() => {
     setFailedModelUrls((s) => {
       if (!s.has(carModelUrl)) return s;
@@ -292,6 +305,11 @@ const RealMap = forwardRef<RealMapHandle, {
         // Pas de map.setFog() ici : le style personnalisé (Mapbox Studio,
         // panneau "Atmosphere") définit déjà sa propre ambiance de ciel/brume.
         // La forcer ici en JS écraserait ce réglage à chaque chargement.
+
+        // Déclenche le re-rendu qui permet aux effets tracé/marqueurs de
+        // (re)tourner maintenant que la carte est prête — voir le
+        // commentaire sur `mapReady` plus haut.
+        setMapReady(true);
       });
     })();
 
@@ -490,7 +508,7 @@ const RealMap = forwardRef<RealMapHandle, {
     if (map.isStyleLoaded()) render();
     else map.once('load', render);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins), effectiveUse3dCar, overviewZoom, Array.from(failedModelUrls).sort().join(',')]);
+  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins), effectiveUse3dCar, overviewZoom, Array.from(failedModelUrls).sort().join(','), mapReady]);
 
   // Modèles 3D réels (.glb) : le véhicule du chauffeur connecté (driverPosition,
   // si use3dCar) + tout pin déclarant `car3d` (ex: autres chauffeurs disponibles
@@ -615,7 +633,7 @@ const RealMap = forwardRef<RealMapHandle, {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveUse3dCar, carModelUrl, carHeading, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins)]);
+  }, [effectiveUse3dCar, carModelUrl, carHeading, driverPosition?.lat, driverPosition?.lng, JSON.stringify(pins), mapReady]);
 
   // Itinéraire réel tenant compte du trafic (Mapbox Directions, profil driving-traffic).
   // Point de départ : la position live du chauffeur si disponible (suivi temps réel),
@@ -760,7 +778,7 @@ const RealMap = forwardRef<RealMapHandle, {
     if (map.isStyleLoaded()) drawRoute();
     else map.once('load', drawRoute);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, showRoute]);
+  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, driverPosition?.lat, driverPosition?.lng, showRoute, mapReady]);
 
   return <div ref={containerRef} className="real-map" />;
 });

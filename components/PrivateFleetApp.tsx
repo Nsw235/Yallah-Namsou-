@@ -1556,6 +1556,7 @@ function Screen6({
 
       <div className="yn-done-hero">
         <div className="yn-check-wrap">
+          <div className="yn-check-ring" />
           <div className="yn-check-circle">
             <svg viewBox="0 0 24 24"><path d="M4 12.5 L9.5 18 L20 6" /></svg>
           </div>
@@ -1573,8 +1574,10 @@ function Screen6({
             />
           ))}
         </div>
-        <div className="yn-done-title">Vous êtes arrivé !</div>
-        <div className="yn-done-sub">Merci d&apos;avoir voyagé avec Yalla Nimshi</div>
+        <div className="yn-done-textbox">
+          <div className="yn-done-title">Vous êtes arrivé !</div>
+          <div className="yn-done-sub">Merci d&apos;avoir voyagé avec Yalla Nimshi</div>
+        </div>
       </div>
 
       <div className="yn-ticket" style={{ top: 230 }}>
